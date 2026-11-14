@@ -1,0 +1,555 @@
+// =========================================================================
+// ТАБЛИЦА БАЛАНСА БОЕВОЙ СИСТЕМЫ (KEY-VALUES / КВ ТАБЛИЦА)
+// Файл: assets/config/combat_balance.kv
+//
+// Инструкция:
+// 1. Здесь можно вручную менять урон (damage), форсу отталкивания (knock_x / knock_y),
+//    стан-лок игрока при попадании (player_recovery) и промахе (whiff_stun),
+//    а также стан-лок противника (enemy_stun) для всех приемов и комбо.
+// 2. В игре нажмите [F5] для мгновенной горячей перезагрузки этой таблицы без перезапуска!
+// =========================================================================
+
+"CombatBalance"
+{
+    // =====================================================================
+    // 1. БАЗОВЫЕ ОДИНОЧНЫЕ АТАКИ (ЗЕМЛЯ, НАПРАВЛЕНИЯ, ДЭШ, ВОЗДУХ)
+    // =====================================================================
+    "Attacks"
+    {
+        // --- 1.1. Легкие атаки на земле ---
+        "1"
+        {
+            "damage"            "2.0"
+            "knock_x"           "160.0"
+            "knock_y"           "-25.0"
+            "player_recovery"   "0.14"
+            "enemy_stun"        "0.18"
+            "whiff_stun"        "0.38"
+            "active_time"       "0.11"
+            "lunge"             "14.0"
+            "name"              "ATTACK: 1 (Light Jab)"
+            "color"             "255 235 90"
+        }
+        "f1"
+        {
+            "damage"            "2.2"
+            "knock_x"           "220.0"
+            "knock_y"           "-30.0"
+            "player_recovery"   "0.15"
+            "enemy_stun"        "0.20"
+            "whiff_stun"        "0.38"
+            "active_time"       "0.12"
+            "lunge"             "18.0"
+            "name"              "ATTACK: f1 (Forward Thrust)"
+            "color"             "255 240 110"
+        }
+        "b1"
+        {
+            "damage"            "2.0"
+            "knock_x"           "-140.0"
+            "knock_y"           "-30.0"
+            "player_recovery"   "0.14"
+            "enemy_stun"        "0.18"
+            "whiff_stun"        "0.38"
+            "active_time"       "0.11"
+            "lunge"             "0.0"
+            "name"              "ATTACK: b1 (Turn Jab)"
+            "color"             "245 220 90"
+        }
+        "u1"
+        {
+            "damage"            "2.2"
+            "knock_x"           "80.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.16"
+            "enemy_stun"        "0.40"
+            "whiff_stun"        "0.40"
+            "active_time"       "0.12"
+            "lunge"             "8.0"
+            "name"              "ATTACK: u1 (Anti-Air Poke)"
+            "color"             "255 245 120"
+        }
+        "dw1"
+        {
+            "damage"            "2.0"
+            "knock_x"           "180.0"
+            "knock_y"           "-20.0"
+            "player_recovery"   "0.14"
+            "enemy_stun"        "0.20"
+            "whiff_stun"        "0.38"
+            "active_time"       "0.11"
+            "lunge"             "10.0"
+            "name"              "ATTACK: dw1 (Low Kick)"
+            "color"             "240 210 80"
+        }
+
+        // --- 1.2. Тяжелые атаки на земле ---
+        "2"
+        {
+            "damage"            "3.5"
+            "knock_x"           "350.0"
+            "knock_y"           "-40.0"
+            "player_recovery"   "0.24"
+            "enemy_stun"        "0.26"
+            "whiff_stun"        "0.55"
+            "active_time"       "0.15"
+            "lunge"             "16.0"
+            "name"              "ATTACK: 2 (Heavy Strike)"
+            "color"             "255 110 60"
+        }
+        "f2"
+        {
+            "damage"            "3.8"
+            "knock_x"           "1150.0"
+            "knock_y"           "-45.0"
+            "player_recovery"   "0.22"
+            "enemy_stun"        "0.35"
+            "whiff_stun"        "0.52"
+            "active_time"       "0.14"
+            "lunge"             "18.0"
+            "name"              "ATTACK: f2 (Forward Smash -> Push)"
+            "color"             "255 130 50"
+        }
+        "b2"
+        {
+            "damage"            "3.5"
+            "knock_x"           "-350.0"
+            "knock_y"           "-50.0"
+            "player_recovery"   "0.24"
+            "enemy_stun"        "0.28"
+            "whiff_stun"        "0.55"
+            "active_time"       "0.15"
+            "lunge"             "0.0"
+            "name"              "ATTACK: b2 (Back Swing)"
+            "color"             "255 100 50"
+        }
+        "u2"
+        {
+            "damage"            "4.0"
+            "knock_x"           "120.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.42"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.16"
+            "lunge"             "10.0"
+            "name"              "ATTACK: u2 (Uppercut)"
+            "color"             "255 95 70"
+        }
+        "dw2"
+        {
+            "damage"            "3.6"
+            "knock_x"           "260.0"
+            "knock_y"           "-30.0"
+            "player_recovery"   "0.25"
+            "enemy_stun"        "0.32"
+            "whiff_stun"        "0.58"
+            "active_time"       "0.15"
+            "lunge"             "12.0"
+            "name"              "ATTACK: dw2 (Low Sweep)"
+            "color"             "255 120 60"
+        }
+
+        // --- 1.3. Атаки в дэше ---
+        "d1"
+        {
+            "damage"            "2.5"
+            "knock_x"           "600.0"
+            "knock_y"           "-40.0"
+            "player_recovery"   "0.16"
+            "enemy_stun"        "0.22"
+            "whiff_stun"        "0.40"
+            "active_time"       "0.12"
+            "lunge"             "18.0"
+            "name"              "ATTACK: d1 (Dash Thrust)"
+            "color"             "90 220 255"
+        }
+        "db1"
+        {
+            "damage"            "3.0"
+            "knock_x"           "-220.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.18"
+            "enemy_stun"        "0.40"
+            "whiff_stun"        "0.42"
+            "active_time"       "0.14"
+            "lunge"             "0.0"
+            "name"              "ATTACK: db1 (Reverse Dash Sweep)"
+            "color"             "100 240 220"
+        }
+        "d2"
+        {
+            "damage"            "4.0"
+            "knock_x"           "1150.0"
+            "knock_y"           "-55.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.32"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.16"
+            "lunge"             "22.0"
+            "name"              "ATTACK: d2 (Heavy Dash Smash)"
+            "color"             "255 80 110"
+        }
+        "db2"
+        {
+            "damage"            "4.0"
+            "knock_x"           "-550.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.42"
+            "whiff_stun"        "0.65"
+            "active_time"       "0.16"
+            "lunge"             "0.0"
+            "name"              "ATTACK: db2 (Reverse Dash Launcher)"
+            "color"             "255 90 140"
+        }
+
+        // --- 1.4. Воздушные атаки ---
+        "a1"
+        {
+            "damage"            "2.0"
+            "knock_x"           "70.0"
+            "knock_y"           "-40.0"
+            "player_recovery"   "0.16"
+            "enemy_stun"        "0.35"
+            "whiff_stun"        "0.40"
+            "active_time"       "0.13"
+            "lunge"             "6.0"
+            "name"              "AIR ATTACK: a1 (Air Juggle)"
+            "color"             "80 220 255"
+        }
+        "a2"
+        {
+            "damage"            "3.5"
+            "knock_x"           "1250.0"
+            "knock_y"           "0.0"
+            "player_recovery"   "0.24"
+            "enemy_stun"        "0.48"
+            "whiff_stun"        "0.55"
+            "active_time"       "0.15"
+            "lunge"             "0.0"
+            "name"              "AIR ATTACK: a2 (Horizontal Air Push)"
+            "color"             "240 130 255"
+        }
+        "adw2"
+        {
+            "damage"            "4.0"
+            "knock_x"           "440.0"
+            "knock_y"           "550.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.40"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.16"
+            "lunge"             "8.0"
+            "name"              "AIR ATTACK: adw2 (Air Down Slam)"
+            "color"             "255 90 30"
+        }
+        "ad1"
+        {
+            "damage"            "2.5"
+            "knock_x"           "160.0"
+            "knock_y"           "-60.0"
+            "player_recovery"   "0.17"
+            "enemy_stun"        "0.25"
+            "whiff_stun"        "0.40"
+            "active_time"       "0.13"
+            "lunge"             "12.0"
+            "name"              "AIR DASH ATTACK: ad1"
+            "color"             "100 240 220"
+        }
+        "ad2"
+        {
+            "damage"            "4.0"
+            "knock_x"           "220.0"
+            "knock_y"           "320.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.28"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.16"
+            "lunge"             "15.0"
+            "name"              "AIR DASH ATTACK: ad2"
+            "color"             "255 90 160"
+        }
+    }
+
+    // =====================================================================
+    // 2. РЕЕСТР КОМБО (БАЗОВЫЕ КОМБО И ИХ УНИКАЛЬНЫЕ ВАРИАЦИИ)
+    // =====================================================================
+    "Combos"
+    {
+        // --- 2.1. Уникальные вариации комбо (финишеры) ---
+
+        // 1f2d1: диагональный лаунчер после толчка f2 и рывка d1
+        "1f2d1"
+        {
+            "sequence"          "1 f2 d1"
+            "damage"            "5.0"
+            "knock_x"           "460.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.42"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.15"
+            "lunge"             "15.0"
+            "name"              "COMBO 1-f2-d1: DIAGONAL LAUNCHER!"
+            "color"             "255 170 40"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // 11b2: 2 легких удара, захват и бросок назад на дистанцию прыжка с разворотом
+        "11b2"
+        {
+            "sequence"          "1 1 b2"
+            "damage"            "4.5"
+            "knock_x"           "-540.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.30"
+            "enemy_stun"        "0.45"
+            "whiff_stun"        "0.65"
+            "active_time"       "0.16"
+            "lunge"             "12.0"
+            "name"              "COMBO 1-1-b2: GRAB & BACK THROW!"
+            "color"             "255 80 80"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // 112: 2 удара и мощный апперкот, подбрасывающий врага высоко вверх на высоту прыжка + 13px (лаунчер)
+        "112"
+        {
+            "sequence"          "1 1 2"
+            "damage"            "4.5"
+            "knock_x"           "180.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.42"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.16"
+            "lunge"             "18.0"
+            "name"              "COMBO 1-1-2: RAPID COMBO LAUNCHER!"
+            "color"             "255 60 60"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // 111: тройной легкий удар перед собой
+        "111"
+        {
+            "sequence"          "1 1 1"
+            "damage"            "2.5"
+            "knock_x"           "500.0"
+            "knock_y"           "-40.0"
+            "player_recovery"   "0.15"
+            "enemy_stun"        "0.22"
+            "whiff_stun"        "0.38"
+            "active_time"       "0.12"
+            "lunge"             "16.0"
+            "name"              "COMBO 1-1-1: TRIPLE LIGHT STRIKE"
+            "color"             "255 240 90"
+            "is_unique"         "0"
+            "is_finisher"       "1"
+        }
+
+        // 222: тройной тяжелый удар с мощным толчком на дистанцию рывка
+        "222"
+        {
+            "sequence"          "2 2 2"
+            "damage"            "4.0"
+            "knock_x"           "1200.0"
+            "knock_y"           "-60.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.30"
+            "whiff_stun"        "0.65"
+            "active_time"       "0.16"
+            "lunge"             "25.0"
+            "name"              "COMBO 2-2-2: TRIPLE HEAVY STRIKE"
+            "color"             "255 95 45"
+            "is_unique"         "0"
+            "is_finisher"       "1"
+        }
+
+        // 21db1: удар 2, удар 1 (толкает < дэша), рывок за спину и разворот с подсечкой db1
+        "21db1"
+        {
+            "sequence"          "2 1 db1"
+            "damage"            "4.8"
+            "knock_x"           "220.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.42"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.15"
+            "lunge"             "0.0"
+            "name"              "COMBO 2-1-db1: REVERSE SWEEP LAUNCHER!"
+            "color"             "255 140 80"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // a1a1adw2: 2 удара в воздухе + падение вместе с врагом в пол и отскок на длину дэша
+        "a1a1adw2"
+        {
+            "sequence"          "a1 a1 adw2"
+            "damage"            "5.5"
+            "knock_x"           "1150.0"
+            "knock_y"           "-280.0"
+            "player_recovery"   "0.32"
+            "enemy_stun"        "0.52"
+            "whiff_stun"        "0.65"
+            "active_time"       "0.18"
+            "lunge"             "10.0"
+            "name"              "COMBO a1-a1-adw2: DUAL AIR DIVE SLAM!"
+            "color"             "255 75 25"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // a1adw2: удар в воздухе a1 + вбивание в пол adw2 с аккуратным отскоком
+        "a1adw2"
+        {
+            "sequence"          "a1 adw2"
+            "damage"            "4.5"
+            "knock_x"           "440.0"
+            "knock_y"           "550.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.40"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.16"
+            "lunge"             "8.0"
+            "name"              "COMBO a1-adw2: GROUND BOUNCE SLAM!"
+            "color"             "255 90 30"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // a1a2: воздушный джаггл a1 + горизонтальный пуш a2
+        "a1a2"
+        {
+            "sequence"          "a1 a2"
+            "damage"            "3.5"
+            "knock_x"           "1250.0"
+            "knock_y"           "0.0"
+            "player_recovery"   "0.24"
+            "enemy_stun"        "0.45"
+            "whiff_stun"        "0.55"
+            "active_time"       "0.15"
+            "lunge"             "0.0"
+            "name"              "COMBO a1-a2: HORIZONTAL AIR PUSH!"
+            "color"             "240 130 255"
+            "is_unique"         "0"
+            "is_finisher"       "1"
+        }
+
+        // a2ad1: пуш a2 по прямой + рывок + диагональный подброс ad1
+        "a2ad1"
+        {
+            "sequence"          "a2 ad1"
+            "damage"            "4.5"
+            "knock_x"           "460.0"
+            "knock_y"           "-435.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.40"
+            "whiff_stun"        "0.60"
+            "active_time"       "0.16"
+            "lunge"             "12.0"
+            "name"              "COMBO a2-ad1: AIR DIAGONAL LAUNCH!"
+            "color"             "190 85 255"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // --- 2.2. Базовые комбо (общее начало для дальнейших уникальных вариаций) ---
+
+        // 1f2: удар 1 + тяжелый толчок f2 (сетап под рывок и 1f2d1)
+        "1f2"
+        {
+            "sequence"          "1 f2"
+            "damage"            "3.5"
+            "knock_x"           "1150.0"
+            "knock_y"           "-45.0"
+            "player_recovery"   "0.22"
+            "enemy_stun"        "0.35"
+            "whiff_stun"        "0.52"
+            "active_time"       "0.14"
+            "lunge"             "15.0"
+            "name"              "COMBO 1-f2: PUSH! -> PRESS [SHIFT]"
+            "color"             "255 140 50"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        // 11: два легких удара (начало для 111, 112, 11b2)
+        "11"
+        {
+            "sequence"          "1 1"
+            "damage"            "2.0"
+            "knock_x"           "160.0"
+            "knock_y"           "-25.0"
+            "player_recovery"   "0.14"
+            "enemy_stun"        "0.18"
+            "whiff_stun"        "0.38"
+            "active_time"       "0.11"
+            "lunge"             "14.0"
+            "name"              "COMBO 1-1: Light Jab 2"
+            "color"             "255 215 60"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        // 21: удар 2 + удар 1 (бросает на ~85px, сетап для 21db1)
+        "21"
+        {
+            "sequence"          "2 1"
+            "damage"            "3.0"
+            "knock_x"           "850.0"
+            "knock_y"           "-35.0"
+            "player_recovery"   "0.20"
+            "enemy_stun"        "0.30"
+            "whiff_stun"        "0.48"
+            "active_time"       "0.13"
+            "lunge"             "16.0"
+            "name"              "COMBO 2-1: SETUP FOR DASH BEHIND"
+            "color"             "255 160 60"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        // 22: два тяжелых удара (начало для 222)
+        "22"
+        {
+            "sequence"          "2 2"
+            "damage"            "3.5"
+            "knock_x"           "260.0"
+            "knock_y"           "-35.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.26"
+            "whiff_stun"        "0.58"
+            "active_time"       "0.15"
+            "lunge"             "18.0"
+            "name"              "COMBO 2-2: Heavy Strike 2"
+            "color"             "255 120 50"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        // a1a1: два легких удара в воздухе (сетап под финишер a1a1adw2)
+        "a1a1"
+        {
+            "sequence"          "a1 a1"
+            "damage"            "2.2"
+            "knock_x"           "80.0"
+            "knock_y"           "-35.0"
+            "player_recovery"   "0.16"
+            "enemy_stun"        "0.35"
+            "whiff_stun"        "0.40"
+            "active_time"       "0.13"
+            "lunge"             "8.0"
+            "name"              "COMBO a1-a1: Dual Air Juggle"
+            "color"             "90 230 255"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+    }
+}
+

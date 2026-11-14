@@ -25,6 +25,13 @@
 # ---- Логи ----
 *.log
 
+# ---- Python Cache ----
+__pycache__/
+*.pyc
+
+# ---- Временные скрины тестов ----
+scratch/*.png
+
 # ---- VS Code ----
 .vscode/
 *.code-workspace

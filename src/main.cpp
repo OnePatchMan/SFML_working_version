@@ -1,52 +1,35 @@
-#include <SFML/Graphics.hpp>
-#include <SFML/Window.hpp>
-#include <SFML/System.hpp>
-#include <string>
-#include <iostream>
-#include <variant>
-#include <optional>
-#include "../Animation.h"
-#include "../Crosshair.h"
-#include "../Bone.h"
-#include "../MapGenerator.h"
-#include "../SkeletalAnimation.h"
+#include "core/Common.h"
+#include "world/Arena.h"
+#include "entities/Player.h"
+#include "entities/PlayerConfig.h"
+#include "entities/Enemy.h"
+#include "entities/EnemyConfig.h"
+#include "combat/CombatSystem.h"
+#include "graphics/Crosshair.h"
 
-
-int main()
-{
-    Bone body(nullptr, "assets/sprites/heroBodyLegsTest.png", {400.f, 300.f});
-    
-    MapGenerator generator(60, 70, 0.20f, "assets/sprites/BlocksTest.png");
-    auto map = generator.generate();
-
-    Bone head(&body, "assets/sprites/heroHeadTest.png", {29.f, 16.f});
-    Bone rightHand(&body, "assets/sprites/heroRightHandTest.png", {25.f, 22.f});
-    Bone leftHand(&body, "assets/sprites/heroHandTest.png", {39.f, 20.f});
-
-    head.setOriginVector({15.f, 5.f});
-    rightHand.setOriginVector({11.f, 10.f});
-    leftHand.setOriginVector({20.f, 10.f});
-
-    // Создаем скелет для скелетной анимации
-    Skeleton skeleton;
-    skeleton.addBone("body", &body);
-    skeleton.addBone("head", &head);
-    skeleton.addBone("rightHand", &rightHand);
-    skeleton.addBone("leftHand", &leftHand);
+int main() {
+    Arena arena(ARENA_WIDTH, ARENA_HEIGHT);
+    Player player(arena.getSpawnPosition());
+    Enemy enemy({player.position.x + 350.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+    CombatSystem combat;
 
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
-    sf::RenderWindow window(desktop, "GameTest", sf::Style::None);
-
+    sf::RenderWindow window(desktop, "FightingComboGame", sf::Style::None);
     window.setMouseCursorVisible(false);
     window.setFramerateLimit(144);
 
     Crosshair crosshair("assets/sprites/crosshair.png", window);
-    
-    Animation idleHeroAnimation("assets/sprites/mainHeroTest.png", true);
+    sf::View camera(player.position, sf::Vector2f(static_cast<float>(window.getSize().x), 
+                                                 static_cast<float>(window.getSize().y)));
+    sf::Clock dtClock;
 
-    Animator animator;
+    while (window.isOpen()) {
+        float dt = dtClock.restart().asSeconds();
+        if (dt > 0.1f) dt = 0.1f;
 
-    while(window.isOpen()){
+        sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
+        sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel, camera);
+
         while (const std::optional<sf::Event> event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) {
                 window.close();
@@ -55,42 +38,63 @@ int main()
                 if (keyPressed->code == sf::Keyboard::Key::Escape) {
                     window.close();
                 }
+                // R - сброс позиций и состояний
+                if (keyPressed->code == sf::Keyboard::Key::R) {
+                    player.reset(arena.getSpawnPosition());
+                    enemy.spawnPosition = {player.position.x + 350.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+                    enemy.reset();
+                    combat.reset();
+                    std::cout << "[RESET] Арена, игрок и манекен сброшены!" << std::endl;
+                }
+                // Tab - переключение режима противника (Манекен / Умный ИИ)
+                if (keyPressed->code == sf::Keyboard::Key::Tab) {
+                    enemy.setSmartAI(!enemy.isSmartAI);
+                    std::cout << "[MODE] Режим противника: " 
+                              << (enemy.isSmartAI ? "УМНЫЙ ИИ (Комбо-боец)" : "ТРЕНИРОВОЧНЫЙ МАНЕКЕН (Dummy)") 
+                              << std::endl;
+                }
+                // F5 - горячая перезагрузка всех KV конфигураций (combat_balance.kv, player.kv, enemy.kv)
+                if (keyPressed->code == sf::Keyboard::Key::F5) {
+                    CombatConfig::reload();
+                    PlayerConfig::reload();
+                    EnemyConfig::reload();
+                }
+                // T - атака врага (или запуск комбо-связки умного ИИ)
+                if (keyPressed->code == sf::Keyboard::Key::T) {
+                    if (enemy.isSmartAI) {
+                        enemy.triggerComboSequence();
+                        std::cout << "[AI COMBAT] Умный ИИ инициирует комбо-связку (1f2d1 -> a1adw2 -> a1a1adw2)!" << std::endl;
+                    } else {
+                        enemy.triggerAttack();
+                        std::cout << "[TRAIN] Манекен замахивается для удара!" << std::endl;
+                    }
+                }
             }
+
+            player.handleInput(event);
+            combat.handleInput(event, player, mouseWorld);
         }
 
-        window.clear(sf::Color(100, 150, 200));
-        
-        //MapRenderer::DrawMap(window, generator, map);
-        
-        // Получаем позицию мыши
-        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-        sf::Vector2f mousePosF(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-        
-        // Получаем глобальную позицию тела (корневой кости)
-        sf::Vector2f bodyPos = body.getGlobalPosition();
-        
-        // Вычисляем угол от головы к мышке
-        sf::Vector2f headPos = head.getGlobalPosition();
-        sf::Vector2f directionToMouse = mousePosF - headPos;
-        float angleToMouse = std::atan2(directionToMouse.y, directionToMouse.x) * 180.0f / 3.14159f;
-        // В SFML 0 градусов = вправо, но спрайты обычно смотрят вверх, поэтому вычитаем 90
-        head.setRotationAngle(angleToMouse - 90.0f);
-        
-        // Вычисляем угол от правой руки к мышке
-        sf::Vector2f rightHandPos = rightHand.getGlobalPosition();
-        directionToMouse = mousePosF - rightHandPos;
-        angleToMouse = std::atan2(directionToMouse.y, directionToMouse.x) * 180.0f / 3.14159f;
-        rightHand.setRotationAngle(angleToMouse - 90.0f);
-        
-        // Вычисляем угол от левой руки к мышке
-        sf::Vector2f leftHandPos = leftHand.getGlobalPosition();
-        directionToMouse = mousePosF - leftHandPos;
-        angleToMouse = std::atan2(directionToMouse.y, directionToMouse.x) * 180.0f / 3.14159f;
-        leftHand.setRotationAngle(angleToMouse - 90.0f);
-        
-        // Рисуем скелет
-        skeleton.draw(window);
-        
+        // Обновление физики и состояний сущностей
+        player.update(dt, arena, mouseWorld);
+        enemy.update(dt, arena, player.position);
+        combat.update(dt, player, enemy);
+
+        // Камера с динамической микро-тряской при ударах
+        camera.setCenter(player.position + combat.getScreenShake());
+
+        // 1. Отрисовка игрового мира через камеру
+        window.clear(sf::Color(25, 28, 35));
+        window.setView(camera);
+
+        arena.draw(window);
+        enemy.draw(window, combat.getFont());
+        combat.drawWorld(window, player);
+        player.draw(window);
+
+        // 2. Отрисовка боевого интерфейса и прицела в координатах экрана
+        window.setView(window.getDefaultView());
+        combat.drawUI(window, &player);
         crosshair.Draw(window);
 
         window.display();
