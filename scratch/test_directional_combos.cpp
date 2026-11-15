@@ -3641,6 +3641,162 @@ int main() {
         std::cout << "-> PASSED: Subtle Kill Blood Splatter verified 100%!" << std::endl;
     }
 
+    // =========================================================================
+    // TEST 52: COMBO 12f1 (Ground Slam & Pop-Up 2 -> Baseball Bat Swing Smash f1)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 52] Testing Combo 12f1 (Ground Slam & Pop-Up -> Baseball Bat Swing)..." << std::endl;
+        Arena arena(80, 20);
+        CombatSystem combat;
+        Player player(arena.getSpawnPosition());
+        Enemy enemy({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false);
+        if (!player.isFacingRight()) player.turnAround();
+        enemy.reset();
+        tick(0.1f, arena, player, enemy, combat);
+
+        // Hit 1: Neutral Light 1
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+
+        // Hit 2: Heavy 2 (Ground Slam & Pop-Up)
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        triggerHeavy(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "Hit 2 combo name: " << combat.getCurrentComboName() 
+                  << ", enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
+        assert(combat.getCurrentComboName().find("1-2") != std::string::npos);
+        assert(enemy.velocity.x == 320.0f);
+        assert(enemy.velocity.y == -240.0f); // 2 удар бьет об землю и противник чуть поднимается
+
+        // Hit 3: Forward Light f1 (Baseball Bat Swing Smash)
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        player.setSimulatedMoveDir(1.0f); // Holding forward
+        triggerLight(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "Hit 3 combo name: " << combat.getCurrentComboName() 
+                  << ", enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
+        assert(combat.getCurrentComboName().find("1-2-f1") != std::string::npos ||
+               combat.getCurrentComboName().find("BAT SWING") != std::string::npos);
+        // f1 бьет словно битой и враг отлетает далеко строго по координате x
+        assert(enemy.velocity.x == 950.0f);
+        assert(enemy.velocity.y == 0.0f);
+
+        // Lethal Finisher Verification
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false);
+        if (!player.isFacingRight()) player.turnAround();
+        enemy.reset();
+        enemy.hp = 7.0f; // low hp so Hit 3 is lethal
+        arena.clearBlood();
+        tick(0.1f, arena, player, enemy, combat);
+
+        // 1 -> 2 -> f1
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        triggerHeavy(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        player.setSimulatedMoveDir(1.0f);
+        triggerLight(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+
+        assert(enemy.isDead);
+        assert(arena.getBloodParticles().size() > 20); // Finisher blood triggered!
+        std::cout << "-> PASSED: Combo 12f1 (Bat Swing Smash) verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 53: COMBO b21u2 (Back Heavy Pull -> Light Hilt Push -> Up Heavy Circular Sky Launcher)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 53] Testing Combo b21u2 (Back Pull -> Hilt Push -> Circular Sky Launcher)..." << std::endl;
+        Arena arena(80, 20);
+        CombatSystem combat;
+        Player player(arena.getSpawnPosition());
+        Enemy enemy({player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false);
+        if (!player.isFacingRight()) player.turnAround();
+        enemy.reset();
+        tick(0.1f, arena, player, enemy, combat);
+
+        // Hit 1: Back Heavy b2 (strikes far, pulls enemy towards player)
+        enemy.position = {player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        player.setSimulatedMoveDir(-1.0f); // Holding back
+        triggerHeavy(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "Hit 1 (b2) enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
+        assert(enemy.velocity.x == -420.0f); // 1 удар бьет далеко, сначала притягивает к себе врага!
+
+        // Hit 2: Neutral Light 1 (strikes with hilt, slightly pushing enemy away)
+        enemy.position = {player.position.x + 30.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "Hit 2 combo name: " << combat.getCurrentComboName() 
+                  << ", enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
+        assert(combat.getCurrentComboName().find("b2-1") != std::string::npos ||
+               combat.getCurrentComboName().find("HILT PUSH") != std::string::npos);
+        assert(enemy.velocity.x == 220.0f); // 2 удар бьет рукояткой, слегка отодвигая врага от себя!
+
+        // Hit 3: Up Heavy u2 (circular bottom-to-top strike launching enemy high into sky)
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        player.setSimulatedVerticalDir(-1.0f); // Holding Up / W
+        triggerHeavy(combat, player);
+        player.setSimulatedVerticalDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "Hit 3 combo name: " << combat.getCurrentComboName() 
+                  << ", enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
+        assert(combat.getCurrentComboName().find("b2-1-u2") != std::string::npos ||
+               combat.getCurrentComboName().find("SKY LAUNCHER") != std::string::npos);
+        assert(enemy.velocity.x == 40.0f);
+        assert(enemy.velocity.y == -520.0f); // 3 удар бьет оружием снизу вверх по окружности поднимая врага вверх!
+
+        // Lethal Finisher Verification
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false);
+        if (!player.isFacingRight()) player.turnAround();
+        enemy.reset();
+        enemy.hp = 7.5f; // low hp so Hit 3 is lethal
+        arena.clearBlood();
+        tick(0.1f, arena, player, enemy, combat);
+
+        // b2 -> 1 -> u2
+        enemy.position = {player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        player.setSimulatedMoveDir(-1.0f);
+        triggerHeavy(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.12f, arena, player, enemy, combat);
+
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+
+        player.setSimulatedVerticalDir(-1.0f);
+        triggerHeavy(combat, player);
+        player.setSimulatedVerticalDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+
+        assert(enemy.isDead);
+        assert(arena.getBloodParticles().size() > 20); // Finisher blood triggered!
+        std::cout << "-> PASSED: Combo b21u2 (Circular Sky Launcher) verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;

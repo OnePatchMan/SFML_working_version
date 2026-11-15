@@ -314,7 +314,7 @@ private:
         // Тяжелые атаки на земле
         _attacks["2"]   = {3.5f, 350.0f, -40.0f, 0.24f, 0.26f, 0.15f, 16.0f, "ATTACK: 2 (Heavy Strike)", sf::Color(255, 110, 60), 0.55f};
         _attacks["f2"]  = {3.8f, 1150.0f, -45.0f, 0.22f, 0.35f, 0.14f, 18.0f, "ATTACK: f2 (Forward Smash -> Push)", sf::Color(255, 130, 50), 0.52f};
-        _attacks["b2"]  = {3.5f, -350.0f, -50.0f, 0.24f, 0.28f, 0.15f, 0.0f, "ATTACK: b2 (Back Swing)", sf::Color(255, 100, 50), 0.55f};
+        _attacks["b2"]  = {3.5f, -420.0f, -50.0f, 0.24f, 0.28f, 0.15f, 0.0f, "ATTACK: b2 (Back Swing Pull)", sf::Color(255, 100, 50), 0.55f};
         _attacks["u2"]  = {4.0f, 120.0f, -435.0f, 0.26f, 0.42f, 0.16f, 10.0f, "ATTACK: u2 (Uppercut)", sf::Color(255, 95, 70), 0.60f};
         _attacks["dw2"] = {3.6f, 260.0f, -30.0f, 0.25f, 0.32f, 0.15f, 12.0f, "ATTACK: dw2 (Low Sweep)", sf::Color(255, 120, 60), 0.58f};
 
@@ -413,7 +413,42 @@ private:
             true, true
         });
 
+        addCombo({
+            "12df2",
+            {"1", "2", "df2"},
+            {4.5f, 600.0f, 0.0f, 0.24f, 0.35f, 0.15f, 20.0f, "COMBO 1-2-df2: HORIZONTAL DASH SMASH!", sf::Color(255, 120, 40), 0.60f},
+            true, true
+        });
+
+        addCombo({
+            "12f1",
+            {"1", "2", "f1"},
+            {5.2f, 950.0f, 0.0f, 0.26f, 0.44f, 0.15f, 20.0f, "COMBO 1-2-f1: BAT SWING SMASH!", sf::Color(255, 125, 40), 0.62f},
+            true, true
+        });
+
+        addCombo({
+            "b21u2",
+            {"b2", "1", "u2"},
+            {5.2f, 40.0f, -520.0f, 0.28f, 0.48f, 0.16f, 12.0f, "COMBO b2-1-u2: CIRCULAR SKY LAUNCHER!", sf::Color(255, 70, 120), 0.62f},
+            true, true
+        });
+
         // --- 2. Базовые комбо (общее начало для дальнейших уникальных вариаций) ---
+        addCombo({
+            "12",
+            {"1", "2"},
+            {3.5f, 320.0f, -240.0f, 0.22f, 0.30f, 0.14f, 15.0f, "COMBO 1-2: GROUND SLAM & POP-UP", sf::Color(255, 150, 50), 0.50f},
+            false, false
+        });
+
+        addCombo({
+            "b21",
+            {"b2", "1"},
+            {2.5f, 220.0f, -30.0f, 0.18f, 0.28f, 0.12f, 8.0f, "COMBO b2-1: HILT PUSH -> [W+2]", sf::Color(255, 180, 70), 0.45f},
+            false, false
+        });
+
         addCombo({
             "1f2",
             {"1", "f2"},

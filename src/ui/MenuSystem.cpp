@@ -468,7 +468,7 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
 void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float w, float h) {
     if (!_font) return;
 
-    sf::Text hint(*_font, toSfString("ОБОЗНАЧЕНИЯ: 1 = ЛКМ | 2 = ПКМ | dw = Вниз (S) | d = Дэш (Shift) | df = Дэш вперед | db = Дэш назад | f = Вперед | b = Назад | a = В воздухе"), 12);
+    sf::Text hint(*_font, toSfString("ОБОЗНАЧЕНИЯ: 1 = ЛКМ | 2 = ПКМ | dw = Вниз (S) | u = Вверх (W) | d = Дэш (Shift) | df = Дэш вперед | db = Дэш назад | f = Вперед | b = Назад | a = В воздухе"), 12);
     hint.setFillColor(sf::Color(140, 195, 255));
     hint.setPosition(sf::Vector2f(x + 20.0f, y + 12.0f));
     window.draw(hint);
@@ -490,13 +490,15 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         {"a1 -> adw2", "Ground Bounce Slam", "Удар в воздухе (a1) -> дайв-слэм вниз (adw2): вбивание врага в пол с отскоком вверх", sf::Color(255, 90, 30)},
         {"a1 -> a1 -> adw2", "Dual Air Dive Slam", "Два удара в воздухе (a1) -> финальный дайв-слэм вниз (adw2) об пол с отскоком", sf::Color(255, 75, 25)},
         {"a1 -> a2", "Horizontal Air Push", "Удар в воздухе (a1) и тяжелый толчок (a2) далеко по горизонтали", sf::Color(220, 130, 255)},
-        {"1 -> 2 -> df2", "Horizontal Dash Smash", "Джеб -> силовой удар -> дэш вперед с мощным ударом (df2) строго по горизонтали", sf::Color(255, 180, 60)}
+        {"1 -> 2 -> df2", "Horizontal Dash Smash", "Джеб -> силовой удар -> дэш вперед с мощным ударом (df2) строго по горизонтали", sf::Color(255, 180, 60)},
+        {"1 -> 2 -> f1", "Bat Swing Smash", "Джеб -> удар об землю с подбросом (2) -> сокрушительный удар битой (f1) далеко по X", sf::Color(255, 125, 40)},
+        {"b2 -> 1 -> u2", "Circular Sky Launcher", "Дальний удар с притягиванием (b2) -> удар рукояткой (1) -> круговой взмах (u2) в небо", sf::Color(255, 70, 120)}
     };
 
     float startRowY = y + 40.0f;
     float rowH = 34.0f;
 
-    for (size_t i = 0; i < items.size() && i < 10; ++i) {
+    for (size_t i = 0; i < items.size() && i < 12; ++i) {
         float ry = startRowY + i * rowH;
 
         sf::RectangleShape rowBg({w - 30.0f, rowH - 4.0f});

@@ -138,14 +138,14 @@
         "b2"
         {
             "damage"            "3.5"
-            "knock_x"           "-350.0"
+            "knock_x"           "-420.0"
             "knock_y"           "-50.0"
             "player_recovery"   "0.24"
             "enemy_stun"        "0.28"
             "whiff_stun"        "0.26"
             "active_time"       "0.15"
             "lunge"             "0.0"
-            "name"              "ATTACK: b2 (Back Swing)"
+            "name"              "ATTACK: b2 (Back Swing Pull)"
             "color"             "255 100 50"
         }
         "u2"
@@ -502,22 +502,76 @@
             "is_finisher"       "1"
         }
 
+        // 12f1: 1 (легкий удар), 2 (удар об землю, враг чуть поднимается), f1 (удар словно битой, враг отлетает далеко по оси X)
+        "12f1"
+        {
+            "sequence"          "1 2 f1"
+            "damage"            "5.2"
+            "knock_x"           "950.0"
+            "knock_y"           "0.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.44"
+            "whiff_stun"        "0.24"
+            "active_time"       "0.15"
+            "lunge"             "20.0"
+            "name"              "COMBO 1-2-f1: BAT SWING SMASH!"
+            "color"             "255 125 40"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // b21u2: b2 (дальний удар, притягивает к себе), 1 (удар рукояткой, слегка отодвигает), u2 (удар снизу вверх по окружности, подбрасывает высоко вверх)
+        "b21u2"
+        {
+            "sequence"          "b2 1 u2"
+            "damage"            "5.2"
+            "knock_x"           "40.0"
+            "knock_y"           "-520.0"
+            "player_recovery"   "0.28"
+            "enemy_stun"        "0.48"
+            "whiff_stun"        "0.26"
+            "active_time"       "0.16"
+            "lunge"             "12.0"
+            "name"              "COMBO b2-1-u2: CIRCULAR SKY LAUNCHER!"
+            "color"             "255 70 120"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
         // --- 2.2. Базовые комбо (общее начало для дальнейших уникальных вариаций) ---
 
-        // 12: удар 1 + тяжелый удар 2 (толкает врага вперед, сетап под дэш и 12df2)
+        // 12: удар 1 + тяжелый удар 2 (бьет об землю, враг чуть поднимается под f1 или df2)
         "12"
         {
             "sequence"          "1 2"
             "damage"            "3.5"
-            "knock_x"           "650.0"
-            "knock_y"           "-35.0"
+            "knock_x"           "320.0"
+            "knock_y"           "-240.0"
             "player_recovery"   "0.22"
             "enemy_stun"        "0.30"
             "whiff_stun"        "0.20"
             "active_time"       "0.14"
             "lunge"             "15.0"
-            "name"              "COMBO 1-2: PUSH! -> DASH df2"
+            "name"              "COMBO 1-2: GROUND SLAM & POP-UP"
             "color"             "255 150 50"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        // b21: дальний притягивающий удар b2 + удар рукояткой 1 (слегка отодвигает врага, сетап под u2)
+        "b21"
+        {
+            "sequence"          "b2 1"
+            "damage"            "2.5"
+            "knock_x"           "220.0"
+            "knock_y"           "-30.0"
+            "player_recovery"   "0.18"
+            "enemy_stun"        "0.28"
+            "whiff_stun"        "0.20"
+            "active_time"       "0.12"
+            "lunge"             "8.0"
+            "name"              "COMBO b2-1: HILT PUSH -> [W+2]"
+            "color"             "255 180 70"
             "is_unique"         "0"
             "is_finisher"       "0"
         }
