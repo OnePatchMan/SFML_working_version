@@ -628,8 +628,10 @@ void Player::draw(sf::RenderWindow& window) {
             _heldMaceLoaded = _heldMaceTexture.loadFromFile(path);
         }
         if (_heldMaceLoaded) {
-            sf::Sprite maceSprite(_heldMaceTexture);
-            maceSprite.setOrigin({static_cast<float>(_heldMaceTexture.getSize().x) * 0.5f, 48.0f});
+            if (!_heldMaceSprite.has_value()) {
+                _heldMaceSprite.emplace(_heldMaceTexture);
+            }
+            _heldMaceSprite->setOrigin({static_cast<float>(_heldMaceTexture.getSize().x) * 0.5f, 48.0f});
             float dir = isFacingRight() ? 1.0f : -1.0f;
             // Пологий угол наклона ~15 градусов к горизонту, булава опущена еще ниже к земле
             float rot = isFacingRight() ? -105.0f : 105.0f;
@@ -643,10 +645,10 @@ void Player::draw(sf::RenderWindow& window) {
                 handPos += sf::Vector2f(dir * (progress * 18.0f), -progress * 10.0f);
             }
 
-            maceSprite.setPosition(handPos);
-            maceSprite.setRotation(sf::degrees(rot));
-            maceSprite.setScale({dir * 1.0f, 1.0f});
-            window.draw(maceSprite);
+            _heldMaceSprite->setPosition(handPos);
+            _heldMaceSprite->setRotation(sf::degrees(rot));
+            _heldMaceSprite->setScale({dir * 1.0f, 1.0f});
+            window.draw(*_heldMaceSprite);
         }
     };
 

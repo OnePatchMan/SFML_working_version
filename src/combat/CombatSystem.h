@@ -176,6 +176,21 @@ private:
     bool _fontLoaded = false;
     std::mt19937 _rng{777};
 
+    // Кешированные текстовые элементы UI (исключают пересоздание и парсинг шрифта каждый кадр)
+    mutable std::optional<sf::Text> _hint1Text;
+    mutable std::optional<sf::Text> _hint2Text;
+    mutable std::optional<sf::Text> _pLabelText;
+    mutable std::optional<sf::Text> _comboBannerText;
+    mutable std::optional<sf::Text> _chainText;
+    mutable std::optional<sf::Text> _scaleText;
+    mutable std::optional<sf::Text> _stunText;
+    mutable std::optional<sf::Text> _counterText;
+    mutable bool _uiTextsInitialized = false;
+    mutable int _lastCachedHp = -999;
+    mutable std::string _lastCachedComboName;
+    mutable std::string _lastCachedChainStr;
+    mutable std::string _lastCachedScaleStr;
+
     void updateInternal(float dt, Player& player, const std::vector<Enemy*>& enemiesList);
     void triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld);
 };

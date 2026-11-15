@@ -173,6 +173,7 @@ private:
     bool _doorTextureLoaded = false;
     sf::Font _doorFont;
     bool _doorFontLoaded = false;
+    mutable std::optional<sf::Text> _cachedDoorText;
 
     std::string _configPath = "assets/config/map.kv";
     std::string _layoutFilePath = "assets/config/map.txt";

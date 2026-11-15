@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <optional>
 #include "core/Common.h"
 #include "entities/EnemyConfig.h"
 
@@ -175,6 +176,21 @@ public:
     sf::Vector2f lastKnownPlayerPos{0.0f, 0.0f};
     bool hasDetectedPlayer = false;
     float alertEffectTimer = 0.0f;
+
+    // Кешированные текстовые элементы UI врага (исключают пересоздание sf::Text каждый кадр)
+    mutable std::optional<sf::Text> _cachedNameText;
+    mutable std::optional<sf::Text> _cachedDodgeText;
+    mutable std::optional<sf::Text> _cachedExText;
+    mutable std::optional<sf::Text> _cachedAlertText;
+    mutable std::optional<sf::Text> _cachedPatText;
+    mutable std::optional<sf::Text> _cachedSearchBadge;
+    mutable std::optional<sf::Text> _cachedChaseBadge;
+    mutable std::optional<sf::Text> _cachedAiBanner;
+    mutable std::optional<sf::Text> _cachedParryText;
+    mutable std::optional<sf::Text> _cachedWarnExText;
+    mutable const sf::Font* _cachedFont = nullptr;
+    mutable std::string _cachedLabel;
+    mutable std::string _cachedComboName;
 
     Enemy(sf::Vector2f spawnPos, EnemyType type = EnemyType::NORMAL);
 

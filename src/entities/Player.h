@@ -195,6 +195,7 @@ private:
 
     bool _hasWeapon = true; // С самого начала персонаж появляется с булавой
     mutable sf::Texture _heldMaceTexture;
+    mutable std::optional<sf::Sprite> _heldMaceSprite;
     mutable bool _heldMaceLoaded = false;
 
     std::vector<DashGhost> _dashGhosts;

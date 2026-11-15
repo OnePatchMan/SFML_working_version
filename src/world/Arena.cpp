@@ -700,6 +700,10 @@ void Arena::loadTileset(const std::string& texturePath) {
     for (const auto& fp : fontCandidates) {
         if (!fp.empty() && std::filesystem::exists(fp) && _doorFont.openFromFile(fp)) {
             _doorFontLoaded = true;
+            _cachedDoorText.emplace(_doorFont, "", 13);
+            _cachedDoorText->setFillColor(sf::Color(0, 255, 230));
+            _cachedDoorText->setOutlineColor(sf::Color(0, 0, 0, 220));
+            _cachedDoorText->setOutlineThickness(1.5f);
             break;
         }
     }
@@ -1829,15 +1833,10 @@ void Arena::draw(sf::RenderWindow& window) {
             window.draw(doorSp);
 
             // Неоновое свечение и маркер целевой комнаты над дверью
-            if (_doorFontLoaded) {
-                sf::Text txt(_doorFont);
-                txt.setString("-> Rm " + std::to_string(d.targetRoom));
-                txt.setCharacterSize(13);
-                txt.setFillColor(sf::Color(0, 255, 230));
-                txt.setOutlineColor(sf::Color(0, 0, 0, 220));
-                txt.setOutlineThickness(1.5f);
-                txt.setPosition({dx - 4.0f, dy - 18.0f});
-                window.draw(txt);
+            if (_doorFontLoaded && _cachedDoorText.has_value()) {
+                _cachedDoorText->setString("-> Rm " + std::to_string(d.targetRoom));
+                _cachedDoorText->setPosition({dx - 4.0f, dy - 18.0f});
+                window.draw(*_cachedDoorText);
             }
         }
     }

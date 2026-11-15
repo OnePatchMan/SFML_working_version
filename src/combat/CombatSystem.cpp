@@ -1314,14 +1314,24 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 }
 
 void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
-    // 1. Искры попадания
-    for (const auto& p : _hitParticles) {
-        sf::RectangleShape pr({p.size, p.size});
-        pr.setPosition(p.position);
-        sf::Color pc = p.color;
-        pc.a = static_cast<std::uint8_t>(std::clamp(p.alpha, 0.0f, 255.0f));
-        pr.setFillColor(pc);
-        window.draw(pr);
+    // 1. Искры попадания (пакетная отрисовка в 1 Draw Call)
+    if (!_hitParticles.empty()) {
+        sf::VertexArray hitVA(sf::PrimitiveType::Triangles);
+        for (const auto& p : _hitParticles) {
+            float s = p.size;
+            sf::Color pc = p.color;
+            pc.a = static_cast<std::uint8_t>(std::clamp(p.alpha, 0.0f, 255.0f));
+            float x = p.position.x;
+            float y = p.position.y;
+            hitVA.append({{x, y}, pc, {0.0f, 0.0f}});
+            hitVA.append({{x + s, y}, pc, {0.0f, 0.0f}});
+            hitVA.append({{x + s, y + s}, pc, {0.0f, 0.0f}});
+
+            hitVA.append({{x, y}, pc, {0.0f, 0.0f}});
+            hitVA.append({{x + s, y + s}, pc, {0.0f, 0.0f}});
+            hitVA.append({{x, y + s}, pc, {0.0f, 0.0f}});
+        }
+        window.draw(hitVA);
     }
 
     // 2. Хитбокс и динамический росчерк удара
@@ -1441,6 +1451,38 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
 void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
     if (!_fontLoaded) return;
 
+    if (!_uiTextsInitialized) {
+        _hint1Text.emplace(_font, toSfString("[ЛКМ/J]: 1 | [ПКМ/K]: 2 | [Q]: Контр-атака | [Shift]: Рывок/Уворот | [Tab]: ИИ | [F5]: КВ/Карта | [T]: Атака"), 13);
+        _hint1Text->setFillColor(sf::Color(220, 220, 235, 210));
+
+        _hint2Text.emplace(_font, toSfString("Комбо: 111 | 222 | 11b2 (бросок назад) | 112 | 1f2d1 | 21db1 (подсечка) | a1a2 | a1a1adw2 | a1adw2 | a2ad1"), 13);
+        _hint2Text->setFillColor(sf::Color(255, 200, 110, 220));
+
+        _pLabelText.emplace(_font, "", 11);
+        _pLabelText->setFillColor(sf::Color(210, 235, 215));
+
+        _comboBannerText.emplace(_font, "", 22);
+
+        _chainText.emplace(_font, "", 15);
+        _chainText->setPosition({30.0f, 62.0f});
+        _chainText->setFillColor(sf::Color(180, 220, 255, 200));
+
+        _scaleText.emplace(_font, "", 14);
+        _scaleText->setPosition({30.0f, 82.0f});
+        _scaleText->setFillColor(sf::Color(255, 215, 80));
+        _scaleText->setOutlineColor(sf::Color(0, 0, 0, 200));
+        _scaleText->setOutlineThickness(1.2f);
+
+        _stunText.emplace(_font, "", 15);
+        _stunText->setPosition({30.0f, 88.0f});
+
+        _counterText.emplace(_font, toSfString("[Q] СТОЙКА КОНТР-АТАКИ / ПАРИРОВАНИЯ АКТИВНА!"), 15);
+        _counterText->setPosition({30.0f, 88.0f});
+        _counterText->setFillColor(sf::Color(0, 230, 255));
+
+        _uiTextsInitialized = true;
+    }
+
     // Полоска здоровья игрока в верхнем левом углу
     if (player) {
         float pBarW = 160.0f;
@@ -1476,18 +1518,24 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
             window.draw(pHpBar);
         }
 
-        sf::Text pLabel(_font, toSfString("PLAYER HP: " + std::to_string(static_cast<int>(player->hp))), 11);
-        pLabel.setPosition({pBarX + pBarW + 10.0f, pBarY - 2.0f});
-        pLabel.setFillColor(sf::Color(210, 235, 215));
-        window.draw(pLabel);
+        int curHpInt = static_cast<int>(player->hp);
+        if (curHpInt != _lastCachedHp) {
+            _lastCachedHp = curHpInt;
+            _pLabelText->setString(toSfString("PLAYER HP: " + std::to_string(curHpInt)));
+        }
+        _pLabelText->setPosition({pBarX + pBarW + 10.0f, pBarY - 2.0f});
+        window.draw(*_pLabelText);
     }
 
     // Отображение текущего комбо баннера
     if (_comboDisplayTimer > 0.0f && !_comboDisplayName.empty()) {
-        sf::Text txt(_font, toSfString(_comboDisplayName), 22);
-        txt.setPosition({30.0f, 32.0f});
-        txt.setFillColor(_comboDisplayColor);
-        window.draw(txt);
+        if (_comboDisplayName != _lastCachedComboName) {
+            _lastCachedComboName = _comboDisplayName;
+            _comboBannerText->setString(toSfString(_comboDisplayName));
+        }
+        _comboBannerText->setPosition({30.0f, 32.0f});
+        _comboBannerText->setFillColor(_comboDisplayColor);
+        window.draw(*_comboBannerText);
     }
 
     // Отображение цепочки ввода (например: "INPUT CHAIN: [1] -> [f2] -> [d1]")
@@ -1497,10 +1545,11 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
             chainStr += "[" + _comboHistory[i] + "]";
             if (i + 1 < _comboHistory.size()) chainStr += " -> ";
         }
-        sf::Text chainTxt(_font, toSfString(chainStr), 15);
-        chainTxt.setPosition({30.0f, 62.0f});
-        chainTxt.setFillColor(sf::Color(180, 220, 255, 200));
-        window.draw(chainTxt);
+        if (chainStr != _lastCachedChainStr) {
+            _lastCachedChainStr = chainStr;
+            _chainText->setString(toSfString(chainStr));
+        }
+        window.draw(*_chainText);
     }
 
     // Отображение скейлинга урона и снижения стана при серии ударов
@@ -1510,56 +1559,40 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
         std::string scaleStr = "COMBO HITS: " + std::to_string(_comboHitCount) +
                                " | PRORATION: " + std::to_string(dmgPct) + "%" +
                                " | STUN: " + std::to_string(stunPct) + "%";
-        sf::Text scaleTxt(_font, toSfString(scaleStr), 14);
-        scaleTxt.setPosition({30.0f, 82.0f});
-        scaleTxt.setFillColor(sf::Color(255, 215, 80));
-        scaleTxt.setOutlineColor(sf::Color(0, 0, 0, 200));
-        scaleTxt.setOutlineThickness(1.2f);
-        window.draw(scaleTxt);
+        if (scaleStr != _lastCachedScaleStr) {
+            _lastCachedScaleStr = scaleStr;
+            _scaleText->setString(toSfString(scaleStr));
+        }
+        window.draw(*_scaleText);
     }
 
     // Предупреждение об изнеможении / стан-локе игрока
     if (player && player->isStunned()) {
         std::string sVal = std::to_string(player->getStunTimer());
         if (sVal.size() > 4) sVal = sVal.substr(0, 4);
-        sf::Text stunTxt(_font, "", 15);
         if (player->isCounterWhiffStun() || _lastStunReason == StunReason::COUNTER_WHIFF) {
-            stunTxt.setString(toSfString("! СТАН-ЛОК ИГРОКА (ПРОМАХ СТОЙКИ КОНТР-АТАКИ [Q]): " + sVal + "с !"));
-            stunTxt.setFillColor(sf::Color(255, 120, 80));
+            _stunText->setString(toSfString("! СТАН-ЛОК ИГРОКА (ПРОМАХ СТОЙКИ КОНТР-АТАКИ [Q]): " + sVal + "с !"));
+            _stunText->setFillColor(sf::Color(255, 120, 80));
         } else if (_lastStunReason == StunReason::WHIFF) {
-            stunTxt.setString(toSfString("! СТАН-ЛОК ИГРОКА (ПРОМАХ ПО ВРАГУ / WHIFF LAG): " + sVal + "с !"));
-            stunTxt.setFillColor(sf::Color(255, 110, 110));
+            _stunText->setString(toSfString("! СТАН-ЛОК ИГРОКА (ПРОМАХ ПО ВРАГУ / WHIFF LAG): " + sVal + "с !"));
+            _stunText->setFillColor(sf::Color(255, 110, 110));
         } else if (_lastStunReason == StunReason::SPAM) {
-            stunTxt.setString(toSfString("! СТАН-ЛОК ИГРОКА (ШТРАФ ЗА СПАМ ОДНОГО КОМБО В ТЕЧЕНИЕ 3с): " + sVal + "с !"));
-            stunTxt.setFillColor(sf::Color(255, 75, 75));
-        } else if (_lastStunReason == StunReason::COUNTER_WHIFF) {
-            stunTxt.setString(toSfString("! СТАН-ЛОК ИГРОКА (ПРОМАХ СТОЙКИ КОНТР-АТАКИ [Q]): " + sVal + "с !"));
-            stunTxt.setFillColor(sf::Color(255, 120, 80));
+            _stunText->setString(toSfString("! СТАН-ЛОК ИГРОКА (ШТРАФ ЗА СПАМ ОДНОГО КОМБО В ТЕЧЕНИЕ 3с): " + sVal + "с !"));
+            _stunText->setFillColor(sf::Color(255, 75, 75));
         } else {
-            stunTxt.setString(toSfString("! СТАН-ЛОК ИГРОКА: " + sVal + "с !"));
-            stunTxt.setFillColor(sf::Color(255, 80, 80));
+            _stunText->setString(toSfString("! СТАН-ЛОК ИГРОКА: " + sVal + "с !"));
+            _stunText->setFillColor(sf::Color(255, 80, 80));
         }
-        stunTxt.setPosition({30.0f, 88.0f});
-        window.draw(stunTxt);
+        window.draw(*_stunText);
     } else if (player && player->isCounterStanceActive()) {
-        sf::Text counterTxt(_font, toSfString("[Q] СТОЙКА КОНТР-АТАКИ / ПАРИРОВАНИЯ АКТИВНА!"), 15);
-        counterTxt.setPosition({30.0f, 88.0f});
-        counterTxt.setFillColor(sf::Color(0, 230, 255));
-        window.draw(counterTxt);
+        window.draw(*_counterText);
     }
 
-    // Нижняя панель подсказок управления
-    sf::Text hint1(_font, 
-        toSfString("[ЛКМ/J]: 1 | [ПКМ/K]: 2 | [Q]: Контр-атака | [Shift]: Рывок/Уворот | [Tab]: ИИ | [F5]: КВ/Карта | [T]: Атака"), 
-        13);
-    hint1.setPosition({30.0f, static_cast<float>(window.getSize().y) - 46.0f});
-    hint1.setFillColor(sf::Color(220, 220, 235, 210));
-    window.draw(hint1);
+    // Нижняя панель подсказок управления (статические кешированные тексты)
+    float winH = static_cast<float>(window.getSize().y);
+    _hint1Text->setPosition({30.0f, winH - 46.0f});
+    window.draw(*_hint1Text);
 
-    sf::Text hint2(_font, 
-        toSfString("Комбо: 111 | 222 | 11b2 (бросок назад) | 112 | 1f2d1 | 21db1 (подсечка) | a1a2 | a1a1adw2 | a1adw2 | a2ad1"), 
-        13);
-    hint2.setPosition({30.0f, static_cast<float>(window.getSize().y) - 26.0f});
-    hint2.setFillColor(sf::Color(255, 200, 110, 220));
-    window.draw(hint2);
+    _hint2Text->setPosition({30.0f, winH - 26.0f});
+    window.draw(*_hint2Text);
 }

@@ -1611,6 +1611,30 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
 }
 
 void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
+    if (font && _cachedFont != font) {
+        _cachedFont = font;
+        _cachedParryText.emplace(*font, "PARRY", 11);
+        _cachedParryText->setFillColor(sf::Color(0, 240, 255));
+        _cachedWarnExText.emplace(*font, "!", 13);
+        _cachedWarnExText->setFillColor(sf::Color::White);
+        _cachedNameText.emplace(*font, "", 10);
+        _cachedDodgeText.emplace(*font, toSfString("DODGE!"), 10);
+        _cachedDodgeText->setFillColor(sf::Color(255, 230, 80));
+        _cachedExText.emplace(*font, "!", 12);
+        _cachedExText->setStyle(sf::Text::Bold);
+        _cachedExText->setFillColor(sf::Color(30, 20, 0));
+        _cachedAlertText.emplace(*font, toSfString("ОБНАРУЖЕН!"), 9);
+        _cachedAlertText->setFillColor(sf::Color(255, 225, 60));
+        _cachedPatText.emplace(*font, toSfString("[ПАТРУЛЬ]"), 9);
+        _cachedPatText->setFillColor(sf::Color(100, 210, 255, 200));
+        _cachedSearchBadge.emplace(*font, toSfString("[?] ПОИСК"), 9);
+        _cachedSearchBadge->setFillColor(sf::Color(255, 195, 60));
+        _cachedChaseBadge.emplace(*font, toSfString("[!] ПОГОНЯ"), 9);
+        _cachedChaseBadge->setFillColor(sf::Color(255, 80, 80));
+        _cachedAiBanner.emplace(*font, "", 12);
+        _cachedAiBanner->setFillColor(sf::Color(255, 230, 90));
+    }
+
     // 1. Модель противника (с учетом размера архетипа: Танк в 1.5 раза больше)
     sf::RectangleShape body({halfW * 2.0f, halfH * 2.0f});
     body.setOrigin({halfW, halfH});
@@ -1741,11 +1765,9 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         shield.setOutlineColor(sf::Color(120, 240, 255, 230));
         window.draw(shield);
 
-        if (font) {
-            sf::Text pText(*font, "PARRY", 11);
-            pText.setFillColor(sf::Color(0, 240, 255));
-            pText.setPosition({position.x - 18.0f, position.y - halfH - 30.0f});
-            window.draw(pText);
+        if (_cachedParryText) {
+            _cachedParryText->setPosition({position.x - 18.0f, position.y - halfH - 30.0f});
+            window.draw(*_cachedParryText);
         }
     }
 
@@ -1763,11 +1785,9 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         warn.setFillColor(sf::Color(255, 45, 45));
         window.draw(warn);
 
-        if (font) {
-            sf::Text exText(*font, "!", 13);
-            exText.setFillColor(sf::Color::White);
-            exText.setPosition({position.x - 2.5f, barY - 19.0f});
-            window.draw(exText);
+        if (_cachedWarnExText) {
+            _cachedWarnExText->setPosition({position.x - 2.5f, barY - 19.0f});
+            window.draw(*_cachedWarnExText);
         }
     }
 
@@ -1799,7 +1819,7 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(hpBar);
     }
 
-    if (font) {
+    if (font && _cachedNameText) {
         std::string label = "NORMAL";
         sf::Color labelColor = sf::Color(190, 195, 205);
         if (enemyType == EnemyType::TANK) {
@@ -1809,17 +1829,18 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
             label = "DUELIST";
             labelColor = sf::Color(215, 120, 255);
         }
-        sf::Text nameText(*font, toSfString(label), 10);
-        nameText.setFillColor(labelColor);
-        nameText.setPosition({barX + 2.0f, barY - 13.0f});
-        window.draw(nameText);
+        if (label != _cachedLabel) {
+            _cachedLabel = label;
+            _cachedNameText->setString(toSfString(label));
+        }
+        _cachedNameText->setFillColor(labelColor);
+        _cachedNameText->setPosition({barX + 2.0f, barY - 13.0f});
+        window.draw(*_cachedNameText);
 
         // Индикатор уворота
-        if (isDodging) {
-            sf::Text dodgeText(*font, toSfString("DODGE!"), 10);
-            dodgeText.setFillColor(sf::Color(255, 230, 80));
-            dodgeText.setPosition({position.x - 18.0f, barY - 26.0f});
-            window.draw(dodgeText);
+        if (isDodging && _cachedDodgeText) {
+            _cachedDodgeText->setPosition({position.x - 18.0f, barY - 26.0f});
+            window.draw(*_cachedDodgeText);
         }
 
         // Индикатор состояния восприятия
@@ -1834,41 +1855,41 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
                 alertBadge.setOutlineColor(sf::Color(255, 80, 0));
                 window.draw(alertBadge);
 
-                sf::Text exText(*font, "!", 12);
-                exText.setStyle(sf::Text::Bold);
-                exText.setFillColor(sf::Color(30, 20, 0));
-                exText.setPosition({position.x - 3.0f, barY - 30.0f});
-                window.draw(exText);
-
-                sf::Text alertText(*font, toSfString("ОБНАРУЖЕН!"), 9);
-                alertText.setFillColor(sf::Color(255, 225, 60));
-                alertText.setPosition({position.x - 28.0f, barY - 42.0f});
-                window.draw(alertText);
+                if (_cachedExText) {
+                    _cachedExText->setPosition({position.x - 3.0f, barY - 30.0f});
+                    window.draw(*_cachedExText);
+                }
+                if (_cachedAlertText) {
+                    _cachedAlertText->setPosition({position.x - 28.0f, barY - 42.0f});
+                    window.draw(*_cachedAlertText);
+                }
             } else if (behaviorState == AIBehaviorState::PATROL) {
-                sf::Text patText(*font, toSfString("[ПАТРУЛЬ]"), 9);
-                patText.setFillColor(sf::Color(100, 210, 255, 200));
-                patText.setPosition({barX + barW - 48.0f, barY - 13.0f});
-                window.draw(patText);
+                if (_cachedPatText) {
+                    _cachedPatText->setPosition({barX + barW - 48.0f, barY - 13.0f});
+                    window.draw(*_cachedPatText);
+                }
             } else if (behaviorState == AIBehaviorState::CHASE) {
                 if (lostSightTimer < EnemyConfig::get().perception.lostSightTimeout - 0.5f) {
-                    sf::Text searchBadge(*font, toSfString("[?] ПОИСК"), 9);
-                    searchBadge.setFillColor(sf::Color(255, 195, 60));
-                    searchBadge.setPosition({barX + barW - 46.0f, barY - 13.0f});
-                    window.draw(searchBadge);
+                    if (_cachedSearchBadge) {
+                        _cachedSearchBadge->setPosition({barX + barW - 46.0f, barY - 13.0f});
+                        window.draw(*_cachedSearchBadge);
+                    }
                 } else {
-                    sf::Text chaseBadge(*font, toSfString("[!] ПОГОНЯ"), 9);
-                    chaseBadge.setFillColor(sf::Color(255, 80, 80));
-                    chaseBadge.setPosition({barX + barW - 50.0f, barY - 13.0f});
-                    window.draw(chaseBadge);
+                    if (_cachedChaseBadge) {
+                        _cachedChaseBadge->setPosition({barX + barW - 50.0f, barY - 13.0f});
+                        window.draw(*_cachedChaseBadge);
+                    }
                 }
             }
         }
 
-        if (isSmartAI && !currentComboName.empty()) {
-            sf::Text aiBanner(*font, toSfString(currentComboName), 12);
-            aiBanner.setFillColor(sf::Color(255, 230, 90));
-            aiBanner.setPosition({position.x - 75.0f, barY - 28.0f});
-            window.draw(aiBanner);
+        if (isSmartAI && !currentComboName.empty() && _cachedAiBanner) {
+            if (currentComboName != _cachedComboName) {
+                _cachedComboName = currentComboName;
+                _cachedAiBanner->setString(toSfString(currentComboName));
+            }
+            _cachedAiBanner->setPosition({position.x - 75.0f, barY - 28.0f});
+            window.draw(*_cachedAiBanner);
         }
     }
 }
