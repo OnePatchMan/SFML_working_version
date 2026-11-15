@@ -707,6 +707,7 @@ void Arena::loadTileset(const std::string& texturePath) {
 
 void Arena::buildDefaultMap() {
     _doors.clear();
+    _tilemapDirty = true;
     // 0 = воздух, 1 = пол, 2 = стена/фундамент
     _map.assign(_height, std::vector<int>(_width, 0));
 
@@ -977,6 +978,7 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
     }
     syncEnemySpawnPositions();
     _enemySpawnPosition = _enemySpawnPositions[0];
+    _tilemapDirty = true;
 
     return true;
 }
@@ -1209,6 +1211,7 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
         _enemySpawns.push_back({{_spawnPosition.x + 350.0f, _spawnPosition.y + 2.0f}, 0});
     }
     syncEnemySpawnPositions();
+    _tilemapDirty = true;
 
     return true;
 }
@@ -1465,6 +1468,7 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
         _enemySpawns.push_back({{ _spawnPosition.x + 350.0f, _spawnPosition.y + 2.0f }, 0});
     }
     syncEnemySpawnPositions();
+    _tilemapDirty = true;
 
     return true;
 }
@@ -1683,6 +1687,7 @@ int Arena::getTile(int tx, int ty) const {
 void Arena::setTile(int tx, int ty, int tile) {
     if (tx >= 0 && tx < _width && ty >= 0 && ty < _height) {
         _map[ty][tx] = tile;
+        _tilemapDirty = true;
         if (tile == 3) {
             bool found = false;
             for (auto& d : _doors) {
@@ -1698,6 +1703,45 @@ void Arena::setTile(int tx, int ty, int tile) {
     }
 }
 
+namespace {
+inline void addQuadColored(sf::VertexArray& va, float x, float y, float w, float h, const sf::Color& c) {
+    va.append({{x, y}, c, {0.0f, 0.0f}});
+    va.append({{x + w, y}, c, {0.0f, 0.0f}});
+    va.append({{x + w, y + h}, c, {0.0f, 0.0f}});
+
+    va.append({{x, y}, c, {0.0f, 0.0f}});
+    va.append({{x + w, y + h}, c, {0.0f, 0.0f}});
+    va.append({{x, y + h}, c, {0.0f, 0.0f}});
+}
+}
+
+void Arena::rebuildTilemapVertices() {
+    _tilemapVertices.clear();
+    for (int y = 0; y < _height; ++y) {
+        for (int x = 0; x < _width; ++x) {
+            int tile = _map[y][x];
+            if (tile == 0 || tile == 3) continue; // 0 = воздух, 3 = дверь
+            if (tile < 0 || static_cast<size_t>(tile) >= _tileSprites.size()) continue;
+
+            float px = static_cast<float>(x * _tileSize);
+            float py = static_cast<float>(y * _tileSize);
+            float tx = static_cast<float>(tile * 32);
+            float ty = 0.0f;
+            float tw = 32.0f;
+            float th = 32.0f;
+
+            _tilemapVertices.append({{px, py}, sf::Color::White, {tx, ty}});
+            _tilemapVertices.append({{px + _tileSize, py}, sf::Color::White, {tx + tw, ty}});
+            _tilemapVertices.append({{px + _tileSize, py + _tileSize}, sf::Color::White, {tx + tw, ty + th}});
+
+            _tilemapVertices.append({{px, py}, sf::Color::White, {tx, ty}});
+            _tilemapVertices.append({{px + _tileSize, py + _tileSize}, sf::Color::White, {tx + tw, ty + th}});
+            _tilemapVertices.append({{px, py + _tileSize}, sf::Color::White, {tx, ty + th}});
+        }
+    }
+    _tilemapDirty = false;
+}
+
 void Arena::draw(sf::RenderWindow& window) {
     sf::View view = window.getView();
     sf::Vector2f center = view.getCenter();
@@ -1708,108 +1752,70 @@ void Arena::draw(sf::RenderWindow& window) {
     int startY = std::max(0, static_cast<int>((center.y - size.y / 2.0f) / _tileSize) - 1);
     int endY = std::min(_height, static_cast<int>((center.y + size.y / 2.0f) / _tileSize) + 2);
 
-    // -------------------------------------------------------------
-    // Стекающие следы густой крови на заднем фоне (Dense Dripping Blood Streaks)
-    // Рисуются ПЕРЕД тайлами, отображая потеки и сгустки крови на задней стене
-    // -------------------------------------------------------------
-    for (const auto& streak : _bgBloodStreaks) {
-        if (streak.isSpray) {
-            // Мелкие спреевидные брызги на задней стене (не стекают, статичные микрокапли 1-3.5px)
-            sf::RectangleShape spray({streak.width, streak.blotchH > 0.0f ? streak.blotchH : streak.width});
-            spray.setPosition({std::floor(streak.startPos.x - streak.width * 0.5f), 
-                              std::floor(streak.startPos.y - (streak.blotchH > 0.0f ? streak.blotchH * 0.5f : streak.width * 0.5f))});
-            spray.setFillColor(streak.color);
-            window.draw(spray);
-        } else if (streak.isBlotch) {
-            // Густой сгусток в эпицентре удара (Dense Blood Mass)
-            sf::RectangleShape blotch({streak.width, streak.blotchH});
-            blotch.setPosition({std::floor(streak.startPos.x - streak.width * 0.5f), 
-                                std::floor(streak.startPos.y - streak.blotchH * 0.5f)});
-            blotch.setFillColor(streak.color);
-            window.draw(blotch);
-        } else if (streak.length <= 1.0f) {
-            // Мелкая крапинка / капля брызг
-            sf::RectangleShape spot({streak.width, std::max(2.0f, streak.width * 0.8f)});
-            spot.setPosition({std::floor(streak.startPos.x - streak.width * 0.5f), 
-                              std::floor(streak.startPos.y)});
-            spot.setFillColor(streak.color);
-            window.draw(spot);
-        } else {
-            // Стекающий ручей крови:
-            // 1. Верхний якорный сгусток (у основания струи)
-            float anchorW = streak.width * 1.35f;
-            float anchorH = std::max(3.5f, streak.width * 0.85f);
-            sf::RectangleShape anchor({anchorW, anchorH});
-            anchor.setPosition({std::floor(streak.startPos.x - anchorW * 0.5f), 
-                                std::floor(streak.startPos.y)});
-            anchor.setFillColor(streak.color);
-            window.draw(anchor);
+    // 1. Пакетная отрисовка стекающей крови на заднем фоне (Batch VertexArray в 1 Draw Call)
+    if (!_bgBloodStreaks.empty()) {
+        sf::VertexArray bgBloodVA(sf::PrimitiveType::Triangles);
+        for (const auto& streak : _bgBloodStreaks) {
+            if (streak.isSpray) {
+                float h = (streak.blotchH > 0.0f) ? streak.blotchH : streak.width;
+                float px = std::floor(streak.startPos.x - streak.width * 0.5f);
+                float py = std::floor(streak.startPos.y - (streak.blotchH > 0.0f ? streak.blotchH * 0.5f : streak.width * 0.5f));
+                addQuadColored(bgBloodVA, px, py, streak.width, h, streak.color);
+            } else if (streak.isBlotch) {
+                float px = std::floor(streak.startPos.x - streak.width * 0.5f);
+                float py = std::floor(streak.startPos.y - streak.blotchH * 0.5f);
+                addQuadColored(bgBloodVA, px, py, streak.width, streak.blotchH, streak.color);
+            } else if (streak.length <= 1.0f) {
+                float px = std::floor(streak.startPos.x - streak.width * 0.5f);
+                float py = std::floor(streak.startPos.y);
+                addQuadColored(bgBloodVA, px, py, streak.width, std::max(2.0f, streak.width * 0.8f), streak.color);
+            } else {
+                float anchorW = streak.width * 1.35f;
+                float anchorH = std::max(3.5f, streak.width * 0.85f);
+                addQuadColored(bgBloodVA, std::floor(streak.startPos.x - anchorW * 0.5f), std::floor(streak.startPos.y), anchorW, anchorH, streak.color);
 
-            // 2. Вертикальное тело струи крови
-            sf::RectangleShape body({streak.width, streak.length});
-            body.setPosition({std::floor(streak.startPos.x - streak.width * 0.5f), 
-                              std::floor(streak.startPos.y)});
-            body.setFillColor(streak.color);
-            window.draw(body);
+                addQuadColored(bgBloodVA, std::floor(streak.startPos.x - streak.width * 0.5f), std::floor(streak.startPos.y), streak.width, streak.length, streak.color);
 
-            // 3. Каплевидная головка на конце стекающего ручья
-            float headW = streak.width * 1.35f;
-            float headH = std::max(4.0f, streak.width * 1.5f);
-            sf::RectangleShape head({headW, headH});
-            head.setPosition({std::floor(streak.currentPos.x - headW * 0.5f), 
-                              std::floor(streak.currentPos.y)});
-            head.setFillColor(streak.color);
-            window.draw(head);
-        }
-    }
-
-    // Отрисовка тайлов комнат
-    for (int y = startY; y < endY; ++y) {
-        for (int x = startX; x < endX; ++x) {
-            int tile = _map[y][x];
-            if (tile == 0 || tile == 3) continue; // 0 = воздух, 3 = дверь
-            if (static_cast<size_t>(tile) < _tileSprites.size()) {
-                sf::Sprite sp = _tileSprites[tile];
-                sp.setPosition({static_cast<float>(x * _tileSize), static_cast<float>(y * _tileSize)});
-                window.draw(sp);
+                float headW = streak.width * 1.35f;
+                float headH = std::max(4.0f, streak.width * 1.5f);
+                addQuadColored(bgBloodVA, std::floor(streak.currentPos.x - headW * 0.5f), std::floor(streak.currentPos.y), headW, headH, streak.color);
             }
         }
-    }
-
-    // -------------------------------------------------------------
-    // Наружные полосы крови на гранях блоков (Surface Edge Blood Stripes)
-    // Окрашивают прямой полосой исключительно наружные 2-3px пиксели блоков
-    // -------------------------------------------------------------
-    for (const auto& decal : _bloodDecals) {
-        sf::RectangleShape line;
-        float len = (decal.length > 0.0f) ? decal.length : (decal.radiusX * 2.0f);
-        float thick = (decal.thickness > 0.0f) ? decal.thickness : 2.5f;
-
-        if (decal.orientation == BloodDecalOrientation::HORIZONTAL) {
-            line.setSize({std::max(4.0f, len), thick});
-            line.setPosition({std::floor(decal.position.x), std::floor(decal.position.y)});
-        } else {
-            line.setSize({thick, std::max(4.0f, len)});
-            line.setPosition({std::floor(decal.position.x), std::floor(decal.position.y)});
+        if (bgBloodVA.getVertexCount() > 0) {
+            window.draw(bgBloodVA);
         }
-        line.setFillColor(decal.color);
-        window.draw(line);
     }
 
-    // Пиксельная отрисовка летящих капель крови в воздухе (Pixel-Art Droplets)
-    for (const auto& bp : _bloodParticles) {
-        if (!bp.active) continue;
-        float pSize = std::max(2.5f, std::floor(bp.radius * 1.1f));
-        sf::RectangleShape drop({pSize, pSize});
-        drop.setPosition({std::floor(bp.position.x - pSize * 0.5f), 
-                          std::floor(bp.position.y - pSize * 0.5f)});
-        drop.setFillColor(bp.color);
-        window.draw(drop);
+    // 2. Пакетная отрисовка тайлов карты в 1 Draw Call через кешированный VertexArray
+    if (_tilemapDirty) {
+        rebuildTilemapVertices();
+    }
+    sf::RenderStates tileStates(&_tileTexture);
+    window.draw(_tilemapVertices, tileStates);
+
+    // 3. Пакетная отрисовка наружных декалей крови и летящих частиц в воздухе (Batch VertexArray в 1 Draw Call)
+    if (!_bloodDecals.empty() || !_bloodParticles.empty()) {
+        sf::VertexArray fgBloodVA(sf::PrimitiveType::Triangles);
+        for (const auto& decal : _bloodDecals) {
+            float len = (decal.length > 0.0f) ? decal.length : (decal.radiusX * 2.0f);
+            float thick = (decal.thickness > 0.0f) ? decal.thickness : 2.5f;
+            float w = (decal.orientation == BloodDecalOrientation::HORIZONTAL) ? std::max(4.0f, len) : thick;
+            float h = (decal.orientation == BloodDecalOrientation::HORIZONTAL) ? thick : std::max(4.0f, len);
+            addQuadColored(fgBloodVA, std::floor(decal.position.x), std::floor(decal.position.y), w, h, decal.color);
+        }
+
+        for (const auto& bp : _bloodParticles) {
+            if (!bp.active) continue;
+            float pSize = std::max(2.5f, std::floor(bp.radius * 1.1f));
+            addQuadColored(fgBloodVA, std::floor(bp.position.x - pSize * 0.5f), std::floor(bp.position.y - pSize * 0.5f), pSize, pSize, bp.color);
+        }
+
+        if (fgBloodVA.getVertexCount() > 0) {
+            window.draw(fgBloodVA);
+        }
     }
 
-    // -------------------------------------------------------------
-    // Отрисовка настраиваемых блоков дверей
-    // -------------------------------------------------------------
+    // 4. Отрисовка настраиваемых блоков дверей
     for (const auto& d : _doors) {
         if (d.x < startX - 1 || d.x > endX + 1 || d.y < startY - 1 || d.y > endY + 1) continue;
         float dx = static_cast<float>(d.x * _tileSize);

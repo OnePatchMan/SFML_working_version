@@ -148,6 +148,7 @@ public:
     std::string getCurrentRoomPath() const;
 
     void draw(sf::RenderWindow& window);
+    void markTilemapDirty() { _tilemapDirty = true; }
 
 private:
     int _width;
@@ -157,6 +158,9 @@ private:
     std::vector<std::vector<int>> _map;
     sf::Texture _tileTexture;
     std::vector<sf::Sprite> _tileSprites;
+    sf::VertexArray _tilemapVertices{sf::PrimitiveType::Triangles};
+    bool _tilemapDirty = true;
+    void rebuildTilemapVertices();
     sf::Vector2f _spawnPosition;
     sf::Vector2f _enemySpawnPosition;
     std::vector<EnemySpawnConfig> _enemySpawns;

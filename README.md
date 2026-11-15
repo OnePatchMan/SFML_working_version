@@ -90,6 +90,8 @@
 | `Tab` | Переключение режима врагов: **Умный ИИ** $\leftrightarrow$ **Тренировочный манекен** |
 | `Y` | Смена архетипа врагов по кругу: `NORMAL` $\rightarrow$ `TANK` $\rightarrow$ `DUELIST` |
 | `Backspace` | Сброс (ресет) позиций игрока, противников и боевого состояния |
+| `F3` | Переключение счетчика FPS и времени кадра (`FPS: ... [MAX]`) |
+| `F4` | Переключение лимитера частоты кадров (`MAX / Uncapped` $\rightarrow$ `240` $\rightarrow$ `144` $\rightarrow$ `60` $\rightarrow$ `VSync`) |
 | `PageUp` / `PageDown` | Быстрое переключение комнат (`room_1` $\dots$ `room_10`) |
 | `F5` | Горячая перезагрузка всех конфигураций (`.kv`), звуков и комнат |
 | `F6` | Включение / выключение встроенного редактора карт |
@@ -198,3 +200,4 @@ xvfb-run -a ./build/test_directional_combos
 * [docs/combat_system.md](file:///home/dagai/Projects/SFML_working_version/docs/combat_system.md) — подробные формулы урона, скорости булавы и тайминги комбо.
 * [docs/enemy_ai.md](file:///home/dagai/Projects/SFML_working_version/docs/enemy_ai.md) — параметры архетипов и деревья решений искусственного интеллекта.
 * [docs/map_editor.md](file:///home/dagai/Projects/SFML_working_version/docs/map_editor.md) — горячие клавиши и инструкция по созданию новых уровней.
+

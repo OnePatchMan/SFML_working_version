@@ -42,7 +42,47 @@ int main() {
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
     sf::RenderWindow window(desktop, "FightingComboGame", sf::Style::None);
     window.setMouseCursorVisible(false);
-    window.setFramerateLimit(144);
+
+    // Управление режимами ограничения частоты кадров (FPS)
+    enum class FpsMode {
+        UNCAPPED,
+        FPS_240,
+        FPS_144,
+        FPS_60,
+        VSYNC
+    };
+    FpsMode fpsMode = FpsMode::UNCAPPED;
+    auto applyFpsMode = [&](FpsMode mode) {
+        fpsMode = mode;
+        switch (mode) {
+            case FpsMode::UNCAPPED:
+                window.setVerticalSyncEnabled(false);
+                window.setFramerateLimit(0);
+                std::cout << "[FPS] Режим: БЕЗ ОГРАНИЧЕНИЙ (Uncapped / Max FPS)" << std::endl;
+                break;
+            case FpsMode::FPS_240:
+                window.setVerticalSyncEnabled(false);
+                window.setFramerateLimit(240);
+                std::cout << "[FPS] Режим: 240 FPS" << std::endl;
+                break;
+            case FpsMode::FPS_144:
+                window.setVerticalSyncEnabled(false);
+                window.setFramerateLimit(144);
+                std::cout << "[FPS] Режим: 144 FPS" << std::endl;
+                break;
+            case FpsMode::FPS_60:
+                window.setVerticalSyncEnabled(false);
+                window.setFramerateLimit(60);
+                std::cout << "[FPS] Режим: 60 FPS" << std::endl;
+                break;
+            case FpsMode::VSYNC:
+                window.setFramerateLimit(0);
+                window.setVerticalSyncEnabled(true);
+                std::cout << "[FPS] Режим: VSync (Вертикальная синхронизация)" << std::endl;
+                break;
+        }
+    };
+    applyFpsMode(FpsMode::UNCAPPED);
 
     Crosshair crosshair("assets/sprites/crosshair.png", window);
     sf::View camera(player.position, sf::Vector2f(static_cast<float>(window.getSize().x), 
@@ -50,9 +90,26 @@ int main() {
     sf::Clock dtClock;
     bool isPaused = false;
 
+    // FPS счетчик (активен по умолчанию, переключение по F3)
+    sf::Clock fpsClock;
+    int fpsFrameCounter = 0;
+    float currentFps = 144.0f;
+    float frameTimeMs = 6.9f;
+    bool showFpsCounter = true;
+
     while (window.isOpen()) {
         float dt = dtClock.restart().asSeconds();
         if (dt > 0.1f) dt = 0.1f;
+
+        fpsFrameCounter++;
+        if (fpsClock.getElapsedTime().asSeconds() >= 0.25f) {
+            float elapsed = fpsClock.restart().asSeconds();
+            if (elapsed > 0.0f && fpsFrameCounter > 0) {
+                currentFps = static_cast<float>(fpsFrameCounter) / elapsed;
+                frameTimeMs = (elapsed / static_cast<float>(fpsFrameCounter)) * 1000.0f;
+            }
+            fpsFrameCounter = 0;
+        }
 
         sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
         sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel, camera);
@@ -95,6 +152,19 @@ int main() {
                         window.close();
                     }
                 } else {
+                    // F3 - переключение отображения FPS счетчика
+                    if (keyPressed->code == sf::Keyboard::Key::F3) {
+                        showFpsCounter = !showFpsCounter;
+                    }
+                    // F4 - переключение лимитера частоты кадров (Uncapped -> 240 -> 144 -> 60 -> VSync)
+                    if (keyPressed->code == sf::Keyboard::Key::F4) {
+                        FpsMode nextMode = (fpsMode == FpsMode::UNCAPPED) ? FpsMode::FPS_240 :
+                                           (fpsMode == FpsMode::FPS_240)   ? FpsMode::FPS_144 :
+                                           (fpsMode == FpsMode::FPS_144)   ? FpsMode::FPS_60 :
+                                           (fpsMode == FpsMode::FPS_60)    ? FpsMode::VSYNC :
+                                                                             FpsMode::UNCAPPED;
+                        applyFpsMode(nextMode);
+                    }
                     // F6 - Переключение режима ручного редактора карты
                     if (keyPressed->code == sf::Keyboard::Key::F6) {
                         mapEditor.toggle(window, camera, player);
@@ -366,6 +436,40 @@ int main() {
             } else {
                 crosshair.Draw(window);
             }
+        }
+
+        // 3. Отрисовка счетчика FPS (в правом верхнем углу)
+        if (showFpsCounter && combat.getFont()) {
+            const sf::Font& font = *combat.getFont();
+            const char* modeTag = (fpsMode == FpsMode::UNCAPPED) ? "MAX" :
+                                  (fpsMode == FpsMode::FPS_240)   ? "240" :
+                                  (fpsMode == FpsMode::FPS_144)   ? "144" :
+                                  (fpsMode == FpsMode::FPS_60)    ? "60" : "VSYNC";
+
+            char fpsBuf[64];
+            std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d (%.1f ms) [%s]", 
+                          static_cast<int>(std::round(currentFps)), frameTimeMs, modeTag);
+
+            float badgeW = 180.0f;
+            float badgeH = 26.0f;
+            float badgeX = winSize.x - badgeW - 20.0f;
+            float badgeY = 12.0f;
+
+            sf::RectangleShape badge({badgeW, badgeH});
+            badge.setPosition({badgeX, badgeY});
+            badge.setFillColor(sf::Color(15, 18, 25, 215));
+            badge.setOutlineThickness(1.5f);
+
+            sf::Color fpsColor = (currentFps >= 55.0f) ? sf::Color(80, 240, 110) :
+                                 (currentFps >= 30.0f) ? sf::Color(255, 215, 60) :
+                                                         sf::Color(255, 80, 80);
+            badge.setOutlineColor(sf::Color(fpsColor.r, fpsColor.g, fpsColor.b, 160));
+            window.draw(badge);
+
+            sf::Text fpsText(font, toSfString(fpsBuf), 12);
+            fpsText.setFillColor(fpsColor);
+            fpsText.setPosition({badgeX + 8.0f, badgeY + 4.0f});
+            window.draw(fpsText);
         }
 
         window.display();
