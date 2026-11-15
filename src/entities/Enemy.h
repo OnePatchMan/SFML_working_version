@@ -96,6 +96,9 @@ public:
     float hurtTimer = 0.0f;
     float respawnTimer = 0.0f;
     float deathFadeTimer = 0.0f;
+    float spinTimer = 0.0f;         // Таймер вращения вокруг своей оси при попадании булавы
+    float spinAngle = 0.0f;         // Текущий угол вращения в градусах
+    float spinSpeed = 0.0f;         // Скорость вращения (град/с)
     sf::Vector2f spawnPosition;
 
     EnemyType enemyType = EnemyType::NORMAL;
@@ -202,6 +205,10 @@ public:
     sf::FloatRect getBounds() const;
     bool takeDamage(float amount, float knockX, float knockY, float stunTime = 0.18f);
     void triggerStun(float dur) { hurtTimer = std::max(hurtTimer, dur * stunMultiplier); }
+    void triggerSpin(float duration = 0.65f, float speed = 900.0f) {
+        spinTimer = duration;
+        spinSpeed = speed;
+    }
     float getStunTimer() const { return hurtTimer; }
     bool isStunned() const { return hurtTimer > 0.0f; }
     void reset();

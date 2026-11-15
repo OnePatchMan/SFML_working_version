@@ -135,6 +135,7 @@ public:
             return &_combos[it->second];
         }
         if (id == "21dw1" || id == "21ddw1") return getCombo("21db1");
+        if (id == "db1up1" || id == "b1u1" || id == "b1up1") return getCombo("db1u1");
         return nullptr;
     }
 
@@ -142,6 +143,7 @@ public:
     static bool hasCombo(const std::string& id) {
         ensureInitialized();
         if (id == "21dw1" || id == "21ddw1") return hasCombo("21db1");
+        if (id == "db1up1" || id == "b1u1" || id == "b1up1") return hasCombo("db1u1");
         return _comboIndexMap.find(id) != _comboIndexMap.end();
     }
 
@@ -461,6 +463,20 @@ private:
             "b21u2",
             {"b2", "1", "u2"},
             {5.2f, 40.0f, -520.0f, 0.28f, 0.48f, 0.16f, 12.0f, "COMBO b2-1-u2: CIRCULAR SKY LAUNCHER!", sf::Color(255, 70, 120), 0.62f},
+            true, true
+        });
+
+        addCombo({
+            "121",
+            {"1", "2", "1"},
+            {4.8f, 480.0f, 0.0f, 0.24f, 0.38f, 0.15f, 16.0f, "COMBO 1-2-1: TENDERIZER PUSH!", sf::Color(255, 165, 45), 0.58f},
+            true, true
+        });
+
+        addCombo({
+            "db1u1",
+            {"db1", "u1"},
+            {4.6f, 140.0f, -480.0f, 0.24f, 0.42f, 0.15f, 10.0f, "COMBO db1-u1: REVERSE TURN & SKY POP-UP!", sf::Color(255, 110, 180), 0.60f},
             true, true
         });
 

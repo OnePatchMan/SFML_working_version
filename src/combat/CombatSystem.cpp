@@ -93,6 +93,7 @@ AttackAnimType CombatSystem::resolveAttackAnimType(const std::string& attackType
         return AttackAnimType::THROW;
     }
     if (comboName.find("b2-1-u2") != std::string::npos || comboName.find("SKY LAUNCHER") != std::string::npos ||
+        comboName.find("db1-u1") != std::string::npos || comboName.find("SKY POP-UP") != std::string::npos ||
         comboName.find("1-1-2") != std::string::npos || comboName.find("UPPERCUT") != std::string::npos || 
         attackType == "u1" || attackType == "u2") {
         return AttackAnimType::UPPERCUT;
@@ -100,7 +101,8 @@ AttackAnimType CombatSystem::resolveAttackAnimType(const std::string& attackType
     if (comboName.find("1-2-f1") != std::string::npos || comboName.find("BAT SWING") != std::string::npos) {
         return AttackAnimType::TURN_ATTACK;
     }
-    if (comboName.find("1-f2-d1") != std::string::npos || comboName.find("DIAGONAL") != std::string::npos || 
+    if (comboName.find("1-2-1") != std::string::npos || comboName.find("TENDERIZER PUSH") != std::string::npos ||
+        comboName.find("1-f2-d1") != std::string::npos || comboName.find("DIAGONAL") != std::string::npos || 
         attackType == "d1" || attackType == "d2" || attackType == "df1" || attackType == "df2") {
         return AttackAnimType::DASH_ATTACK;
     }
@@ -409,6 +411,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         if ((actual == "addw2" && expected == "adw2") || (actual == "adw2" && expected == "addw2")) return true;
         if ((actual == "dw1" || actual == "ddw1") && (expected == "db1" || expected == "dw1" || expected == "ddw1")) return true;
         if (actual == "db1" && (expected == "dw1" || expected == "ddw1")) return true;
+        if ((actual == "u1" && (expected == "up1" || expected == "u1")) || (actual == "up1" && (expected == "u1" || expected == "up1"))) return true;
+        if (actual == "1" && expected == "u1") return true;
+        if ((actual == "b1" && (expected == "db1" || expected == "b1")) || (actual == "db1" && (expected == "b1" || expected == "db1"))) return true;
         return false;
     };
 
@@ -426,8 +431,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     // ==========================================
     const ComboEntry* matchedCombo = nullptr;
     for (const auto& entry : CombatConfig::getCombos()) {
-        // Разделение комбо: 12f1 и b21u2 — оружие, остальное — руки
-        bool isWeaponCombo = (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21");
+        // Разделение комбо: 12f1, b21u2, 121, db1u1 — оружие, остальное — руки
+        bool isWeaponCombo = (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21" ||
+                              entry.id == "121" || entry.id == "db1u1" || entry.id == "db1up1" || entry.id == "b1u1");
         if (player.hasWeapon()) {
             if (!isWeaponCombo && entry.id != "12") {
                 continue; // С оружием в руках рукопашные комбо заблокированы
@@ -649,8 +655,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             hbw = 85.0f;
             hbh = 75.0f;
             hby = player.position.y - 45.0f;
-        } else if (_currentAttackType == "b1" || _currentAttackType == "b2") {
-            // Для одиночных атак назад (b1, b2) хитбокс охватывает обе стороны от персонажа
+        } else if (_currentAttackType == "b1" || _currentAttackType == "b2" || _currentAttackType == "db1") {
+            // Для одиночных атак назад (b1, b2, db1) хитбокс охватывает обе стороны от персонажа
             hbw = 140.0f;
             hbh = 54.0f;
             hby = player.position.y - 22.0f;
@@ -664,8 +670,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
         } else if (_currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos) {
             // b2 бьет далеко вперед и охватывает пространство вокруг персонажа (-30px позади до +110px впереди)
             hbx = (_attackDirection > 0) ? (player.position.x - 30.0f) : (player.position.x + 30.0f - hbw);
-        } else if (_currentAttackType == "b1") {
-            hbx = player.position.x - hbw * 0.5f; // Центрирован по персонажу, надежно поражает цель
+        } else if (_currentAttackType == "b1" || _currentAttackType == "db1") {
+            hbx = player.position.x - hbw * 0.5f; // Центрирован по персонажу, надежно поражает цель сзади и спереди
         }
         _attackHitbox = sf::FloatRect({hbx, hby}, {hbw, hbh});
 
@@ -854,6 +860,12 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                                 _comboDisplayName.find("b2-1-u2") != std::string::npos ||
                                                 _comboDisplayName.find("b21u2") != std::string::npos ||
                                                 _comboDisplayName.find("SKY LAUNCHER") != std::string::npos ||
+                                                _comboDisplayName.find("1-2-1") != std::string::npos ||
+                                                _comboDisplayName.find("121") != std::string::npos ||
+                                                _comboDisplayName.find("TENDERIZER PUSH") != std::string::npos ||
+                                                _comboDisplayName.find("db1-u1") != std::string::npos ||
+                                                _comboDisplayName.find("db1u1") != std::string::npos ||
+                                                _comboDisplayName.find("SKY POP-UP") != std::string::npos ||
                                                 _comboDisplayName.find("UNIQUE") != std::string::npos;
                         if (isUniqueFinisher) {
                             if (Arena::getActive()) {
@@ -893,6 +905,14 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                            _comboDisplayName.find("BAT SWING") != std::string::npos) {
                                     // 1-2-f1 удар словно битой строго по координате x
                                     finisherForceDir = sf::Vector2f(dirX * 1.0f, 0.0f);
+                                } else if (_comboDisplayName.find("1-2-1") != std::string::npos || 
+                                           _comboDisplayName.find("TENDERIZER PUSH") != std::string::npos) {
+                                    // 1-2-1 силовой толчок по координате x
+                                    finisherForceDir = sf::Vector2f(dirX * 1.0f, 0.0f);
+                                } else if (_comboDisplayName.find("db1-u1") != std::string::npos || 
+                                           _comboDisplayName.find("SKY POP-UP") != std::string::npos) {
+                                    // db1-u1 подброс вверх под диагональный бросок оружия
+                                    finisherForceDir = sf::Vector2f(dirX * 0.5f, -0.866f);
                                 } else if (_comboDisplayName.find("b2-1-u2") != std::string::npos || 
                                            _comboDisplayName.find("b21u2") != std::string::npos || 
                                            _comboDisplayName.find("SKY LAUNCHER") != std::string::npos) {
@@ -940,6 +960,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     player.turnAround();
                 }
 
+                // Особая логика комбо db1u1 (удар за себя с разворотом в обратную сторону):
+                if ((_currentAttackType == "db1" || _currentAttackType == "b1") && player.hasWeapon()) {
+                    player.turnAround();
+                }
+
                 // Особая логика комбо 21db1 (подсечка за спиной и запуск вверх):
                 if (_comboDisplayName.find("2-1-db1") != std::string::npos || 
                     _comboDisplayName.find("2-1-dw1") != std::string::npos || 
@@ -976,6 +1001,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     _comboDisplayName.find("1-2-f1") != std::string::npos ||
                     _comboDisplayName.find("12f1") != std::string::npos ||
                     _comboDisplayName.find("BAT SWING") != std::string::npos ||
+                    _comboDisplayName.find("1-2-1") != std::string::npos ||
+                    _comboDisplayName.find("TENDERIZER PUSH") != std::string::npos ||
+                    _comboDisplayName.find("db1-u1") != std::string::npos ||
+                    _comboDisplayName.find("SKY POP-UP") != std::string::npos ||
                     _comboDisplayName.find("b2-1-u2") != std::string::npos ||
                     _comboDisplayName.find("b21u2") != std::string::npos ||
                     _comboDisplayName.find("SKY LAUNCHER") != std::string::npos ||
@@ -1270,7 +1299,18 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
         // 1. Полет и физика в пространстве арены
         if (!it->grounded) {
-            if (it->isUpwardThrow) {
+            if (it->hasHit) {
+                // Если булава уже попала во врага — она крутится и кратковременно замирает на месте
+                it->rotation += it->angularVelocity * dt;
+                if (it->apexHoverTimer > 0.0f) {
+                    it->apexHoverTimer -= dt;
+                    it->velocity = {0.0f, 0.0f}; // Не отлетает от противника, замирает!
+                } else {
+                    // После замирания плавно опускается на пол
+                    it->velocity.y += CombatConfig::getThrowStraightGravity() * 0.65f * dt;
+                    it->velocity.x *= (1.0f - 0.50f * dt);
+                }
+            } else if (it->isUpwardThrow) {
                 // Закручивание булавы в воздухе (вверх и вверх-прямо)
                 it->rotation += it->angularVelocity * dt;
 
@@ -1401,11 +1441,15 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                         _hitParticles.push_back(p);
                     }
 
-                    // Отскок булавы назад и вверх при ударе о врага
-                    it->velocity.x = -it->velocity.x * 0.30f;
-                    it->velocity.y = -220.0f;
-                    it->angularVelocity = -it->angularVelocity * 0.75f;
-                    it->hitCooldown = 999.0f; // Больше ударить не может
+                    // Враг всегда начинает крутиться после попадания булавы
+                    enemy.triggerSpin(0.70f, (hitDir.x >= 0.0f ? 1.0f : -1.0f) * 900.0f);
+
+                    // Булава чуть замирает на месте попадания, не отлетая от противника, и бешено вращается
+                    it->velocity = sf::Vector2f(0.0f, 0.0f);
+                    float curSpin = (it->angularVelocity != 0.0f) ? ((it->angularVelocity > 0.0f) ? 1.0f : -1.0f) : 1.0f;
+                    it->angularVelocity = curSpin * 1440.0f;
+                    it->apexHoverTimer = 0.22f; // Замирает на 0.22с рядом с противником
+                    it->hitCooldown = 999.0f;   // Больше ударить не может
 
                     _shakeTimer = 0.06f;
                     _shakeIntensity = 3.5f;

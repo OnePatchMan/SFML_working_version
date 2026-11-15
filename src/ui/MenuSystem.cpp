@@ -492,16 +492,18 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         {"a1 -> a2", "Air Push [РУКИ]", "Удар в воздухе (a1) и тяжелый толчок (a2) далеко по горизонтали", sf::Color(220, 130, 255)},
         {"1 -> 2 -> df2", "Dash Smash [РУКИ]", "Джеб -> силовой удар -> дэш вперед со смешем (df2) строго по горизонтали", sf::Color(255, 180, 60)},
         {"1 -> 2 -> f1", "Bat Swing [ОРУЖИЕ]", "Джеб -> удар об пол (2) -> сокрушительный удар булавой словно битой (f1)", sf::Color(255, 125, 40)},
-        {"b2 -> 1 -> u2", "Sky Launcher [ОРУЖИЕ]", "Дальний зацеп булавой (b2) -> тычок рукояткой (1) -> взмах (u2) в небо", sf::Color(255, 70, 120)}
+        {"b2 -> 1 -> u2", "Sky Launcher [ОРУЖИЕ]", "Дальний зацеп булавой (b2) -> тычок рукояткой (1) -> взмах (u2) в небо", sf::Color(255, 70, 120)},
+        {"1 -> 2 -> 1", "Tenderizer Push [ОРУЖИЕ]", "Джеб -> удар об пол -> силовой толчок по X на расстояние чуть меньше рывка", sf::Color(255, 165, 45)},
+        {"db1 -> u1", "Sky Pop-Up [ОРУЖИЕ]", "Удар назад с разворотом (db1) -> апперкот (u1) с подбросом под диагональный бросок", sf::Color(255, 110, 180)}
     };
 
-    float startRowY = y + 40.0f;
-    float rowH = 34.0f;
+    float startRowY = y + 28.0f;
+    float rowH = 26.0f;
 
-    for (size_t i = 0; i < items.size() && i < 12; ++i) {
+    for (size_t i = 0; i < items.size(); ++i) {
         float ry = startRowY + i * rowH;
 
-        sf::RectangleShape rowBg({w - 30.0f, rowH - 4.0f});
+        sf::RectangleShape rowBg({w - 30.0f, rowH - 3.0f});
         rowBg.setPosition(sf::Vector2f(x + 15.0f, ry));
         rowBg.setFillColor((i % 2 == 0) ? sf::Color(22, 28, 40, 255) : sf::Color(27, 35, 52, 255));
         rowBg.setOutlineThickness(1.0f);
@@ -509,44 +511,51 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         window.draw(rowBg);
 
         // Инпуты комбо
-        sf::Text txtIn(*_font, toSfString(items[i].inputs), 15);
+        sf::Text txtIn(*_font, toSfString(items[i].inputs), 13);
         txtIn.setStyle(sf::Text::Bold);
         txtIn.setFillColor(items[i].col);
-        txtIn.setPosition(sf::Vector2f(x + 28.0f, ry + 4.0f));
+        txtIn.setPosition(sf::Vector2f(x + 28.0f, ry + 2.0f));
         window.draw(txtIn);
 
         // Разделитель
-        sf::RectangleShape div1({2.0f, 20.0f});
-        div1.setPosition(sf::Vector2f(x + 210.0f, ry + 5.0f));
+        sf::RectangleShape div1({2.0f, 16.0f});
+        div1.setPosition(sf::Vector2f(x + 210.0f, ry + 3.0f));
         div1.setFillColor(sf::Color(48, 65, 92, 170));
         window.draw(div1);
 
         // Имя комбо
-        sf::Text txtName(*_font, toSfString(items[i].name), 14);
+        sf::Text txtName(*_font, toSfString(items[i].name), 13);
         txtName.setStyle(sf::Text::Bold);
         txtName.setFillColor(sf::Color(245, 250, 255));
-        txtName.setPosition(sf::Vector2f(x + 225.0f, ry + 5.0f));
+        txtName.setPosition(sf::Vector2f(x + 225.0f, ry + 2.0f));
         window.draw(txtName);
 
         // Разделитель
-        sf::RectangleShape div2({2.0f, 20.0f});
-        div2.setPosition(sf::Vector2f(x + 470.0f, ry + 5.0f));
+        sf::RectangleShape div2({2.0f, 16.0f});
+        div2.setPosition(sf::Vector2f(x + 470.0f, ry + 3.0f));
         div2.setFillColor(sf::Color(48, 65, 92, 170));
         window.draw(div2);
 
         // Описание эффекта на всю оставшуюся ширину
-        sf::Text txtDesc(*_font, toSfString(items[i].desc), 13);
+        sf::Text txtDesc(*_font, toSfString(items[i].desc), 12);
         txtDesc.setFillColor(sf::Color(190, 208, 230));
-        txtDesc.setPosition(sf::Vector2f(x + 485.0f, ry + 6.0f));
+        txtDesc.setPosition(sf::Vector2f(x + 485.0f, ry + 3.0f));
         window.draw(txtDesc);
     }
 
-    // Анти-спам плашка строго под всеми строками комбо (без наложения на строки)
-    float noteY = startRowY + static_cast<float>(items.size()) * rowH + 12.0f;
-    sf::Text antiSpam(*_font, toSfString("★ ПРАВИЛО АНТИ-СПАМА: Повтор одного и того же комбо дважды за 3 секунды наказывается оглушением игрока на 0.75с! Вариируйте связки!"), 13);
+    // Анти-спам плашка строго под всеми строками комбо (в собственной аккуратной рамке, без наложения на строки)
+    float noteY = startRowY + static_cast<float>(items.size()) * rowH + 6.0f;
+    sf::RectangleShape noteBg({w - 30.0f, 26.0f});
+    noteBg.setPosition(sf::Vector2f(x + 15.0f, noteY));
+    noteBg.setFillColor(sf::Color(38, 28, 16, 220));
+    noteBg.setOutlineThickness(1.0f);
+    noteBg.setOutlineColor(sf::Color(180, 125, 35, 200));
+    window.draw(noteBg);
+
+    sf::Text antiSpam(*_font, toSfString("★ ПРАВИЛО АНТИ-СПАМА: Повтор одного и того же комбо дважды за 2.5 секунды наказывается оглушением игрока на 0.75с! Варьируйте связки!"), 12);
     antiSpam.setStyle(sf::Text::Bold);
-    antiSpam.setFillColor(sf::Color(255, 190, 60));
-    antiSpam.setPosition(sf::Vector2f(x + 20.0f, noteY));
+    antiSpam.setFillColor(sf::Color(255, 195, 65));
+    antiSpam.setPosition(sf::Vector2f(x + 25.0f, noteY + 3.0f));
     window.draw(antiSpam);
 }
 

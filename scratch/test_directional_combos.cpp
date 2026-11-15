@@ -3631,14 +3631,16 @@ int main() {
         assert(damageDealt >= 4.0f); // Speed scaled damage
         assert(enemy.velocity.x > 250.0f); // Force pushed enemy!
         assert(enemy.getStunTimer() >= 0.40f); // Stun extended!
+        assert(enemy.spinTimer > 0.0f); // Enemy spins after being hit by mace!
         assert(!combat.getThrownMaces().empty() && combat.getThrownMaces().front().hasHit);
+        assert(combat.getThrownMaces().front().angularVelocity != 0.0f); // Mace spins rapidly!
         float hpAfterFirstHit = enemy.hp;
         // Step while mace continues moving near enemy
         for (int frame = 0; frame < 20; ++frame) {
             tick(0.016f, arena, player, enemy, combat);
         }
         assert(enemy.hp == hpAfterFirstHit); // Mace cannot hit or deal damage a second time!
-        std::cout << "-> Verified: Mace hits strictly 1 time upon throw and cannot hit again!" << std::endl;
+        std::cout << "-> Verified: Mace hits strictly 1 time, enemy spins, and mace hovers in place spinning!" << std::endl;
 
         // 5. Verify High-Speed Lethal Throw Blood Splatter
         combat.clearThrownMaces();
@@ -3879,6 +3881,185 @@ int main() {
         assert(enemy.isDead);
         assert(arena.getBloodParticles().size() > 20); // Finisher blood triggered!
         std::cout << "-> PASSED: Combo b21u2 (Circular Sky Launcher) verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 54: COMBO 121 (Tenderizer Push: Ground Slam & Pop-Up -> Horizontal Force Push)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 54] Testing Weapon Combo 121 (Tenderizer Push)..." << std::endl;
+        Arena arena(80, 20);
+        CombatSystem combat;
+        Player player(arena.getSpawnPosition());
+        Enemy enemy({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), true);
+        if (!player.isFacingRight()) player.turnAround();
+        enemy.reset();
+        tick(0.1f, arena, player, enemy, combat);
+
+        // Hit 1: Neutral Light 1
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+
+        // Hit 2: Heavy 2 (Ground Slam & Pop-Up)
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        triggerHeavy(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        assert(combat.getCurrentComboName().find("1-2") != std::string::npos);
+
+        // Hit 3: Neutral Light 1 (Tenderizer Push Finisher)
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        triggerLight(combat, player);
+        tick(0.08f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "Hit 3 combo name: " << combat.getCurrentComboName() 
+                  << ", enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
+        assert(combat.getCurrentComboName().find("1-2-1") != std::string::npos ||
+               combat.getCurrentComboName().find("TENDERIZER PUSH") != std::string::npos);
+        // Verified: pushes enemy strictly along X by distance slightly less than a dash (480 px/s, knockY = 0)
+        assert(enemy.velocity.x == 480.0f);
+        assert(enemy.velocity.y == 0.0f);
+
+        // Weapon-only check: unarmed player cannot trigger 121
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false); // Unarmed!
+        enemy.reset();
+        tick(0.1f, arena, player, enemy, combat);
+
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerHeavy(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerLight(combat, player);
+        tick(0.08f, arena, player, enemy, combat);
+        // Should NOT trigger 121 finisher when unarmed
+        assert(combat.getCurrentComboName().find("1-2-1") == std::string::npos);
+
+        // Lethal Finisher Verification
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), true);
+        if (!player.isFacingRight()) player.turnAround();
+        enemy.reset();
+        enemy.hp = 7.0f; // low hp so Hit 3 kills
+        arena.clearBlood();
+        tick(0.1f, arena, player, enemy, combat);
+
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerHeavy(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+
+        enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerLight(combat, player);
+        tick(0.08f, arena, player, enemy, combat);
+
+        assert(enemy.isDead);
+        assert(arena.getBloodParticles().size() > 20); // Finisher blood triggered!
+        std::cout << "-> PASSED: Weapon Combo 121 (Tenderizer Push) verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 55: COMBO db1u1 (Reverse Turn Strike -> Sky Pop-Up -> Diagonal Mace Juggle)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 55] Testing Weapon Combo db1u1 (Reverse Turn Strike -> Sky Pop-Up)..." << std::endl;
+        Arena arena(80, 20);
+        CombatSystem combat;
+        Player player(arena.getSpawnPosition());
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), true);
+        if (!player.isFacingRight()) player.turnAround();
+        assert(player.isFacingRight());
+
+        // Enemy is behind the player (to the left)
+        Enemy enemy({player.position.x - 45.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+        enemy.reset();
+        tick(0.1f, arena, player, enemy, combat);
+
+        // Hit 1: db1 / b1 (holding back/backward + Light):
+        // Strikes behind and automatically turns player around to face enemy!
+        player.setSimulatedMoveDir(-1.0f); // Holding back
+        triggerLight(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        // Verify player turned around to face enemy (now facing left)!
+        assert(!player.isFacingRight());
+        std::cout << "Hit 1 (db1) turned player around: facingLeft = " << (!player.isFacingRight()) << std::endl;
+
+        // Hit 2: u1 (holding Up/W + Light):
+        // Launches enemy into air diagonally upwards
+        enemy.position = {player.position.x - 40.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.velocity = {0.0f, 0.0f};
+        player.setSimulatedVerticalDir(-1.0f); // Holding Up
+        triggerLight(combat, player);
+        player.setSimulatedVerticalDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "Hit 2 combo name: " << combat.getCurrentComboName() 
+                  << ", enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
+        assert(combat.getCurrentComboName().find("db1-u1") != std::string::npos ||
+               combat.getCurrentComboName().find("SKY POP-UP") != std::string::npos);
+        // Facing left: knockX is negative (-140), knockY is -480 (air launch)
+        assert(enemy.velocity.x == -140.0f);
+        assert(enemy.velocity.y == -480.0f);
+
+        // Diagonal Mace Throw Juggle:
+        // While enemy is popped up, throw mace diagonally upward towards enemy
+        sf::Vector2f targetPopUpPos = {enemy.position.x, enemy.position.y - 40.0f};
+        combat.throwWeapon(player, targetPopUpPos);
+        assert(combat.getThrownMaces().size() == 1);
+
+        // Step physics until mace hits airborne enemy
+        for (int frame = 0; frame < 20; ++frame) {
+            tick(0.016f, arena, player, enemy, combat);
+            if (combat.getThrownMaces().front().hasHit) break;
+        }
+
+        assert(combat.getThrownMaces().front().hasHit);
+        assert(enemy.spinTimer > 0.0f); // Enemy spins after being hit!
+        assert(combat.getThrownMaces().front().angularVelocity != 0.0f); // Mace spins rapidly in place!
+        std::cout << "Airborne enemy spin timer: " << enemy.spinTimer << ", mace hasHit: 1" << std::endl;
+
+        // Lethal Finisher Verification
+        combat.clearThrownMaces();
+        player.reset(arena.getSpawnPosition(), true);
+        if (!player.isFacingRight()) player.turnAround();
+        enemy.reset();
+        enemy.hp = 4.0f; // low hp so Hit 2 kills
+        enemy.position = {player.position.x - 45.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        arena.clearBlood();
+        tick(0.1f, arena, player, enemy, combat);
+
+        player.setSimulatedMoveDir(-1.0f);
+        triggerLight(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.12f, arena, player, enemy, combat);
+
+        enemy.position = {player.position.x - 40.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        player.setSimulatedVerticalDir(-1.0f);
+        triggerLight(combat, player);
+        player.setSimulatedVerticalDir(0.0f);
+        tick(0.08f, arena, player, enemy, combat);
+
+        assert(enemy.isDead);
+        assert(arena.getBloodParticles().size() > 20); // Finisher blood triggered!
+        std::cout << "-> PASSED: Weapon Combo db1u1 (Sky Pop-Up & Diagonal Mace Juggle) verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

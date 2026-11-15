@@ -161,6 +161,8 @@ void Enemy::reset() {
     displayedHp = maxHp;
     isDead = false;
     hurtTimer = 0.0f;
+    spinTimer = 0.0f;
+    spinAngle = 0.0f;
     isDodging = false;
     dodgeTimer = 0.0f;
     dodgeCooldownTimer = 0.0f;
@@ -390,6 +392,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
     if (perfectDodgeEffectTimer > 0.0f) {
         perfectDodgeEffectTimer -= dt;
         if (perfectDodgeEffectTimer <= 0.0f) isPerfectDodged = false;
+    }
+    if (spinTimer > 0.0f) {
+        spinTimer -= dt;
+        spinAngle += spinSpeed * dt;
+        if (spinTimer <= 0.0f) {
+            spinAngle = 0.0f;
+        }
+    } else {
+        spinAngle = 0.0f;
     }
     if (isDodging) {
         dodgeTimer -= dt;
@@ -1639,6 +1650,11 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     sf::RectangleShape body({halfW * 2.0f, halfH * 2.0f});
     body.setOrigin({halfW, halfH});
     body.setPosition(position);
+    if (spinTimer > 0.0f) {
+        body.setRotation(sf::degrees(spinAngle));
+    } else {
+        body.setRotation(sf::degrees(0.0f));
+    }
     body.setOutlineThickness(2.0f);
     body.setOutlineColor(sf::Color(25, 25, 30, 230));
 
