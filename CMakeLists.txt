@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
+
+# Разрешаем совместимость для старых подпроектов (FreeType < 3.5) в CMake 3.31+ / 4.0
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 project(FightingComboArena LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -7,6 +11,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Поиск SFML 3 в системе или автоматическая загрузка через FetchContent для Windows / чистых систем
 find_package(SFML 3 COMPONENTS Graphics Window System Audio QUIET)
 if(NOT SFML_FOUND)
+    set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SFML_BUILD_DOC OFF CACHE BOOL "" FORCE)
+    set(SFML_BUILD_TEST_SUITE OFF CACHE BOOL "" FORCE)
+
     include(FetchContent)
     FetchContent_Declare(
         SFML
