@@ -8,8 +8,13 @@
 #include "combat/CombatSystem.h"
 #include "graphics/Crosshair.h"
 #include "audio/SoundManager.h"
+#include <cstdlib>
 
 int main() {
+    // Отключение принудительного VSync драйвера Mesa (AMD/Intel) и Nvidia
+    setenv("vblank_mode", "0", 1);
+    setenv("__GL_SYNC_TO_VBLANK", "0", 1);
+
     SoundManager::get().init("assets/soundeff");
 
     Arena arena(ARENA_WIDTH, ARENA_HEIGHT);
@@ -90,26 +95,21 @@ int main() {
     sf::Clock dtClock;
     bool isPaused = false;
 
-    // FPS счетчик (активен по умолчанию, переключение по F3)
+    // FPS и тайминги производительности (активен по умолчанию, переключение по F3)
     sf::Clock fpsClock;
     int fpsFrameCounter = 0;
     float currentFps = 144.0f;
     float frameTimeMs = 6.9f;
+    float accumulatedCpuMs = 0.0f;
+    float accumulatedSwapMs = 0.0f;
+    float avgCpuMs = 0.4f;
+    float avgSwapMs = 6.5f;
     bool showFpsCounter = true;
 
     while (window.isOpen()) {
+        sf::Clock frameWorkClock;
         float dt = dtClock.restart().asSeconds();
         if (dt > 0.1f) dt = 0.1f;
-
-        fpsFrameCounter++;
-        if (fpsClock.getElapsedTime().asSeconds() >= 0.25f) {
-            float elapsed = fpsClock.restart().asSeconds();
-            if (elapsed > 0.0f && fpsFrameCounter > 0) {
-                currentFps = static_cast<float>(fpsFrameCounter) / elapsed;
-                frameTimeMs = (elapsed / static_cast<float>(fpsFrameCounter)) * 1000.0f;
-            }
-            fpsFrameCounter = 0;
-        }
 
         sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
         sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel, camera);
@@ -441,16 +441,22 @@ int main() {
         // 3. Отрисовка счетчика FPS (в правом верхнем углу)
         if (showFpsCounter && combat.getFont()) {
             const sf::Font& font = *combat.getFont();
-            const char* modeTag = (fpsMode == FpsMode::UNCAPPED) ? "MAX" :
-                                  (fpsMode == FpsMode::FPS_240)   ? "240" :
-                                  (fpsMode == FpsMode::FPS_144)   ? "144" :
-                                  (fpsMode == FpsMode::FPS_60)    ? "60" : "VSYNC";
+            bool isVsyncWaiting = (avgSwapMs > 2.0f && avgSwapMs > avgCpuMs * 2.0f);
 
-            char fpsBuf[64];
-            std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d (%.1f ms) [%s]", 
-                          static_cast<int>(std::round(currentFps)), frameTimeMs, modeTag);
+            char fpsBuf[128];
+            if (isVsyncWaiting) {
+                std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d | CPU: %.1f ms (Экран 144Hz)", 
+                              static_cast<int>(std::round(currentFps)), avgCpuMs);
+            } else {
+                const char* modeTag = (fpsMode == FpsMode::UNCAPPED) ? "MAX" :
+                                      (fpsMode == FpsMode::FPS_240)   ? "240" :
+                                      (fpsMode == FpsMode::FPS_144)   ? "144" :
+                                      (fpsMode == FpsMode::FPS_60)    ? "60" : "VSYNC";
+                std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d (CPU: %.1f ms) [%s]", 
+                              static_cast<int>(std::round(currentFps)), avgCpuMs, modeTag);
+            }
 
-            float badgeW = 180.0f;
+            float badgeW = isVsyncWaiting ? 236.0f : 180.0f;
             float badgeH = 26.0f;
             float badgeX = winSize.x - badgeW - 20.0f;
             float badgeY = 12.0f;
@@ -472,7 +478,27 @@ int main() {
             window.draw(fpsText);
         }
 
+        float cpuWorkMs = frameWorkClock.getElapsedTime().asSeconds() * 1000.0f;
+        accumulatedCpuMs += cpuWorkMs;
+
+        sf::Clock swapClock;
         window.display();
+        float swapMs = swapClock.getElapsedTime().asSeconds() * 1000.0f;
+        accumulatedSwapMs += swapMs;
+
+        fpsFrameCounter++;
+        if (fpsClock.getElapsedTime().asSeconds() >= 0.25f) {
+            float elapsed = fpsClock.restart().asSeconds();
+            if (elapsed > 0.0f && fpsFrameCounter > 0) {
+                currentFps = static_cast<float>(fpsFrameCounter) / elapsed;
+                frameTimeMs = (elapsed / static_cast<float>(fpsFrameCounter)) * 1000.0f;
+                avgCpuMs = accumulatedCpuMs / static_cast<float>(fpsFrameCounter);
+                avgSwapMs = accumulatedSwapMs / static_cast<float>(fpsFrameCounter);
+            }
+            fpsFrameCounter = 0;
+            accumulatedCpuMs = 0.0f;
+            accumulatedSwapMs = 0.0f;
+        }
     }
 
     return 0;
