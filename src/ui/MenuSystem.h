@@ -126,3 +126,4 @@ private:
     std::function<void()> _onExitGame;
     std::function<void(FpsLimitMode)> _onFpsModeChanged;
 };
+
