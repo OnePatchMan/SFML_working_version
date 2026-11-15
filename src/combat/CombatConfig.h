@@ -79,6 +79,15 @@ public:
         return _finisherBloodBaseHp;
     }
 
+    // Параметры броска булавы и физики полета
+    static float getThrowBaseSpeed() { ensureInitialized(); return _throwBaseSpeed; }
+    static float getThrowSpeedBoostMultiplier() { ensureInitialized(); return _throwSpeedBoostMultiplier; }
+    static float getThrowStraightGravity() { ensureInitialized(); return _throwStraightGravity; }
+    static float getThrowUpwardSpinSpeed() { ensureInitialized(); return _throwUpwardSpinSpeed; }
+    static float getThrowUpwardApexHoverTime() { ensureInitialized(); return _throwUpwardApexHoverTime; }
+    static float getThrowUpwardUpGravity() { ensureInitialized(); return _throwUpwardUpGravity; }
+    static float getThrowUpwardFallGravity() { ensureInitialized(); return _throwUpwardFallGravity; }
+
     // Получение параметров базовой атаки по ключу ("1", "f2", "dw1", "d1", "a1" и т.д.)
     static AttackStats getBaseAttack(const std::string& type) {
         ensureInitialized();
@@ -215,6 +224,20 @@ public:
                             try { _hitstunDecayMin = std::stof(val); } catch (...) {}
                         } else if (key == "finisher_blood_base_hp" || key == "finisherbloodbasehp") {
                             try { _finisherBloodBaseHp = std::stof(val); } catch (...) {}
+                        } else if (key == "base_throw_speed" || key == "basethrowspeed") {
+                            try { _throwBaseSpeed = std::stof(val); } catch (...) {}
+                        } else if (key == "speed_boost_multiplier" || key == "speedboostmultiplier") {
+                            try { _throwSpeedBoostMultiplier = std::stof(val); } catch (...) {}
+                        } else if (key == "straight_gravity" || key == "straightgravity") {
+                            try { _throwStraightGravity = std::stof(val); } catch (...) {}
+                        } else if (key == "upward_spin_speed" || key == "upwardspinspeed") {
+                            try { _throwUpwardSpinSpeed = std::stof(val); } catch (...) {}
+                        } else if (key == "upward_apex_hover_time" || key == "upwardapexhovertime") {
+                            try { _throwUpwardApexHoverTime = std::stof(val); } catch (...) {}
+                        } else if (key == "upward_up_gravity" || key == "upwardupgravity") {
+                            try { _throwUpwardUpGravity = std::stof(val); } catch (...) {}
+                        } else if (key == "upward_fall_gravity" || key == "upwardfallgravity") {
+                            try { _throwUpwardFallGravity = std::stof(val); } catch (...) {}
                         } else if (blockStack.size() >= 3) {
                             const std::string& section = blockStack[1];
                             const std::string& entryId = blockStack[2];
@@ -276,6 +299,13 @@ private:
     inline static float _hitstunDecayStep = 0.10f;
     inline static float _hitstunDecayMin = 0.30f;
     inline static float _finisherBloodBaseHp = 45.0f;
+    inline static float _throwBaseSpeed = 550.0f;
+    inline static float _throwSpeedBoostMultiplier = 1.6f;
+    inline static float _throwStraightGravity = 980.0f;
+    inline static float _throwUpwardSpinSpeed = 1080.0f;
+    inline static float _throwUpwardApexHoverTime = 0.30f;
+    inline static float _throwUpwardUpGravity = 850.0f;
+    inline static float _throwUpwardFallGravity = 380.0f;
     inline static std::unordered_map<std::string, AttackStats> _attacks;
     inline static std::vector<ComboEntry> _combos;
     inline static std::unordered_map<std::string, size_t> _comboIndexMap;

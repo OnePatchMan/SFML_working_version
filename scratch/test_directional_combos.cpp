@@ -3481,7 +3481,16 @@ int main() {
             const auto& thrown = combat.getThrownMaces().front();
             float vSpeed = std::hypot(thrown.velocity.x, thrown.velocity.y);
             assert(std::abs(vSpeed - 550.0f) < 1.0f); // Базовая скорость стоя на месте = 550 px/s
-            assert(thrown.angularVelocity == 0.0f); // Без вращения, как копье!
+
+            // Броски вверх и вверх-прямо (225, 270, 315) закручиваются (angularVelocity != 0)
+            // Броски прямо, прямо вниз и вниз (0, 45, 90, 135, 180) летят прямо как копье (angularVelocity == 0)
+            if (angles[i] == 225.0f || angles[i] == 270.0f || angles[i] == 315.0f) {
+                assert(thrown.isUpwardThrow);
+                assert(thrown.angularVelocity != 0.0f);
+            } else {
+                assert(!thrown.isUpwardThrow);
+                assert(thrown.angularVelocity == 0.0f);
+            }
 
             // Vector should strictly match snapped angle
             float expectedX = std::cos(rad) * 550.0f;
@@ -3489,7 +3498,7 @@ int main() {
             assert(std::abs(thrown.velocity.x - expectedX) < 1.0f);
             assert(std::abs(thrown.velocity.y - expectedY) < 1.0f);
         }
-        std::cout << "-> 8-way directional aiming snapped all 8 directions with 100% precision (angularVel=0)!" << std::endl;
+        std::cout << "-> 8-way directional aiming snapped all 8 directions with 100% precision (Straight: spear, Up: spinning)!" << std::endl;
 
         // Player velocity boost test (Standing vs Moving):
         player.setHasWeapon(true);
@@ -3505,19 +3514,31 @@ int main() {
         std::cout << "-> Throw speed successfully scales with player velocity (Standing: 550 px/s vs Moving: " 
                   << boostedSpeed << " px/s)!" << std::endl;
 
-        // 2. Armed Mode: Mace strikes have NO combos yet (Single heavy attacks)
+        // 2. Upward Throw: Spin, Apex Hover & Slow Descent for Combo Setup
+        player.setHasWeapon(true);
+        combat.clearThrownMaces();
+        combat.throwWeapon(player, player.position + sf::Vector2f(0.0f, -200.0f)); // Straight Up
+        assert(combat.getThrownMaces().size() == 1);
+        assert(combat.getThrownMaces().front().isUpwardThrow);
+        assert(combat.getThrownMaces().front().angularVelocity != 0.0f);
+
+        // Advance simulation towards apex
+        bool sawHover = false;
+        for (int step = 0; step < 70; ++step) {
+            tick(0.016f, arena, player, enemy, combat);
+            if (combat.getThrownMaces().empty()) break;
+            const auto& m = combat.getThrownMaces().front();
+            if (m.reachedApex && m.apexHoverTimer > 0.0f) {
+                sawHover = true;
+                assert(std::abs(m.velocity.y) < 1.0f); // Зависание в пиковой точке!
+            }
+        }
+        assert(sawHover);
+        std::cout << "-> Verified: Upward throw hovered at apex and descends slowly for combos!" << std::endl;
+
+        // 3. Armed Mode: Combos are active WITH WEAPON!
         player.setHasWeapon(true);
         combat.reset();
-        triggerLight(combat, player);
-        std::cout << "Armed attack name: " << combat.getCurrentComboName() << std::endl;
-        assert(combat.getCurrentComboName().find("MACE") != std::string::npos);
-        assert(combat.getComboHistory().empty()); // No combos in armed mode!
-        while (player.isPlayingAttackAnimation()) tick(0.02f, arena, player, enemy, combat);
-
-        // 3. Unarmed Mode: ALL combos are active when unarmed!
-        player.setHasWeapon(false); // Unarmed
-        combat.reset();
-        // Combo 1-1-1 in unarmed mode:
         enemy.position = {player.position.x + 35.0f, player.position.y};
         triggerLight(combat, player);
         tick(0.12f, arena, player, enemy, combat);
@@ -3525,9 +3546,9 @@ int main() {
         tick(0.12f, arena, player, enemy, combat);
         triggerLight(combat, player);
         tick(0.05f, arena, player, enemy, combat);
-        std::cout << "Unarmed combo 1-1-1: " << combat.getCurrentComboName() << std::endl;
+        std::cout << "Armed combo 1-1-1: " << combat.getCurrentComboName() << std::endl;
         assert(combat.getCurrentComboName().find("1-1-1") != std::string::npos);
-        std::cout << "-> Verified: Unarmed mode has ALL full combo chains active!" << std::endl;
+        std::cout << "-> Verified: Armed mode has ALL full combo chains active!" << std::endl;
         while (player.isPlayingAttackAnimation()) tick(0.02f, arena, player, enemy, combat);
 
         // 4. Verify Mace Flying Hit: Speed Damage, Knock Force & Stun Extension
@@ -3590,14 +3611,14 @@ int main() {
         assert(!player.hasWeapon()); // Player has no weapon after throwing
         assert(combat.getThrownMaces().size() == 1);
 
-        // Step until mace settles
-        for (int f = 0; f < 30; ++f) {
+        // Step until mace falls back down near player (with slow descent + apex hover)
+        for (int f = 0; f < 80; ++f) {
             tick(0.03f, arena, player, enemy, combat);
+            if (combat.tryRetrieveWeapon(player)) break;
         }
 
         // Test retrieval on same button
-        bool retrieved = combat.tryRetrieveWeapon(player);
-        assert(retrieved);
+        assert(player.hasWeapon());
         assert(player.hasWeapon());
         std::cout << "-> Verified: Button retrieval (tryRetrieveWeapon) picked up mace and restored armed state!" << std::endl;
         std::cout << "-> PASSED: Mace Meat-Tenderizer Throw & Unarmed Combat verified 100%!" << std::endl;

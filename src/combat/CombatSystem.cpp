@@ -190,13 +190,17 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
 
     sf::Vector2f throwDir(std::cos(snappedAngle), std::sin(snappedAngle));
 
+    // Проверяем тип броска:
+    // Вверх и вверх-прямо (throwDir.y < -0.3f): закручиваются, зависают в пике, медленно падают (для комбо)
+    // Прямо, прямо вниз и вниз (throwDir.y >= -0.3f): летят прямо как копье без вращения
+    bool isUpward = (throwDir.y < -0.3f);
+
     // Скорость полета булавы зависит от эффективной скорости игрока (ходьба, бег, дэш):
-    // В положении стоя скорость умеренная (550 px/s), а при ходьбе и беге существенно возрастает!
-    float baseThrowSpeed = 550.0f;
+    float baseThrowSpeed = CombatConfig::getThrowBaseSpeed();
     sf::Vector2f effVel = player.getEffectiveVelocity();
     float currentSpeed = std::hypot(effVel.x, effVel.y);
     float playerSpeedInDir = effVel.x * throwDir.x + effVel.y * throwDir.y;
-    float boost = std::max(0.0f, playerSpeedInDir * 1.6f);
+    float boost = std::max(0.0f, playerSpeedInDir * CombatConfig::getThrowSpeedBoostMultiplier());
     if (boost < 1.0f && currentSpeed > 30.0f) {
         boost = currentSpeed * 0.5f;
     }
@@ -205,10 +209,21 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
     ThrownMace mace;
     mace.position = playerCenter + throwDir * 20.0f;
     mace.velocity = throwDir * totalSpeed;
-    mace.angularVelocity = 0.0f; // БЕЗ ВРАЩЕНИЯ, летит как копье!
+    mace.isUpwardThrow = isUpward;
+    mace.reachedApex = false;
+    mace.apexHoverTimer = 0.0f;
 
-    // Ориентация как у копья (наконечник спереди по вектору скорости):
-    mace.rotation = std::atan2(mace.velocity.y, mace.velocity.x) * 180.0f / 3.14159265f + 90.0f;
+    if (isUpward) {
+        // Броски вверх и вверх-прямо: закручиваются в полете!
+        float spinDir = (throwDir.x < -0.1f) ? -1.0f : 1.0f;
+        mace.angularVelocity = spinDir * CombatConfig::getThrowUpwardSpinSpeed();
+        mace.rotation = 0.0f;
+    } else {
+        // Броски прямо, прямо вниз и вниз: летят прямо как копье без вращения!
+        mace.angularVelocity = 0.0f;
+        mace.rotation = std::atan2(mace.velocity.y, mace.velocity.x) * 180.0f / 3.14159265f + 90.0f;
+    }
+
     mace.active = true;
     mace.grounded = false;
     mace.hitCooldown = 0.0f;
@@ -217,13 +232,14 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
 
     _thrownMaces.push_back(mace);
 
-    // Персонаж лишается оружия и переходит в безоружный комбо-режим
+    // Персонаж бросает оружие и временно остается безоружным
     player.setHasWeapon(false);
 
     SoundManager::get().playAttack("2", "", !player.isOnGround());
 
+    std::string markerText = isUpward ? "COMBO SPIN MACE THROW (UP)" : "SPEAR MACE THROW";
     _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -60.0f), 
-                                    "SPEAR MACE THROW (8-WAY)", sf::Color(255, 180, 50), 0.75f, 0.75f, 1.0f, 255.0f});
+                                    markerText, sf::Color(255, 180, 50), 0.75f, 0.75f, 1.0f, 255.0f});
 }
 
 void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld) {
@@ -261,37 +277,6 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     player.clearDashWindow();
 
     _isAirAttack = inAir;
-
-    // -------------------------------------------------------------
-    // РЕЖИМ С ОРУЖИЕМ (ARMED / MACE):
-    // В оружном режиме комбо пока нет — выполняются одиночные тяжелые удары булавой!
-    // А в безоружном режиме (без булавы) действуют все комбо файтинга!
-    // -------------------------------------------------------------
-    if (player.hasWeapon()) {
-        _currentAttackType = (input == AttackInput::LIGHT) ? "mace_1" : "mace_2";
-        _isEmpoweredStrike = false;
-        _attackTimer = (input == AttackInput::LIGHT) ? 0.16f : 0.20f;
-        _attackCooldown = (input == AttackInput::LIGHT) ? 0.22f : 0.30f;
-        _currentWhiffStun = _attackCooldown * 1.1f;
-        _currentDamage = (input == AttackInput::LIGHT) ? 3.5f : 5.0f;
-        _knockX = _attackDirection * ((input == AttackInput::LIGHT) ? 320.0f : 480.0f);
-        _knockY = (input == AttackInput::LIGHT) ? -35.0f : -55.0f;
-        _enemyStunTime = (input == AttackInput::LIGHT) ? 0.28f : 0.38f;
-        _attackColor = (input == AttackInput::LIGHT) ? sf::Color(255, 170, 70) : sf::Color(255, 110, 40);
-        _comboDisplayName = (input == AttackInput::LIGHT) ? "MACE: Heavy Thrust" : "MACE: Overhead Smash";
-        _comboDisplayTimer = 0.8f;
-        _comboDisplayColor = _attackColor;
-        player.lunge((input == AttackInput::LIGHT) ? 14.0f : 20.0f);
-
-        AttackAnimType animType = (input == AttackInput::LIGHT) ? AttackAnimType::LIGHT : AttackAnimType::HEAVY;
-        player.triggerAttackAnimation(animType, _attackCooldown);
-
-        _comboHistory.clear();
-        _comboResetTimer = 0.0f;
-
-        SoundManager::get().playAttack((input == AttackInput::LIGHT) ? "1" : "2", "", inAir);
-        return;
-    }
 
     // -------------------------------------------------------------
     // Определение направления с учетом приоритетов:
@@ -416,6 +401,7 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         if ((actual == "df2" && expected == "f2") || (actual == "f2" && expected == "df2")) return true;
         if ((actual == "db2" && expected == "b2") || (actual == "b2" && expected == "db2")) return true;
         if ((actual == "du2" && expected == "u2") || (actual == "u2" && expected == "du2")) return true;
+        if (actual == "2" && expected == "u2") return true;
         if ((actual == "af1" && expected == "a1") || (actual == "a1" && expected == "af1")) return true;
         if ((actual == "af2" && expected == "a2") || (actual == "a2" && expected == "af2")) return true;
         if (actual == "f1" && expected == "1") return true;
@@ -1304,14 +1290,38 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
         float speed = std::hypot(it->velocity.x, it->velocity.y);
 
-        // 1. Полет и физика в пространстве арены (полет без вращения, как копье)
+        // 1. Полет и физика в пространстве арены
         if (!it->grounded) {
-            it->velocity.y += 980.0f * dt; // Гравитация
-            it->velocity.x *= (1.0f - 0.08f * dt); // Сопротивление воздуха
+            if (it->isUpwardThrow) {
+                // Закручивание булавы в воздухе (вверх и вверх-прямо)
+                it->rotation += it->angularVelocity * dt;
 
-            // Без вращения: наконечник ориентируется по направлению полета (как копье)
-            if (std::hypot(it->velocity.x, it->velocity.y) > 30.0f) {
-                it->rotation = std::atan2(it->velocity.y, it->velocity.x) * 180.0f / 3.14159265f + 90.0f;
+                // Фазы полета: подъем, зависание в пике, медленное падение (для комбо)
+                if (!it->reachedApex) {
+                    if (it->velocity.y < -40.0f) {
+                        it->velocity.y += CombatConfig::getThrowUpwardUpGravity() * dt;
+                        it->velocity.x *= (1.0f - 0.15f * dt);
+                    } else {
+                        it->reachedApex = true;
+                        it->apexHoverTimer = CombatConfig::getThrowUpwardApexHoverTime();
+                        it->velocity.y = 0.0f;
+                    }
+                } else if (it->apexHoverTimer > 0.0f) {
+                    it->apexHoverTimer -= dt;
+                    it->velocity.y = 0.0f;
+                    it->velocity.x *= (1.0f - 0.85f * dt);
+                } else {
+                    it->velocity.y += CombatConfig::getThrowUpwardFallGravity() * dt;
+                    it->velocity.x *= (1.0f - 0.20f * dt);
+                }
+            } else {
+                // Прямые броски (прямо, прямо вниз, вниз) - летят прямо как копье без вращения
+                it->velocity.y += CombatConfig::getThrowStraightGravity() * dt;
+                it->velocity.x *= (1.0f - 0.08f * dt);
+
+                if (std::hypot(it->velocity.x, it->velocity.y) > 30.0f) {
+                    it->rotation = std::atan2(it->velocity.y, it->velocity.x) * 180.0f / 3.14159265f + 90.0f;
+                }
             }
 
             sf::Vector2f startPos = it->position;
@@ -1329,6 +1339,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 if (hitNormal.y < -0.5f && bounceSpeed < 90.0f) {
                     it->grounded = true;
                     it->velocity = {0.0f, 0.0f};
+                    it->angularVelocity = 0.0f;
                     it->rotation = 90.0f; // Лежит горизонтально на полу
                 }
             } else {
@@ -1340,7 +1351,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
         speed = std::hypot(it->velocity.x, it->velocity.y);
 
         // 2. Столкновение с врагами (Урон от скорости + форса + стан-лок + кровь при летале)
-        if (it->hitCooldown <= 0.0f && speed > 80.0f) {
+        bool canHitEnemy = (it->hitCooldown <= 0.0f) && 
+                           (speed > 80.0f || (it->isUpwardThrow && (it->apexHoverTimer > 0.0f || it->velocity.y > 0.0f)));
+        if (canHitEnemy) {
             for (Enemy* enemyPtr : enemiesList) {
                 if (!enemyPtr) continue;
                 Enemy& enemy = *enemyPtr;
@@ -1351,13 +1364,19 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                                (enemy.position.y - Enemy::HALF_H) - it->position.y);
 
                 if (eBounds.contains(it->position) || distToEnemy < 38.0f) {
+                    it->hitCooldown = 0.28f;
                     // Рассчитываем урон пропорционально скорости полета булавы
                     float speedFactor = std::clamp(speed / 950.0f, 0.20f, 1.25f);
+                    if (it->isUpwardThrow) speedFactor = std::max(speedFactor, 0.65f);
                     float maceDmg = 1.8f + speedFactor * 3.5f; // ~1.8 .. 6.17 урона
 
                     sf::Vector2f hitDir = (speed > 0.001f) ? (it->velocity / speed) : sf::Vector2f(1.0f, 0.0f);
+                    if (it->isUpwardThrow) {
+                        hitDir.y = -0.7f;
+                    }
                     // Само попадание еще чуть форсает врага
                     float knockForce = 180.0f + speed * 0.35f;
+                    if (it->isUpwardThrow) knockForce = std::max(knockForce, 240.0f);
                     enemy.velocity += hitDir * knockForce;
 
                     // Продлевает стан-лок цели

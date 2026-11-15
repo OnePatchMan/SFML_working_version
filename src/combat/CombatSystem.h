@@ -89,6 +89,9 @@ public:
         float hitCooldown = 0.0f;       // Кулдаун между ударами по врагам
         float lifetime = 25.0f;         // Время жизни до автовозврата
         float pickupCooldown = 0.22f;   // Задержка перед подбором игроком
+        bool isUpwardThrow = false;     // Бросок вверх / вверх-прямо (закручивание и зависание)
+        bool reachedApex = false;       // Достигла ли пиковой точки
+        float apexHoverTimer = 0.0f;    // Таймер зависания в пиковой точке
     };
 
     void throwWeapon(Player& player, const sf::Vector2f& targetPoint = {0.0f, 0.0f});
