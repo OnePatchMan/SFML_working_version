@@ -29,8 +29,12 @@
 __pycache__/
 *.pyc
 
-# ---- Временные скрины тестов ----
+# ---- Временные скрины и дампы тестов ----
 scratch/*.png
+scratch/*.txt
+scratch/*.kv
+scratch/*.gif
+assets/maps_backup/
 
 # ---- VS Code ----
 .vscode/

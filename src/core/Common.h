@@ -34,6 +34,11 @@ inline std::string resolveAssetPath(const std::string& path) {
         "../assets/fonts/" + filename,
         "assets/config/" + filename,
         "../assets/config/" + filename,
+        "assets/maps/" + filename,
+        "../assets/maps/" + filename,
+        "assets/soundeff/" + filename,
+        "../assets/soundeff/" + filename,
+        "../../assets/soundeff/" + filename,
         "assets/" + filename,
         "../assets/" + filename
     };

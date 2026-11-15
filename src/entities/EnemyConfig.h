@@ -24,25 +24,25 @@ struct EnemyAttackStats {
 
 struct Starter1F2D1Config {
     float windup = 0.07f;
-    EnemyAttackStats hit1{0.0f, 0.12f, 0.06f, 2.0f, 160.0f, -25.0f, 0.24f, 0.0f, 55.0f, 42.0f, -18.0f, false};
-    EnemyAttackStats hitF2{0.0f, 0.16f, 0.06f, 3.5f, 460.0f, -45.0f, 0.35f, 18.0f, 70.0f, 46.0f, -20.0f, false};
-    EnemyAttackStats hitD1{0.0f, 0.18f, 0.06f, 5.0f, 220.0f, -435.0f, 0.48f, 30.0f, 75.0f, 70.0f, -42.0f, false};
+    EnemyAttackStats hit1{0.0f, 0.12f, 0.06f, 1.0f, 160.0f, -25.0f, 0.24f, 0.0f, 55.0f, 42.0f, -18.0f, false};
+    EnemyAttackStats hitF2{0.0f, 0.16f, 0.06f, 1.8f, 460.0f, -45.0f, 0.35f, 18.0f, 70.0f, 46.0f, -20.0f, false};
+    EnemyAttackStats hitD1{0.0f, 0.18f, 0.06f, 2.5f, 220.0f, -435.0f, 0.48f, 30.0f, 75.0f, 70.0f, -42.0f, false};
 };
 
 struct Starter112Config {
     float windup = 0.06f;
-    EnemyAttackStats hit1{0.0f, 0.12f, 0.05f, 2.0f, 150.0f, -25.0f, 0.24f, 0.0f, 55.0f, 42.0f, -18.0f, false};
-    EnemyAttackStats hit2nd1{0.0f, 0.12f, 0.05f, 2.2f, 160.0f, -25.0f, 0.24f, 14.0f, 58.0f, 44.0f, -18.0f, false};
-    EnemyAttackStats hit2{0.0f, 0.18f, 0.06f, 4.5f, 180.0f, -435.0f, 0.45f, 18.0f, 70.0f, 68.0f, -40.0f, false};
+    EnemyAttackStats hit1{0.0f, 0.12f, 0.05f, 1.0f, 150.0f, -25.0f, 0.24f, 0.0f, 55.0f, 42.0f, -18.0f, false};
+    EnemyAttackStats hit2nd1{0.0f, 0.12f, 0.05f, 1.1f, 160.0f, -25.0f, 0.24f, 14.0f, 58.0f, 44.0f, -18.0f, false};
+    EnemyAttackStats hit2{0.0f, 0.18f, 0.06f, 2.2f, 180.0f, -435.0f, 0.45f, 18.0f, 70.0f, 68.0f, -40.0f, false};
 };
 
 struct Starter21DB1Config {
     float windup = 0.09f;
-    EnemyAttackStats hit2{0.0f, 0.16f, 0.06f, 3.5f, 350.0f, -35.0f, 0.30f, 0.0f, 65.0f, 46.0f, -18.0f, false};
-    EnemyAttackStats hit1{0.0f, 0.14f, 0.06f, 3.0f, 850.0f, -35.0f, 0.35f, 16.0f, 60.0f, 44.0f, -18.0f, false};
+    EnemyAttackStats hit2{0.0f, 0.16f, 0.06f, 1.8f, 350.0f, -35.0f, 0.30f, 0.0f, 65.0f, 46.0f, -18.0f, false};
+    EnemyAttackStats hit1{0.0f, 0.14f, 0.06f, 1.5f, 850.0f, -35.0f, 0.35f, 16.0f, 60.0f, 44.0f, -18.0f, false};
     float dashBehindDuration = 0.08f;
     float dashBehindOffset = 38.0f;
-    EnemyAttackStats hitSweep{0.0f, 0.15f, 0.06f, 4.8f, 0.0f, -435.0f, 0.48f, 0.0f, 70.0f, 50.0f, -10.0f, false};
+    EnemyAttackStats hitSweep{0.0f, 0.15f, 0.06f, 2.4f, 0.0f, -435.0f, 0.48f, 0.0f, 70.0f, 50.0f, -10.0f, false};
 };
 
 struct AirFollowup1Config {
@@ -50,8 +50,8 @@ struct AirFollowup1Config {
     float jumpDuration = 0.32f;
     float jumpHorizFactor = 6.5f;
     float jumpMaxSpeedX = 500.0f;
-    EnemyAttackStats hitA1{0.0f, 0.14f, 0.06f, 2.0f, 60.0f, -40.0f, 0.35f, 0.0f, 70.0f, 55.0f, -25.0f, false};
-    EnemyAttackStats hitAdw2{0.0f, 0.18f, 0.06f, 4.5f, 440.0f, 550.0f, 0.42f, 0.0f, 75.0f, 60.0f, -15.0f, true};
+    EnemyAttackStats hitA1{0.0f, 0.14f, 0.06f, 1.0f, 60.0f, -40.0f, 0.35f, 0.0f, 70.0f, 55.0f, -25.0f, false};
+    EnemyAttackStats hitAdw2{0.0f, 0.18f, 0.06f, 2.2f, 440.0f, 550.0f, 0.42f, 0.0f, 75.0f, 60.0f, -15.0f, true};
 };
 
 struct AirFollowup2Config {
@@ -59,9 +59,9 @@ struct AirFollowup2Config {
     float groundAdvanceDist = 72.0f;
     float jumpVelY = -860.0f;
     float jumpDuration = 0.32f;
-    EnemyAttackStats hitA1_1{0.0f, 0.12f, 0.05f, 2.0f, 60.0f, -40.0f, 0.35f, 0.0f, 70.0f, 55.0f, -25.0f, false};
-    EnemyAttackStats hitA1_2{0.0f, 0.12f, 0.05f, 2.0f, 60.0f, -40.0f, 0.35f, 0.0f, 65.0f, 50.0f, -25.0f, false};
-    EnemyAttackStats hitAdw2{0.0f, 0.30f, 0.50f, 5.5f, 1150.0f, -280.0f, 0.52f, 0.0f, 80.0f, 65.0f, -15.0f, true};
+    EnemyAttackStats hitA1_1{0.0f, 0.12f, 0.05f, 1.0f, 60.0f, -40.0f, 0.35f, 0.0f, 70.0f, 55.0f, -25.0f, false};
+    EnemyAttackStats hitA1_2{0.0f, 0.12f, 0.05f, 1.0f, 60.0f, -40.0f, 0.35f, 0.0f, 65.0f, 50.0f, -25.0f, false};
+    EnemyAttackStats hitAdw2{0.0f, 0.30f, 0.50f, 2.5f, 1150.0f, -280.0f, 0.52f, 0.0f, 80.0f, 65.0f, -15.0f, true};
     float diveSpeedY = 1200.0f;
     float finalKnockXVertical = 600.0f;
 };
@@ -71,24 +71,80 @@ struct EnemyCounterConfig {
     float cooldown = 3.50f;
     float whiffStun = 1.20f;
     float playerStun = 1.40f;
-    float damage = 7.0f;
+    float damage = 3.5f;
     float knockX = 320.0f;
     float knockY = -40.0f;
     float triggerDistance = 65.0f;
 };
 
+struct EnemyPerceptionConfig {
+    float viewDistance = 450.0f;     // Дальность обзора вперед (px)
+    float rearViewDistance = 110.0f; // Радиус обнаружения сзади / слух (px)
+    float verticalViewSpan = 180.0f; // Вертикальный сектор видимости (px)
+    float patrolSpeed = 120.0f;      // Скорость патрулирования (px/s)
+    float patrolRadius = 220.0f;     // Радиус патрулирования от точки спавна (px)
+    float patrolWaitTime = 1.0f;     // Ожидание на краю патруля перед разворотом (сек)
+    float alertDuration = 0.45f;     // Время фазы тревоги (!) перед погоней (сек)
+    float lostSightTimeout = 2.5f;   // Время поиска игрока после потери из виду (сек)
+    float jumpSpeed = 850.0f;        // Сила прыжка врага (px/s)
+    float jumpCooldown = 0.65f;      // Перезарядка прыжков врага (сек)
+};
+
+// -------------------------------------------------------------
+// АРХЕТИПЫ ВРАГОВ (ENEMY ARCHETYPES)
+// -------------------------------------------------------------
+struct NormalEnemyConfig {
+    float hp = 45.0f;
+    float speed = 220.0f;
+    float approachSpeed = 280.0f;
+    float damageMult = 1.0f;
+    float scale = 1.0f;
+    bool canCounter = false;
+    bool canBlock = false;
+    bool canDodge = false;
+};
+
+struct TankEnemyConfig {
+    float hp = 110.0f;
+    float speed = 135.0f;
+    float approachSpeed = 180.0f;
+    float damageMult = 1.65f;
+    float hitboxScale = 1.50f;
+    float scale = 1.50f;
+    float stunMult = 0.55f;
+    float knockMult = 0.50f;
+    float windupMult = 1.30f;
+    bool canCounter = false;
+    bool canBlock = true;
+};
+
+struct DuelistEnemyConfig {
+    float hp = 65.0f;
+    float speed = 330.0f;
+    float approachSpeed = 390.0f;
+    float damageMult = 1.15f;
+    float scale = 1.0f;
+    bool canCounter = true;
+    bool canBlock = true;
+    bool canDodge = true;
+    float aggressiveness = 0.65f;
+    float intelligence = 0.85f;
+    float dodgeCooldown = 2.20f;
+    float spacingDistance = 90.0f;
+};
+
 struct EnemyGeneralStats {
-    float maxHp = 100.0f;
+    float maxHp = 45.0f;
     float gravity = 2600.0f;
     float whiffRecovery = 0.50f;
     float hitRecovery = 0.20f;
-    float neutralPursuitSpeed = 250.0f;
-    float approachSpeed = 320.0f;
+    float neutralPursuitSpeed = 220.0f;
+    float approachSpeed = 280.0f;
     float attackCooldown = 0.75f;
     float dummyWindup = 0.38f;
     float dummyActiveTime = 0.16f;
     float dummyRecovery = 0.20f;
-    float dummyDamage = 3.0f;
+    float dummyDamage = 1.5f;
     float dummyKnockX = 250.0f;
     float dummyKnockY = -30.0f;
     float dummyStun = 0.25f;
@@ -106,6 +162,10 @@ struct EnemyAllConfig {
     AirFollowup1Config air1;
     AirFollowup2Config air2;
     EnemyCounterConfig counter;
+    EnemyPerceptionConfig perception;
+    NormalEnemyConfig normal;
+    TankEnemyConfig tank;
+    DuelistEnemyConfig duelist;
 };
 
 class EnemyConfig {
@@ -208,6 +268,40 @@ private:
             else if (key == "neutral_pursuit_speed" || key == "neutralpursuitspeed") _config.stats.neutralPursuitSpeed = std::stof(val);
             else if (key == "approach_speed" || key == "approachspeed") _config.stats.approachSpeed = std::stof(val);
             else if (key == "attack_cooldown" || key == "attackcooldown") _config.stats.attackCooldown = std::stof(val);
+        } else if (root == "Normal") {
+            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.normal.hp = std::stof(val);
+            else if (key == "speed") _config.normal.speed = std::stof(val);
+            else if (key == "approach_speed" || key == "approachspeed") _config.normal.approachSpeed = std::stof(val);
+            else if (key == "damage_multiplier" || key == "damagemult") _config.normal.damageMult = std::stof(val);
+            else if (key == "scale") _config.normal.scale = std::stof(val);
+            else if (key == "can_counter" || key == "cancounter") _config.normal.canCounter = (std::stoi(val) != 0);
+            else if (key == "can_block" || key == "canblock") _config.normal.canBlock = (std::stoi(val) != 0);
+            else if (key == "can_dodge" || key == "candodge") _config.normal.canDodge = (std::stoi(val) != 0);
+        } else if (root == "Tank") {
+            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.tank.hp = std::stof(val);
+            else if (key == "speed") _config.tank.speed = std::stof(val);
+            else if (key == "approach_speed" || key == "approachspeed") _config.tank.approachSpeed = std::stof(val);
+            else if (key == "damage_multiplier" || key == "damagemult") _config.tank.damageMult = std::stof(val);
+            else if (key == "hitbox_scale" || key == "hitboxscale") _config.tank.hitboxScale = std::stof(val);
+            else if (key == "scale") _config.tank.scale = std::stof(val);
+            else if (key == "stun_multiplier" || key == "stunmult") _config.tank.stunMult = std::stof(val);
+            else if (key == "knock_multiplier" || key == "knockmult") _config.tank.knockMult = std::stof(val);
+            else if (key == "windup_multiplier" || key == "windupmult") _config.tank.windupMult = std::stof(val);
+            else if (key == "can_counter" || key == "cancounter") _config.tank.canCounter = (std::stoi(val) != 0);
+            else if (key == "can_block" || key == "canblock") _config.tank.canBlock = (std::stoi(val) != 0);
+        } else if (root == "Duelist") {
+            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.duelist.hp = std::stof(val);
+            else if (key == "speed") _config.duelist.speed = std::stof(val);
+            else if (key == "approach_speed" || key == "approachspeed") _config.duelist.approachSpeed = std::stof(val);
+            else if (key == "damage_multiplier" || key == "damagemult") _config.duelist.damageMult = std::stof(val);
+            else if (key == "scale") _config.duelist.scale = std::stof(val);
+            else if (key == "can_counter" || key == "cancounter") _config.duelist.canCounter = (std::stoi(val) != 0);
+            else if (key == "can_block" || key == "canblock") _config.duelist.canBlock = (std::stoi(val) != 0);
+            else if (key == "can_dodge" || key == "candodge") _config.duelist.canDodge = (std::stoi(val) != 0);
+            else if (key == "aggressiveness") _config.duelist.aggressiveness = std::stof(val);
+            else if (key == "intelligence") _config.duelist.intelligence = std::stof(val);
+            else if (key == "dodge_cooldown" || key == "dodgecooldown") _config.duelist.dodgeCooldown = std::stof(val);
+            else if (key == "spacing_distance" || key == "spacingdistance") _config.duelist.spacingDistance = std::stof(val);
         } else if (root == "DummyAttack") {
             if (key == "windup") _config.stats.dummyWindup = std::stof(val);
             else if (key == "active_time" || key == "activetime") _config.stats.dummyActiveTime = std::stof(val);
@@ -229,6 +323,17 @@ private:
             else if (key == "knock_x" || key == "knockx") _config.counter.knockX = std::stof(val);
             else if (key == "knock_y" || key == "knocky") _config.counter.knockY = std::stof(val);
             else if (key == "trigger_distance" || key == "triggerdistance") _config.counter.triggerDistance = std::stof(val);
+        } else if (root == "Perception") {
+            if (key == "view_distance" || key == "viewdistance") _config.perception.viewDistance = std::stof(val);
+            else if (key == "rear_view_distance" || key == "rearviewdistance") _config.perception.rearViewDistance = std::stof(val);
+            else if (key == "vertical_view_span" || key == "verticalviewspan") _config.perception.verticalViewSpan = std::stof(val);
+            else if (key == "patrol_speed" || key == "patrolspeed") _config.perception.patrolSpeed = std::stof(val);
+            else if (key == "patrol_radius" || key == "patrolradius") _config.perception.patrolRadius = std::stof(val);
+            else if (key == "patrol_wait_time" || key == "patrolwaittime") _config.perception.patrolWaitTime = std::stof(val);
+            else if (key == "alert_duration" || key == "alertduration") _config.perception.alertDuration = std::stof(val);
+            else if (key == "lost_sight_timeout" || key == "lostsighttimeout") _config.perception.lostSightTimeout = std::stof(val);
+            else if (key == "jump_speed" || key == "jumpspeed") _config.perception.jumpSpeed = std::stof(val);
+            else if (key == "jump_cooldown" || key == "jumpcooldown") _config.perception.jumpCooldown = std::stof(val);
         } else if (root == "Combos" && stack.size() >= 3) {
             const std::string& comboId = stack[2];
 

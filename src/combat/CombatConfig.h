@@ -45,6 +45,40 @@ public:
     // ПУБЛИЧНЫЕ МЕТОДЫ ДОСТУПА К КВ ТАБЛИЦЕ (KEY-VALUE GETTERS)
     // =====================================================================
 
+    // Получение множителя стан-лока при промахе
+    static float getWhiffMultiplier() {
+        ensureInitialized();
+        return _whiffMultiplier;
+    }
+
+    // Параметры скейлинга урона (Damage Scaling / Proration)
+    static float getDamageScalingStep() {
+        ensureInitialized();
+        return _damageScalingStep;
+    }
+
+    static float getDamageScalingMin() {
+        ensureInitialized();
+        return _damageScalingMin;
+    }
+
+    // Параметры снижения оглушения (Hitstun Decay)
+    static float getHitstunDecayStep() {
+        ensureInitialized();
+        return _hitstunDecayStep;
+    }
+
+    static float getHitstunDecayMin() {
+        ensureInitialized();
+        return _hitstunDecayMin;
+    }
+
+    // Базовое HP для расчета объема крови добивания
+    static float getFinisherBloodBaseHp() {
+        ensureInitialized();
+        return _finisherBloodBaseHp;
+    }
+
     // Получение параметров базовой атаки по ключу ("1", "f2", "dw1", "d1", "a1" и т.д.)
     static AttackStats getBaseAttack(const std::string& type) {
         ensureInitialized();
@@ -59,6 +93,8 @@ public:
         if (type == "af1") return getBaseAttack("a1");
         if (type == "af2") return getBaseAttack("a2");
         if (type == "f1")  return getBaseAttack("1");
+        if (type == "ddw1") return getBaseAttack("dw1");
+        if (type == "ddw2") return getBaseAttack("dw2");
 
         // Безопасное значение по умолчанию
         return {2.0f, 160.0f, -25.0f, 0.14f, 0.20f, 0.12f, 14.0f, 
@@ -89,12 +125,14 @@ public:
         if (it != _comboIndexMap.end() && it->second < _combos.size()) {
             return &_combos[it->second];
         }
+        if (id == "21dw1" || id == "21ddw1") return getCombo("21db1");
         return nullptr;
     }
 
     // Проверка наличия комбо в КВ реестре
     static bool hasCombo(const std::string& id) {
         ensureInitialized();
+        if (id == "21dw1" || id == "21ddw1") return hasCombo("21db1");
         return _comboIndexMap.find(id) != _comboIndexMap.end();
     }
 
@@ -165,7 +203,19 @@ public:
 
                         std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
-                        if (blockStack.size() >= 3) {
+                        if (key == "whiff_stun_multiplier" || key == "whiff_multiplier" || key == "whiffmultiplier") {
+                            try { _whiffMultiplier = std::stof(val); } catch (...) {}
+                        } else if (key == "damage_scaling_step" || key == "damagescalingstep") {
+                            try { _damageScalingStep = std::stof(val); } catch (...) {}
+                        } else if (key == "damage_scaling_min" || key == "damagescalingmin") {
+                            try { _damageScalingMin = std::stof(val); } catch (...) {}
+                        } else if (key == "hitstun_decay_step" || key == "hitstundecaystep") {
+                            try { _hitstunDecayStep = std::stof(val); } catch (...) {}
+                        } else if (key == "hitstun_decay_min" || key == "hitstundecaymin") {
+                            try { _hitstunDecayMin = std::stof(val); } catch (...) {}
+                        } else if (key == "finisher_blood_base_hp" || key == "finisherbloodbasehp") {
+                            try { _finisherBloodBaseHp = std::stof(val); } catch (...) {}
+                        } else if (blockStack.size() >= 3) {
                             const std::string& section = blockStack[1];
                             const std::string& entryId = blockStack[2];
 
@@ -220,6 +270,12 @@ public:
     }
 
 private:
+    inline static float _whiffMultiplier = 1.0f;
+    inline static float _damageScalingStep = 0.10f;
+    inline static float _damageScalingMin = 0.30f;
+    inline static float _hitstunDecayStep = 0.10f;
+    inline static float _hitstunDecayMin = 0.30f;
+    inline static float _finisherBloodBaseHp = 45.0f;
     inline static std::unordered_map<std::string, AttackStats> _attacks;
     inline static std::vector<ComboEntry> _combos;
     inline static std::unordered_map<std::string, size_t> _comboIndexMap;

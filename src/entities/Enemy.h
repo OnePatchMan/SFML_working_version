@@ -15,6 +15,19 @@ enum class EnemyAttackState {
     RECOVERY    // Откат после удара
 };
 
+enum class AIBehaviorState {
+    PATROL,     // Патрулирование (игрок не обнаружен, спокойное движение по маршруту)
+    ALERT,      // Обнаружение / тревога ([!] восклицательный знак, фиксация цели)
+    CHASE,      // Погоня за игроком (сокращение дистанции, прыжки по платформам)
+    COMBAT      // Бой / комбо-серия (проведение ударов)
+};
+
+enum class EnemyType {
+    NORMAL,  // Обычный: серый цвет, малое ХП (45), легкая броня, средняя скорость, дает 1 комбо, нет контратаки
+    TANK,    // Жирный: красный цвет, больше в 1.5 раза, много ХП (110), тяжелая броня, бьет дальше и больнее, медленный
+    DUELIST  // Дуэлянт: фиолетовый цвет, среднее ХП (65), быстрый, сложные комбо, контратаки, блок, доджи (включая идеальный)
+};
+
 enum class AIStarterType {
     STARTER_1F2D1, // 1 -> f2 -> d1 (диагональный выпад и лаунчер)
     STARTER_112,   // 1 -> 1 -> 2 (быстрые джебы и апперкот)
@@ -75,13 +88,42 @@ class Enemy {
 public:
     sf::Vector2f position;
     sf::Vector2f velocity{0.0f, 0.0f};
-    float hp = 100.0f;
-    float maxHp = 100.0f;
-    float displayedHp = 100.0f;
+    float hp = 45.0f;
+    float maxHp = 45.0f;
+    float displayedHp = 45.0f;
     bool isDead = false;
     float hurtTimer = 0.0f;
     float respawnTimer = 0.0f;
+    float deathFadeTimer = 0.0f;
     sf::Vector2f spawnPosition;
+
+    EnemyType enemyType = EnemyType::NORMAL;
+    float scale = 1.0f;
+    float halfW = 16.0f;
+    float halfH = 28.0f;
+    float stunMultiplier = 1.0f;
+    float knockMultiplier = 1.0f;
+    float damageMultiplier = 1.0f;
+    float hitboxScale = 1.0f;
+    float windupMultiplier = 1.0f;
+
+    bool canCounter = false;
+    bool canBlock = false;
+    bool canDodge = false;
+    float aggressiveness = 0.65f;
+    float intelligence = 0.85f;
+
+    // Параметры уворота / доджа дуэлянта
+    bool isDodging = false;
+    float dodgeTimer = 0.0f;
+    float dodgeCooldownTimer = 0.0f;
+    float dodgeDirection = 0.0f; // -1, 1 или 0 (на месте)
+    bool isPerfectDodged = false;
+    float perfectDodgeEffectTimer = 0.0f;
+
+    // Параметры выжидания и маневрирования (spacing)
+    float spacingTimer = 0.0f;
+    float blockHoldTimer = 0.0f;
 
     EnemyAttackState attackState = EnemyAttackState::IDLE;
     float attackStateTimer = 0.0f;
@@ -94,6 +136,11 @@ public:
 
     float counterStanceTimer = 0.0f;
     float counterCooldownTimer = 0.0f;
+
+    // Система защиты / блока бота (снижает входящий урон на 80%)
+    bool isBlocking = false;
+    float blockStunTimer = 0.0f;
+    bool isBlockStunned() const { return blockStunTimer > 0.0f; }
 
     static constexpr float HALF_W = 16.0f;
     static constexpr float HALF_H = 28.0f;
@@ -114,19 +161,46 @@ public:
     bool isAirSuspended = false;
     AIStarterType currentStarterType = AIStarterType::STARTER_1F2D1;
     int nextStarterChoice = 0;
+    int maxComboHits = 3;
+    bool allowAirFollowup = true;
 
-    Enemy(sf::Vector2f spawnPos);
+    // Система восприятия, патрулирования и прыжков
+    AIBehaviorState behaviorState = AIBehaviorState::PATROL;
+    float alertTimer = 0.0f;
+    float lostSightTimer = 0.0f;
+    float patrolWaitTimer = 0.0f;
+    float jumpCooldown = 0.0f;
+    float patrolStartX = 0.0f;
+    bool isPatrolMovingRight = false;
+    sf::Vector2f lastKnownPlayerPos{0.0f, 0.0f};
+    bool hasDetectedPlayer = false;
+    float alertEffectTimer = 0.0f;
+
+    Enemy(sf::Vector2f spawnPos, EnemyType type = EnemyType::NORMAL);
+
+    void setType(EnemyType type);
+    EnemyType getType() const { return enemyType; }
+    void triggerDodge(float dir = 0.0f);
+    bool isInvulnerable() const { return isDodging; }
 
     sf::FloatRect getBounds() const;
     bool takeDamage(float amount, float knockX, float knockY, float stunTime = 0.18f);
+    void triggerStun(float dur) { hurtTimer = std::max(hurtTimer, dur * stunMultiplier); }
+    float getStunTimer() const { return hurtTimer; }
+    bool isStunned() const { return hurtTimer > 0.0f; }
     void reset();
     void update(float dt, const Arena& arena, const sf::Vector2f& playerPos = {0.0f, 0.0f});
     void draw(sf::RenderWindow& window, const sf::Font* font = nullptr);
+    void applyAttackStats(const EnemyAttackStats& s, float dirX);
 
     void setSmartAI(bool smart) { isSmartAI = smart; }
     void triggerAttack();
-    void triggerComboSequence(int forcedStarter = -1);
+    void triggerComboSequence(int forcedStarter = -1, int forcedHitLimit = -1);
     void dropCombo();
+    void finishCombo(bool hitConfirmed);
+    int getMaxComboHits() const { return maxComboHits; }
+    bool getAllowAirFollowup() const { return allowAirFollowup; }
+    void setComboLimits(int hits, bool airFollow) { maxComboHits = hits; allowAirFollowup = airFollow; }
     bool isCounterStanceActive() const { return counterStanceTimer > 0.0f; }
     void triggerCounterStance();
     void endCounterSuccess();
@@ -135,6 +209,12 @@ public:
     bool isComboSequenceActive() const { return aiComboState != AIComboState::IDLE; }
     const sf::FloatRect& getAttackHitbox() const { return attackHitbox; }
     void stagger(float duration);
+
+    AIBehaviorState getBehaviorState() const { return behaviorState; }
+    void setBehaviorState(AIBehaviorState state) { behaviorState = state; }
+    bool isPlayerDetected() const { return hasDetectedPlayer; }
+    void forceDetectPlayer(sf::Vector2f pos);
+    bool jump(float speedY = 850.0f);
 
     float getCurrentDamage() const { return currentAttackDamage; }
     float getCurrentKnockX() const { return currentAttackKnockX; }
@@ -148,7 +228,21 @@ public:
 // Синоним / обертка для удобного использования нового умного врага
 class SmartEnemy : public Enemy {
 public:
-    SmartEnemy(sf::Vector2f spawnPos) : Enemy(spawnPos) {
+    SmartEnemy(sf::Vector2f spawnPos, EnemyType type = EnemyType::DUELIST) : Enemy(spawnPos, type) {
+        setSmartAI(true);
+    }
+};
+
+class TankEnemy : public Enemy {
+public:
+    TankEnemy(sf::Vector2f spawnPos) : Enemy(spawnPos, EnemyType::TANK) {
+        setSmartAI(true);
+    }
+};
+
+class DuelistEnemy : public Enemy {
+public:
+    DuelistEnemy(sf::Vector2f spawnPos) : Enemy(spawnPos, EnemyType::DUELIST) {
         setSmartAI(true);
     }
 };

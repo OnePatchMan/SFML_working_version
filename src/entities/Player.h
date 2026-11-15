@@ -15,6 +15,19 @@ struct DashGhost {
         : sprite(spr), alpha(a), lifetime(life) {}
 };
 
+enum class AttackAnimType {
+    NONE,
+    LIGHT,          // 1, f1, 111 (Light Jab)
+    HEAVY,          // 2, f2, 222 (Heavy Strike / Power Slash)
+    UPPERCUT,       // u1, u2, 112 (Rising Uppercut Launcher)
+    SWEEP,          // dw1, dw2, 21db1 (Low Sweep / Reverse Sweep)
+    DASH_ATTACK,    // d1, d2, 1f2d1 (Dash Thrust / Diagonal Launcher)
+    THROW,          // 11b2 (Grab & Back Throw)
+    AIR_ATTACK,     // a1, a2, a1a2 (Air Juggle / Air Push)
+    DIVE_SLAM,      // adw2, a1adw2, a1a1adw2 (Air Down Slam / Crater Impact)
+    TURN_ATTACK     // b1, b2 (Spinning Backfist)
+};
+
 class Player {
 public:
     sf::Vector2f position;
@@ -27,6 +40,7 @@ public:
     float diveSlamDir = 1.0f;
 
     static constexpr float HALF_W = 20.0f;
+    static constexpr float HALF_H = 27.5f;
     static constexpr float TOP_OFFSET = 25.0f;
     static constexpr float BOTTOM_OFFSET = 30.0f;
 
@@ -49,7 +63,7 @@ public:
     void handleInput(const std::optional<sf::Event>& event);
     void update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld);
     void draw(sf::RenderWindow& window);
-    void reset(sf::Vector2f spawnPos);
+    void reset(sf::Vector2f spawnPos, bool withWeapon = true);
     bool takeDamage(float amount, float knockX, float knockY, float stunTime);
 
     sf::FloatRect getBounds() const {
@@ -69,16 +83,30 @@ public:
     void consumePerfectDodgeEmpower() { _perfectDodgeEmpoweredTimer = 0.0f; }
     bool isDashWindow() const { return _dashWindowTimer > 0.0f; }
     void clearDashWindow() { _dashWindowTimer = 0.0f; }
+
+    sf::Vector2f getEffectiveVelocity() const;
     bool isAirSuspended() const { return _isAirSuspended; }
     void setAirSuspended(bool s) { _isAirSuspended = s; }
     void lunge(float distance);
     void setSimulatedMoveDir(float dir) { _simulatedMoveDir = dir; }
     void setSimulatedVerticalDir(float dir) { _simulatedVerticalDir = dir; }
-    void turnAround() { _animation.setFacing(!_animation.isFacingRight()); }
+    float getSimulatedMoveDir() const { return _simulatedMoveDir; }
+    float getSimulatedVerticalDir() const { return _simulatedVerticalDir; }
+    void turnAround();
 
-    void triggerStun(float dur) { _stunTimer = dur; }
+    void triggerStun(float dur) { _stunTimer = dur; _isJuggledByEnemy = false; cancelAttackAnimation(); }
     bool isStunned() const { return _stunTimer > 0.0f; }
     float getStunTimer() const { return _stunTimer; }
+
+    bool hasWeapon() const { return _hasWeapon; }
+    void setHasWeapon(bool val) { _hasWeapon = val; }
+
+    // Система защиты / блока (снижение урона на 80%, удержание F/E)
+    bool isBlocking() const { return _isBlocking; }
+    void setBlocking(bool b) { _isBlocking = b; }
+    bool isBlockStunned() const { return _blockStunTimer > 0.0f; }
+    float getBlockStunTimer() const { return _blockStunTimer; }
+    void triggerBlockStun(float dur = 0.14f) { _blockStunTimer = dur; }
 
     // Стойка контр-атаки / парирования на кнопку [Q]
     bool isCounterStanceActive() const { return _isCounterStance && _counterWindowTimer > 0.0f; }
@@ -92,6 +120,20 @@ public:
     void setFacingLocked(bool locked) { _facingLocked = locked; }
     bool isFacingLocked() const { return _facingLocked; }
 
+    const Animation& getAnimation() const { return _animation; }
+    Animation& getAnimation() { return _animation; }
+    const Animation& getRollAnimation() const { return _rollAnimation; }
+    Animation& getRollAnimation() { return _rollAnimation; }
+
+    void triggerAttackAnimation(AttackAnimType animType, float duration);
+    void cancelAttackAnimation();
+    bool isPlayingAttackAnimation() const { return _currentAttackAnim != AttackAnimType::NONE && _attackAnimTimer > 0.0f; }
+    AttackAnimType getCurrentAttackAnim() const { return _currentAttackAnim; }
+    float getAttackAnimTimer() const { return _attackAnimTimer; }
+    float getAttackAnimDuration() const { return _attackAnimDuration; }
+    Animation* getAttackAnimation(AttackAnimType animType);
+    const Animation* getAttackAnimation(AttackAnimType animType) const;
+
     bool isHoldingUp() const;
     bool isHoldingDown() const;
     bool isHoldingForward() const;
@@ -99,7 +141,23 @@ public:
 
 private:
     Animation _animation;
+    Animation _rollAnimation;
+    Animation _lightAttackAnim;
+    Animation _heavyAttackAnim;
+    Animation _uppercutAnim;
+    Animation _sweepAnim;
+    Animation _dashAttackAnim;
+    Animation _throwAnim;
+    Animation _airAttackAnim;
+    Animation _diveSlamAnim;
+    Animation _turnAttackAnim;
     Animator _animator;
+
+    AttackAnimType _currentAttackAnim = AttackAnimType::NONE;
+    float _attackAnimTimer = 0.0f;
+    float _attackAnimDuration = 0.0f;
+
+    void syncAllAnimations(const sf::Color& color);
 
     bool _isOnGround = false;
     bool _isAirSuspended = false;
@@ -108,9 +166,11 @@ private:
     float _coyoteTime = 0.0f;
     float _jumpBuffer = 0.0f;
     bool _collisionEnabled = true;
+    float _pendingLunge = 0.0f;
     float _simulatedMoveDir = 0.0f;
     float _simulatedVerticalDir = 0.0f;
     float _stunTimer = 0.0f;
+    bool _isJuggledByEnemy = false;
 
     float _dashTimer = 0.0f;
     float _dashWindowTimer = 0.0f;
@@ -129,6 +189,13 @@ private:
     float _counterWindowTimer = 0.0f;
     float _counterCooldown = 0.0f;
     bool _counterWhiffStunActive = false;
+
+    bool _isBlocking = false;
+    float _blockStunTimer = 0.0f;
+
+    bool _hasWeapon = true; // С самого начала персонаж появляется с булавой
+    mutable sf::Texture _heldMaceTexture;
+    mutable bool _heldMaceLoaded = false;
 
     std::vector<DashGhost> _dashGhosts;
 
