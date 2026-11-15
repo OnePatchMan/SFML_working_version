@@ -1,13 +1,24 @@
-cmake_minimum_required(VERSION 3.16)
-project(Test)
+cmake_minimum_required(VERSION 3.20)
+project(FightingComboArena LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Поиск SFML 3 в системе
-find_package(SFML 3 COMPONENTS Graphics Window System Audio REQUIRED)
+# Поиск SFML 3 в системе или автоматическая загрузка через FetchContent для Windows / чистых систем
+find_package(SFML 3 COMPONENTS Graphics Window System Audio QUIET)
+if(NOT SFML_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+        SFML
+        GIT_REPOSITORY https://github.com/SFML/SFML.git
+        GIT_TAG        3.0.0
+        GIT_SHALLOW    ON
+        EXCLUDE_FROM_ALL SYSTEM
+    )
+    FetchContent_MakeAvailable(SFML)
+endif()
 
-add_executable(Test
+add_executable(FightingComboArena
     src/main.cpp
     src/world/Arena.cpp
     src/world/MapEditor.cpp
@@ -18,17 +29,20 @@ add_executable(Test
     src/ui/MenuSystem.cpp
 )
 
-target_include_directories(Test PRIVATE
+target_include_directories(FightingComboArena PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(Test PRIVATE
+target_link_libraries(FightingComboArena PRIVATE
     SFML::Graphics
     SFML::Window
     SFML::System
     SFML::Audio
 )
+
+# Псевдоним для обратной совместимости команд сборки
+add_custom_target(Test DEPENDS FightingComboArena)
 
 add_executable(test_directional_combos
     scratch/test_directional_combos.cpp
@@ -52,32 +66,36 @@ target_link_libraries(test_directional_combos PRIVATE
     SFML::Audio
 )
 
-add_executable(MapEditor
-    ../MapEditor/src/main.cpp
-    ../MapEditor/src/EditorApp.cpp
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../MapEditor/src/main.cpp")
+    add_executable(MapEditor
+        ../MapEditor/src/main.cpp
+        ../MapEditor/src/EditorApp.cpp
+    )
 
-target_include_directories(MapEditor PRIVATE
-    ../MapEditor/src
-)
+    target_include_directories(MapEditor PRIVATE
+        ../MapEditor/src
+    )
 
-target_link_libraries(MapEditor PRIVATE
-    SFML::Graphics
-    SFML::Window
-    SFML::System
-)
+    target_link_libraries(MapEditor PRIVATE
+        SFML::Graphics
+        SFML::Window
+        SFML::System
+    )
+endif()
 
 # Копирование ассетов в директорию сборки, чтобы пути всегда работали
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
-    add_custom_command(TARGET Test POST_BUILD
+    add_custom_command(TARGET FightingComboArena POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-        "$<TARGET_FILE_DIR:Test>/assets"
+        "$<TARGET_FILE_DIR:FightingComboArena>/assets"
     )
-    add_custom_command(TARGET MapEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-        "$<TARGET_FILE_DIR:MapEditor>/assets"
-    )
+    if(TARGET MapEditor)
+        add_custom_command(TARGET MapEditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:MapEditor>/assets"
+        )
+    endif()
 endif()
 

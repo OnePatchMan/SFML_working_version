@@ -13,8 +13,13 @@
 
 int main() {
     // Отключение принудительного VSync драйвера Mesa (AMD/Intel) и Nvidia
+#if defined(_WIN32)
+    _putenv("vblank_mode=0");
+    _putenv("__GL_SYNC_TO_VBLANK=0");
+#else
     setenv("vblank_mode", "0", 1);
     setenv("__GL_SYNC_TO_VBLANK", "0", 1);
+#endif
 
     SoundManager::get().init("assets/soundeff");
 
@@ -49,10 +54,12 @@ int main() {
     sf::RenderWindow window(desktop, "FightingComboGame", sf::State::Fullscreen);
     window.setMouseCursorVisible(false);
 
+#if !defined(_WIN32)
     // Автоматический перевод в честный Fullscreen 2 в Hyprland для сокрытия панелей (Quickshell, Waybar)
     if (std::getenv("HYPRLAND_INSTANCE_SIGNATURE") || std::getenv("WAYLAND_DISPLAY")) {
         std::system("hyprctl dispatch fullscreen 2 > /dev/null 2>&1 &");
     }
+#endif
 
     // Управление режимами ограничения частоты кадров (FPS)
     enum class FpsMode {

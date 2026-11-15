@@ -1,0 +1,74 @@
+name: Build Windows Release
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Game
+        run: |
+          cmake --build build --config Release -j 4 --target FightingComboArena
+
+      - name: Package Windows Portable Bundle
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/FightingComboArena
+          Copy-Item -Recurse -Force assets dist/FightingComboArena/assets
+          
+          # Копируем исполняемый файл
+          $exeFiles = Get-ChildItem -Path build -Recurse -Filter "FightingComboArena.exe"
+          if ($exeFiles) {
+              Copy-Item -Path $exeFiles[0].FullName -Destination dist/FightingComboArena/FightingComboArena.exe
+          } else {
+              Write-Error "FightingComboArena.exe not found!"
+              exit 1
+          }
+
+          # Копируем все динамические библиотеки (.dll) SFML и зависимостей
+          Get-ChildItem -Path build -Recurse -Filter *.dll | ForEach-Object {
+              Copy-Item -Force -Path $_.FullName -Destination dist/FightingComboArena/
+          }
+
+          # Запаковываем в удобный архив
+          Compress-Archive -Path dist/FightingComboArena -DestinationPath FightingComboArena-Windows.zip -Force
+
+      - name: Upload Windows Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FightingComboArena-Windows
+          path: FightingComboArena-Windows.zip
+          retention-days: 30
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/master'
+        with:
+          tag_name: latest
+          name: "Fighting Combo Arena (Windows Portable)"
+          body: |
+            ### 🎮 Fighting Combo Arena — Портативная сборка для Windows
+            
+            **Как запустить друзьям:**
+            1. Скачайте архив `FightingComboArena-Windows.zip` ниже.
+            2. Распакуйте его в любую папку.
+            3. Запустите `FightingComboArena.exe`.
+            
+            Никаких дополнительных программ или библиотек устанавливать не нужно!
+          files: FightingComboArena-Windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
