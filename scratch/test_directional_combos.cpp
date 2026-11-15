@@ -3603,6 +3603,44 @@ int main() {
         std::cout << "-> PASSED: Mace Meat-Tenderizer Throw & Unarmed Combat verified 100%!" << std::endl;
     }
 
+    // =========================================================================
+    // TEST 51: SUBTLE KILL BLOOD SPLATTER (LOW COUNT & SHORT DISTANCE)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 51] Testing Subtle Kill Blood Splatter (Low Count & Short Distance)..." << std::endl;
+        Arena arena(80, 20);
+        arena.clearBlood();
+        assert(arena.getBloodParticles().empty());
+        assert(arena.getBloodDecalCount() == 0);
+
+        sf::Vector2f killPos(500.0f, 600.0f);
+        sf::Vector2f knockDir(1.0f, 0.0f);
+        arena.spawnKillBlood(killPos, knockDir, 45.0f);
+
+        size_t count = arena.getBloodParticles().size();
+        size_t bgCount = arena.getBackgroundBloodStreakCount();
+        std::cout << "-> Kill blood spawned: particles=" << count << ", bgDroplets=" << bgCount << std::endl;
+
+        // 1. Verify small particle count ("прям мало")
+        assert(count >= 7 && count <= 14);
+        assert(bgCount >= 2 && bgCount <= 6);
+
+        // 2. Verify short distance / low speed ("без сильной дальности" <= 250 px/s)
+        for (const auto& bp : arena.getBloodParticles()) {
+            float spd = std::hypot(bp.velocity.x, bp.velocity.y);
+            assert(spd <= 250.0f);
+            assert(bp.radius <= 3.2f);
+        }
+
+        // 3. Step physics and verify particles land and leave subtle decals on nearby floor
+        for (int frame = 0; frame < 120; ++frame) {
+            arena.update(0.016f);
+        }
+        std::cout << "-> Kill blood decals formed on nearby surface: " << arena.getBloodDecalCount() << std::endl;
+        assert(arena.getBloodDecalCount() > 0);
+        std::cout << "-> PASSED: Subtle Kill Blood Splatter verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;

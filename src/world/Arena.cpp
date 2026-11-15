@@ -465,6 +465,73 @@ void Arena::spawnFinisherBlood(sf::Vector2f pos, sf::Vector2f burstDir, int coun
     }
 }
 
+void Arena::spawnKillBlood(sf::Vector2f pos, sf::Vector2f knockDir, float maxHp) {
+    static std::mt19937 rng(4242);
+    std::uniform_real_distribution<float> angleDist(-0.85f, 0.85f);
+    std::uniform_real_distribution<float> speedDist(80.0f, 210.0f); // Прям мало и без сильной дальности
+    std::uniform_real_distribution<float> sizeDist(1.3f, 2.7f);
+    std::uniform_real_distribution<float> lifeDist(1.1f, 2.0f);
+
+    float len = std::hypot(knockDir.x, knockDir.y);
+    sf::Vector2f baseDir = (len > 0.001f) ? (knockDir / len) : sf::Vector2f(0.0f, -1.0f);
+
+    // 1. Малое количество аккуратных капель крови (8-10 частиц)
+    int particleCount = 9;
+    for (int i = 0; i < particleCount; ++i) {
+        BloodParticle p;
+        p.position = pos + sf::Vector2f(angleDist(rng) * 4.0f, angleDist(rng) * 4.0f);
+
+        float speed = speedDist(rng);
+        float spreadAngle = angleDist(rng);
+        float cosA = std::cos(spreadAngle);
+        float sinA = std::sin(spreadAngle);
+        sf::Vector2f dir = {
+            baseDir.x * cosA - baseDir.y * sinA,
+            baseDir.x * sinA + baseDir.y * cosA
+        };
+        // Мягкая дуга вверх, капли красиво и компактно опадают на пол вокруг тела
+        dir.y -= 0.35f;
+        float dLen = std::hypot(dir.x, dir.y);
+        if (dLen > 0.001f) dir /= dLen;
+
+        p.velocity = dir * speed;
+        p.radius = sizeDist(rng);
+        p.lifetime = lifeDist(rng);
+        p.active = true;
+
+        int cIdx = rng() % 4;
+        if (cIdx == 0) p.color = sf::Color(155, 12, 18, 230);
+        else if (cIdx == 1) p.color = sf::Color(185, 16, 24, 240);
+        else if (cIdx == 2) p.color = sf::Color(120, 6, 10, 225);
+        else p.color = sf::Color(165, 14, 20, 235);
+
+        _bloodParticles.push_back(p);
+    }
+
+    // 2. Буквально 3-4 маленьких точечных брызга на заднем плане в радиусе 10-18px
+    for (int i = 0; i < 4; ++i) {
+        BackgroundBloodStreak streak;
+        streak.isBlotch = true;
+        float offsetAngle = static_cast<float>(rng() % 360) * 3.14159f / 180.0f;
+        float offsetDist = 3.0f + static_cast<float>(rng() % 15);
+        streak.startPos = pos + sf::Vector2f(std::cos(offsetAngle) * offsetDist, std::sin(offsetAngle) * offsetDist);
+        streak.currentPos = streak.startPos;
+        streak.length = 0.0f;
+        streak.maxLength = 0.0f;
+        streak.dripSpeed = 0.0f;
+        streak.width = 1.4f + static_cast<float>(rng() % 2);
+        streak.blotchH = 1.4f + static_cast<float>(rng() % 2);
+        streak.active = false;
+
+        int cIdx = rng() % 3;
+        if (cIdx == 0) streak.color = sf::Color(145, 10, 16, 210);
+        else if (cIdx == 1) streak.color = sf::Color(175, 15, 22, 220);
+        else streak.color = sf::Color(115, 8, 12, 200);
+
+        _bgBloodStreaks.push_back(streak);
+    }
+}
+
 void Arena::update(float dt) {
     // 1. Обновление летящих капель крови и их задержка на гранях ТВЕРДЫХ блоков без пролета насквозь
     for (auto& p : _bloodParticles) {

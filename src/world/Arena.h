@@ -65,6 +65,7 @@ public:
     static Arena* getActive() { return s_activeArena; }
 
     void spawnFinisherBlood(sf::Vector2f pos, sf::Vector2f burstDir, int count = 65, float maxHp = 45.0f);
+    void spawnKillBlood(sf::Vector2f pos, sf::Vector2f knockDir = {0.0f, -1.0f}, float maxHp = 45.0f);
     void update(float dt);
     void clearBlood() { _bloodDecals.clear(); _bloodParticles.clear(); _bgBloodStreaks.clear(); }
     const std::vector<BloodDecal>& getBloodDecals() const { return _bloodDecals; }

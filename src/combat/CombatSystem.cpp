@@ -663,7 +663,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     enemy.endCounterSuccess();
                     float dir = enemy.isFacingLeft ? -1.0f : 1.0f;
                     player.triggerStun(ecfg.counter.playerStun); // ДОЛГИЙ СТАН ИГРОКА!
+                    bool playerWasDead = player.isDead;
                     player.takeDamage(ecfg.counter.damage, dir * ecfg.counter.knockX, ecfg.counter.knockY, ecfg.counter.playerStun);
+                    if (!playerWasDead && player.isDead && Arena::getActive()) {
+                        Arena::getActive()->spawnKillBlood(player.position, sf::Vector2f(dir * 0.707f, -0.707f), 100.0f);
+                    }
 
                     _shakeTimer = 0.22f;
                     _shakeIntensity = 8.0f;
@@ -731,7 +735,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                     // Наносим урон и импульс врагу с проверкой блока и добивания
                     bool targetWasBlocking = enemy.isBlocking;
+                    bool targetWasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
                     enemy.takeDamage(scaledDamage, _knockX, _knockY, scaledStun);
+                    bool enemyJustDied = !targetWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f);
 
                     // Особые комбо-маркеры и эффекты при попадании усиленной атаки из идеального уворота
                     if (_isEmpoweredStrike) {
@@ -871,6 +877,15 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                         }
                     }
 
+                    // Если враг погиб от обычной атаки/серии (не финишера) — спавним аккуратную локальную кровь
+                    if (enemyJustDied && !isFinisher && Arena::getActive()) {
+                        float pDir = (player.isFacingRight() ? 1.0f : -1.0f);
+                        float kLen = std::hypot(_knockX, _knockY);
+                        sf::Vector2f knockDir = (kLen > 0.001f) ? sf::Vector2f(_knockX / kLen, _knockY / kLen)
+                                                               : sf::Vector2f(pDir * 0.707f, -0.707f);
+                        Arena::getActive()->spawnKillBlood(enemy.position, knockDir, enemy.maxHp);
+                    }
+
                 // Задерживаем в воздухе ТОЛЬКО ПРИ ПОПАДАНИИ по врагу!
                 if (!player.isOnGround()) {
                     _airSuspendedRemaining = 0.22f;
@@ -997,7 +1012,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 player.endCounterSuccess();
                 const auto& pcfg = PlayerConfig::get();
                 float pDir = player.isFacingRight() ? 1.0f : -1.0f;
+                bool enemyWasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
                 enemy.takeDamage(pcfg.counterDamage, pDir * pcfg.counterKnockX, pcfg.counterKnockY, pcfg.counterEnemyStun);
+                if (!enemyWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f) && Arena::getActive()) {
+                    Arena::getActive()->spawnKillBlood(enemy.position, sf::Vector2f(pDir * 0.707f, -0.707f), enemy.maxHp);
+                }
                 enemy.dropCombo();
                 enemy.attackHasHit = false;
 
@@ -1080,10 +1099,16 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 _shakeIntensity = 4.0f;
 
                 bool playerWasBlocking = player.isBlocking();
+                bool playerWasDead = player.isDead;
                 player.takeDamage(enemy.getCurrentDamage(), 
                                   enemy.getCurrentKnockX(), 
                                   enemy.getCurrentKnockY(), 
                                   enemy.getCurrentStunTime());
+                if (!playerWasDead && player.isDead && Arena::getActive()) {
+                    float kLen = std::hypot(enemy.getCurrentKnockX(), enemy.getCurrentKnockY());
+                    sf::Vector2f kDir = (kLen > 0.001f) ? sf::Vector2f(enemy.getCurrentKnockX() / kLen, enemy.getCurrentKnockY() / kLen) : sf::Vector2f(0.0f, -1.0f);
+                    Arena::getActive()->spawnKillBlood(player.position, kDir, 100.0f);
+                }
 
                 if (playerWasBlocking) {
                     for (int i = 0; i < 12; ++i) {
@@ -1254,13 +1279,19 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     bool wasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
                     enemy.takeDamage(maceDmg, hitDir.x * knockForce, hitDir.y * knockForce, 0.50f);
 
-                    // Если бросок был летальным и на высокой скорости — разлетается кровь в направлении форсы!
-                    if (!wasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f) && speed >= 500.0f) {
-                        if (Arena::getActive()) {
-                            Arena::getActive()->spawnFinisherBlood(enemy.position, hitDir, 65, enemy.maxHp);
+                    // Если бросок был летальным — разлетается кровь в направлении форсы
+                    if (!wasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f)) {
+                        if (speed >= 500.0f) {
+                            if (Arena::getActive()) {
+                                Arena::getActive()->spawnFinisherBlood(enemy.position, hitDir, 65, enemy.maxHp);
+                            }
+                            _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -65.0f), 
+                                                            "★ LETHAL MACE THROW! ★", sf::Color(255, 60, 50), 1.0f, 1.0f, 1.25f, 255.0f});
+                        } else {
+                            if (Arena::getActive()) {
+                                Arena::getActive()->spawnKillBlood(enemy.position, hitDir, enemy.maxHp);
+                            }
                         }
-                        _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -65.0f), 
-                                                        "★ LETHAL MACE THROW! ★", sf::Color(255, 60, 50), 1.0f, 1.0f, 1.25f, 255.0f});
                     }
 
                     // Всплывающий урон
