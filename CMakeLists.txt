@@ -1,8 +1,7 @@
-cmake_minimum_required(VERSION 3.20)
-
 # Разрешаем совместимость для старых подпроектов (FreeType < 3.5) в CMake 3.31+ / 4.0
-set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "" FORCE)
 
+cmake_minimum_required(VERSION 3.5...3.30)
 project(FightingComboArena LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)

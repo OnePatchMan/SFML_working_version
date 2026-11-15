@@ -17,8 +17,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure CMake
+        shell: pwsh
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake -B build -DCMAKE_BUILD_TYPE=Release '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
 
       - name: Build Game
         run: |
