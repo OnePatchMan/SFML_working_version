@@ -299,7 +299,7 @@ private:
     inline static float _hitstunDecayStep = 0.10f;
     inline static float _hitstunDecayMin = 0.30f;
     inline static float _finisherBloodBaseHp = 45.0f;
-    inline static float _throwBaseSpeed = 550.0f;
+    inline static float _throwBaseSpeed = 365.0f;
     inline static float _throwSpeedBoostMultiplier = 1.6f;
     inline static float _throwStraightGravity = 980.0f;
     inline static float _throwUpwardSpinSpeed = 1080.0f;

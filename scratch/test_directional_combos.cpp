@@ -3480,7 +3480,8 @@ int main() {
             assert(combat.getThrownMaces().size() == 1);
             const auto& thrown = combat.getThrownMaces().front();
             float vSpeed = std::hypot(thrown.velocity.x, thrown.velocity.y);
-            assert(std::abs(vSpeed - 550.0f) < 1.0f); // Базовая скорость стоя на месте = 550 px/s
+            float expectedBase = CombatConfig::getThrowBaseSpeed();
+            assert(std::abs(vSpeed - expectedBase) < 1.0f); // Базовая скорость стоя на месте
 
             // Броски вверх и вверх-прямо (225, 270, 315) закручиваются (angularVelocity != 0)
             // Броски прямо, прямо вниз и вниз (0, 45, 90, 135, 180) летят прямо как копье (angularVelocity == 0)
@@ -3493,8 +3494,8 @@ int main() {
             }
 
             // Vector should strictly match snapped angle
-            float expectedX = std::cos(rad) * 550.0f;
-            float expectedY = std::sin(rad) * 550.0f;
+            float expectedX = std::cos(rad) * expectedBase;
+            float expectedY = std::sin(rad) * expectedBase;
             assert(std::abs(thrown.velocity.x - expectedX) < 1.0f);
             assert(std::abs(thrown.velocity.y - expectedY) < 1.0f);
         }
@@ -3507,11 +3508,12 @@ int main() {
         combat.throwWeapon(player, player.position + sf::Vector2f(200.0f, 0.0f));
         assert(combat.getThrownMaces().size() == 1);
         float boostedSpeed = std::hypot(combat.getThrownMaces().front().velocity.x, combat.getThrownMaces().front().velocity.y);
-        float expectedBoosted = 550.0f + 400.0f * 1.6f;
+        float expectedBase = CombatConfig::getThrowBaseSpeed();
+        float expectedBoosted = expectedBase + 400.0f * CombatConfig::getThrowSpeedBoostMultiplier();
         assert(std::abs(boostedSpeed - expectedBoosted) < 1.0f);
-        assert(boostedSpeed > 550.0f * 1.5f); // Скорость при ходьбе/беге заметно выше, чем стоя!
+        assert(boostedSpeed > expectedBase * 1.5f); // Скорость при ходьбе/беге заметно выше, чем стоя!
         player.velocity = {0.0f, 0.0f};
-        std::cout << "-> Throw speed successfully scales with player velocity (Standing: 550 px/s vs Moving: " 
+        std::cout << "-> Throw speed successfully scales with player velocity (Standing: " << expectedBase << " px/s vs Moving: " 
                   << boostedSpeed << " px/s)!" << std::endl;
 
         // 2. Upward Throw: Spin, Apex Hover & Slow Descent for Combo Setup
