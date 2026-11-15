@@ -19,7 +19,7 @@ bool MenuSystem::drawButton(sf::RenderWindow& window, const Button& btn, const s
     sf::RectangleShape shape(btn.rect.size);
     shape.setPosition(btn.rect.position);
 
-    sf::Color fillCol = selected ? sf::Color(btn.hoverColor.r, btn.hoverColor.g, btn.hoverColor.b, 230)
+    sf::Color fillCol = selected ? sf::Color(btn.hoverColor.r, btn.hoverColor.g, btn.hoverColor.b, 255)
                                  : (hovered ? btn.hoverColor : btn.normalColor);
     shape.setFillColor(fillCol);
     shape.setOutlineThickness(hovered || selected ? 2.5f : 1.5f);
@@ -56,12 +56,12 @@ void MenuSystem::drawKeybindRow(sf::RenderWindow& window, float x, float y, floa
                                const std::string& key, const std::string& desc, sf::Color keyCol) {
     if (!_font) return;
 
-    // Фон строки
+    // Фон строки - полностью непрозрачный
     sf::RectangleShape rowBg({w, 32.0f});
     rowBg.setPosition(sf::Vector2f(x, y));
-    rowBg.setFillColor(sf::Color(22, 29, 42, 190));
+    rowBg.setFillColor(sf::Color(24, 32, 46, 255));
     rowBg.setOutlineThickness(1.0f);
-    rowBg.setOutlineColor(sf::Color(45, 62, 88, 180));
+    rowBg.setOutlineColor(sf::Color(45, 62, 88));
     window.draw(rowBg);
 
     // Клавиша
@@ -74,7 +74,7 @@ void MenuSystem::drawKeybindRow(sf::RenderWindow& window, float x, float y, floa
     // Разделитель
     sf::RectangleShape div({2.0f, 22.0f});
     div.setPosition(sf::Vector2f(x + 225.0f, y + 5.0f));
-    div.setFillColor(sf::Color(45, 62, 88, 180));
+    div.setFillColor(sf::Color(45, 62, 88));
     window.draw(div);
 
     // Описание с большим запасом по ширине
@@ -88,9 +88,9 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
     float cx = winSize.x * 0.5f;
     float cy = winSize.y * 0.5f;
 
-    // Заливка всего экрана глубоким стильным цветом с виньетированием
+    // Заливка всего экрана глубоким сплошным непрозрачным цветом
     sf::RectangleShape bgFill(winSize);
-    bgFill.setFillColor(sf::Color(12, 16, 24, 248));
+    bgFill.setFillColor(sf::Color(13, 17, 26, 255));
     window.draw(bgFill);
 
     // Верхняя акцентная полоса
@@ -273,7 +273,7 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
 
     sf::RectangleShape contentBox({contentW, contentH});
     contentBox.setPosition(sf::Vector2f(contentX, contentY));
-    contentBox.setFillColor(sf::Color(16, 21, 32, 230));
+    contentBox.setFillColor(sf::Color(18, 24, 36, 255));
     contentBox.setOutlineThickness(1.5f);
     contentBox.setOutlineColor(sf::Color(45, 60, 90));
     window.draw(contentBox);
@@ -501,9 +501,9 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
 
         sf::RectangleShape rowBg({w - 30.0f, rowH - 4.0f});
         rowBg.setPosition(sf::Vector2f(x + 15.0f, ry));
-        rowBg.setFillColor((i % 2 == 0) ? sf::Color(20, 26, 38, 200) : sf::Color(26, 34, 50, 200));
+        rowBg.setFillColor((i % 2 == 0) ? sf::Color(22, 28, 40, 255) : sf::Color(27, 35, 52, 255));
         rowBg.setOutlineThickness(1.0f);
-        rowBg.setOutlineColor(sf::Color(48, 65, 92, 170));
+        rowBg.setOutlineColor(sf::Color(48, 65, 92));
         window.draw(rowBg);
 
         // Инпуты комбо
@@ -575,9 +575,9 @@ void MenuSystem::drawMechanicsTab(sf::RenderWindow& window, float x, float y, fl
 
         sf::RectangleShape cardBg({w - 30.0f, cardH});
         cardBg.setPosition(sf::Vector2f(x + 15.0f, cy));
-        cardBg.setFillColor(sf::Color(20, 26, 38, 220));
+        cardBg.setFillColor(sf::Color(22, 30, 46, 255));
         cardBg.setOutlineThickness(1.0f);
-        cardBg.setOutlineColor(sf::Color(48, 65, 92, 190));
+        cardBg.setOutlineColor(sf::Color(48, 65, 92));
         window.draw(cardBg);
 
         sf::Text txtTitle(*_font, toSfString(items[i].title), 15);
@@ -623,7 +623,7 @@ void MenuSystem::drawEnemiesTab(sf::RenderWindow& window, float x, float y, floa
 
         sf::RectangleShape cardBg({w - 30.0f, cardH});
         cardBg.setPosition(sf::Vector2f(x + 15.0f, cy));
-        cardBg.setFillColor(sf::Color(20, 26, 38, 220));
+        cardBg.setFillColor(sf::Color(22, 30, 46, 255));
         cardBg.setOutlineThickness(1.5f);
         cardBg.setOutlineColor(items[i].col);
         window.draw(cardBg);
@@ -723,7 +723,7 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
 
     sf::RectangleShape contentBox({contentW, contentH});
     contentBox.setPosition(sf::Vector2f(contentX, contentY));
-    contentBox.setFillColor(sf::Color(16, 21, 32, 230));
+    contentBox.setFillColor(sf::Color(18, 24, 36, 255));
     contentBox.setOutlineThickness(1.5f);
     contentBox.setOutlineColor(sf::Color(45, 60, 90));
     window.draw(contentBox);

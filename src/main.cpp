@@ -46,8 +46,13 @@ int main() {
     respawnEnemies();
 
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
-    sf::RenderWindow window(desktop, "FightingComboGame", sf::Style::None);
+    sf::RenderWindow window(desktop, "FightingComboGame", sf::State::Fullscreen);
     window.setMouseCursorVisible(false);
+
+    // Автоматический перевод в честный Fullscreen 2 в Hyprland для сокрытия панелей (Quickshell, Waybar)
+    if (std::getenv("HYPRLAND_INSTANCE_SIGNATURE") || std::getenv("WAYLAND_DISPLAY")) {
+        std::system("hyprctl dispatch fullscreen 2 > /dev/null 2>&1 &");
+    }
 
     // Управление режимами ограничения частоты кадров (FPS)
     enum class FpsMode {
@@ -335,18 +340,23 @@ int main() {
         }
 
         // 1. Отрисовка игрового мира через камеру
-        window.clear(sf::Color(25, 28, 35));
-        window.setView(camera);
+        if (!menuSystem.isInMenu() || menuSystem.getAppState() == AppState::PAUSED) {
+            window.clear(sf::Color(25, 28, 35));
+            window.setView(camera);
 
-        arena.draw(window);
-        for (auto& e : enemies) {
-            e.draw(window, combat.getFont());
-        }
-        combat.drawWorld(window, player);
-        player.draw(window);
+            arena.draw(window);
+            for (auto& e : enemies) {
+                e.draw(window, combat.getFont());
+            }
+            combat.drawWorld(window, player);
+            player.draw(window);
 
-        if (mapEditor.isActive()) {
-            mapEditor.drawWorld(window, arena, mouseWorld, combat.getFont());
+            if (mapEditor.isActive()) {
+                mapEditor.drawWorld(window, arena, mouseWorld, combat.getFont());
+            }
+        } else {
+            // В главном меню (и окнах настроек/гайда) мир игры не рендерится, заливка 100% сплошная
+            window.clear(sf::Color(13, 17, 26));
         }
 
         // 2. Отрисовка интерфейса
