@@ -51,6 +51,7 @@ int main() {
     // Управление режимами ограничения частоты кадров (FPS)
     enum class FpsMode {
         UNCAPPED,
+        FPS_200,
         FPS_240,
         FPS_144,
         FPS_60,
@@ -64,6 +65,11 @@ int main() {
                 window.setVerticalSyncEnabled(false);
                 window.setFramerateLimit(0);
                 std::cout << "[FPS] Режим: БЕЗ ОГРАНИЧЕНИЙ (Uncapped / Max FPS)" << std::endl;
+                break;
+            case FpsMode::FPS_200:
+                window.setVerticalSyncEnabled(false);
+                window.setFramerateLimit(200);
+                std::cout << "[FPS] Режим: 200 FPS" << std::endl;
                 break;
             case FpsMode::FPS_240:
                 window.setVerticalSyncEnabled(false);
@@ -156,9 +162,10 @@ int main() {
                     if (keyPressed->code == sf::Keyboard::Key::F3) {
                         showFpsCounter = !showFpsCounter;
                     }
-                    // F4 - переключение лимитера частоты кадров (Uncapped -> 240 -> 144 -> 60 -> VSync)
+                    // F4 - переключение лимитера частоты кадров (Uncapped -> 200 -> 240 -> 144 -> 60 -> VSync)
                     if (keyPressed->code == sf::Keyboard::Key::F4) {
-                        FpsMode nextMode = (fpsMode == FpsMode::UNCAPPED) ? FpsMode::FPS_240 :
+                        FpsMode nextMode = (fpsMode == FpsMode::UNCAPPED) ? FpsMode::FPS_200 :
+                                           (fpsMode == FpsMode::FPS_200)   ? FpsMode::FPS_240 :
                                            (fpsMode == FpsMode::FPS_240)   ? FpsMode::FPS_144 :
                                            (fpsMode == FpsMode::FPS_144)   ? FpsMode::FPS_60 :
                                            (fpsMode == FpsMode::FPS_60)    ? FpsMode::VSYNC :
@@ -442,21 +449,23 @@ int main() {
         if (showFpsCounter && combat.getFont()) {
             const sf::Font& font = *combat.getFont();
             bool isVsyncWaiting = (avgSwapMs > 2.0f && avgSwapMs > avgCpuMs * 2.0f);
+            int detectedHz = static_cast<int>(std::round(currentFps));
 
             char fpsBuf[128];
             if (isVsyncWaiting) {
-                std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d | CPU: %.1f ms (Экран 144Hz)", 
-                              static_cast<int>(std::round(currentFps)), avgCpuMs);
+                std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d | CPU: %.1f ms (Экран ~%dHz)", 
+                              detectedHz, avgCpuMs, detectedHz);
             } else {
                 const char* modeTag = (fpsMode == FpsMode::UNCAPPED) ? "MAX" :
+                                      (fpsMode == FpsMode::FPS_200)   ? "200" :
                                       (fpsMode == FpsMode::FPS_240)   ? "240" :
                                       (fpsMode == FpsMode::FPS_144)   ? "144" :
                                       (fpsMode == FpsMode::FPS_60)    ? "60" : "VSYNC";
                 std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d (CPU: %.1f ms) [%s]", 
-                              static_cast<int>(std::round(currentFps)), avgCpuMs, modeTag);
+                              detectedHz, avgCpuMs, modeTag);
             }
 
-            float badgeW = isVsyncWaiting ? 236.0f : 180.0f;
+            float badgeW = isVsyncWaiting ? 245.0f : 185.0f;
             float badgeH = 26.0f;
             float badgeX = winSize.x - badgeW - 20.0f;
             float badgeY = 12.0f;
