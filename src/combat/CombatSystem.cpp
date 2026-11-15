@@ -425,6 +425,18 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     // ==========================================
     const ComboEntry* matchedCombo = nullptr;
     for (const auto& entry : CombatConfig::getCombos()) {
+        // Разделение комбо: 12f1 и b21u2 — оружие, остальное — руки
+        bool isWeaponCombo = (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21");
+        if (player.hasWeapon()) {
+            if (!isWeaponCombo && entry.id != "12") {
+                continue; // С оружием в руках рукопашные комбо заблокированы
+            }
+        } else {
+            if (isWeaponCombo) {
+                continue; // Без оружия комбо булавы заблокированы
+            }
+        }
+
         if (endsWith(entry.sequence)) {
             matchedCombo = &entry;
             break; // Первый совпавший комбо (уникальные завершители идут первыми)

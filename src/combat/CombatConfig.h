@@ -303,9 +303,9 @@ private:
     inline static float _throwSpeedBoostMultiplier = 1.6f;
     inline static float _throwStraightGravity = 980.0f;
     inline static float _throwUpwardSpinSpeed = 1080.0f;
-    inline static float _throwUpwardApexHoverTime = 0.30f;
+    inline static float _throwUpwardApexHoverTime = 0.16f;
     inline static float _throwUpwardUpGravity = 850.0f;
-    inline static float _throwUpwardFallGravity = 380.0f;
+    inline static float _throwUpwardFallGravity = 680.0f;
     inline static std::unordered_map<std::string, AttackStats> _attacks;
     inline static std::vector<ComboEntry> _combos;
     inline static std::unordered_map<std::string, size_t> _comboIndexMap;

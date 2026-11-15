@@ -3536,8 +3536,43 @@ int main() {
         assert(sawHover);
         std::cout << "-> Verified: Upward throw hovered at apex and descends slowly for combos!" << std::endl;
 
-        // 3. Armed Mode: Combos are active WITH WEAPON!
+        // 3. Armed vs Unarmed Combo Separation:
+        // 12f1 & b21u2 are WEAPON ONLY; all other combos are UNARMED (HANDS) ONLY!
         player.setHasWeapon(true);
+        combat.reset();
+        enemy.position = {player.position.x + 35.0f, player.position.y};
+
+        // 3a. Armed player attempts hand combo (1-1-1) -> must NOT trigger 1-1-1!
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        triggerLight(combat, player);
+        tick(0.05f, arena, player, enemy, combat);
+        std::cout << "Armed attempting 1-1-1: " << combat.getCurrentComboName() << std::endl;
+        assert(combat.getCurrentComboName().find("1-1-1") == std::string::npos);
+        std::cout << "-> Verified: Hand combos (1-1-1) are blocked when armed with weapon!" << std::endl;
+        while (player.isPlayingAttackAnimation()) tick(0.02f, arena, player, enemy, combat);
+
+        // 3b. Armed player performs weapon combo (1-2-f1) -> must trigger Bat Swing!
+        combat.reset();
+        enemy.position = {player.position.x + 35.0f, player.position.y};
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        triggerHeavy(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        player.setSimulatedMoveDir(1.0f);
+        triggerLight(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.05f, arena, player, enemy, combat);
+        std::cout << "Armed combo 1-2-f1: " << combat.getCurrentComboName() << std::endl;
+        assert(combat.getCurrentComboName().find("1-2-f1") != std::string::npos ||
+               combat.getCurrentComboName().find("BAT SWING") != std::string::npos);
+        std::cout << "-> Verified: Weapon combo 1-2-f1 works when armed with weapon!" << std::endl;
+        while (player.isPlayingAttackAnimation()) tick(0.02f, arena, player, enemy, combat);
+
+        // 3c. Unarmed player performs hand combo (1-1-1) -> must trigger 1-1-1!
+        player.setHasWeapon(false);
         combat.reset();
         enemy.position = {player.position.x + 35.0f, player.position.y};
         triggerLight(combat, player);
@@ -3546,9 +3581,26 @@ int main() {
         tick(0.12f, arena, player, enemy, combat);
         triggerLight(combat, player);
         tick(0.05f, arena, player, enemy, combat);
-        std::cout << "Armed combo 1-1-1: " << combat.getCurrentComboName() << std::endl;
+        std::cout << "Unarmed combo 1-1-1: " << combat.getCurrentComboName() << std::endl;
         assert(combat.getCurrentComboName().find("1-1-1") != std::string::npos);
-        std::cout << "-> Verified: Armed mode has ALL full combo chains active!" << std::endl;
+        std::cout << "-> Verified: Unarmed player successfully executes hand combos (1-1-1)!" << std::endl;
+        while (player.isPlayingAttackAnimation()) tick(0.02f, arena, player, enemy, combat);
+
+        // 3d. Unarmed player attempts weapon combo (1-2-f1) -> must NOT trigger 1-2-f1!
+        combat.reset();
+        enemy.position = {player.position.x + 35.0f, player.position.y};
+        triggerLight(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        triggerHeavy(combat, player);
+        tick(0.12f, arena, player, enemy, combat);
+        player.setSimulatedMoveDir(1.0f);
+        triggerLight(combat, player);
+        player.setSimulatedMoveDir(0.0f);
+        tick(0.05f, arena, player, enemy, combat);
+        std::cout << "Unarmed attempting 1-2-f1: " << combat.getCurrentComboName() << std::endl;
+        assert(combat.getCurrentComboName().find("1-2-f1") == std::string::npos &&
+               combat.getCurrentComboName().find("BAT SWING") == std::string::npos);
+        std::cout << "-> Verified: Weapon combo 1-2-f1 is blocked when unarmed!" << std::endl;
         while (player.isPlayingAttackAnimation()) tick(0.02f, arena, player, enemy, combat);
 
         // 4. Verify Mace Flying Hit: Speed Damage, Knock Force & Stun Extension
@@ -3672,7 +3724,7 @@ int main() {
         Player player(arena.getSpawnPosition());
         Enemy enemy({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
         combat.reset();
-        player.reset(arena.getSpawnPosition(), false);
+        player.reset(arena.getSpawnPosition(), true);
         if (!player.isFacingRight()) player.turnAround();
         enemy.reset();
         tick(0.1f, arena, player, enemy, combat);
@@ -3714,7 +3766,7 @@ int main() {
 
         // Lethal Finisher Verification
         combat.reset();
-        player.reset(arena.getSpawnPosition(), false);
+        player.reset(arena.getSpawnPosition(), true);
         if (!player.isFacingRight()) player.turnAround();
         enemy.reset();
         enemy.hp = 7.0f; // low hp so Hit 3 is lethal
@@ -3746,7 +3798,7 @@ int main() {
         Player player(arena.getSpawnPosition());
         Enemy enemy({player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
         combat.reset();
-        player.reset(arena.getSpawnPosition(), false);
+        player.reset(arena.getSpawnPosition(), true);
         if (!player.isFacingRight()) player.turnAround();
         enemy.reset();
         tick(0.1f, arena, player, enemy, combat);
@@ -3791,7 +3843,7 @@ int main() {
 
         // Lethal Finisher Verification
         combat.reset();
-        player.reset(arena.getSpawnPosition(), false);
+        player.reset(arena.getSpawnPosition(), true);
         if (!player.isFacingRight()) player.turnAround();
         enemy.reset();
         enemy.hp = 7.5f; // low hp so Hit 3 is lethal
