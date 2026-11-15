@@ -8,6 +8,7 @@
 #include "combat/CombatSystem.h"
 #include "graphics/Crosshair.h"
 #include "audio/SoundManager.h"
+#include "ui/MenuSystem.h"
 #include <cstdlib>
 
 int main() {
@@ -99,7 +100,32 @@ int main() {
     sf::View camera(player.position, sf::Vector2f(static_cast<float>(window.getSize().x), 
                                                  static_cast<float>(window.getSize().y)));
     sf::Clock dtClock;
-    bool isPaused = false;
+
+    // Инициализация системы главного меню и настроек
+    MenuSystem menuSystem;
+    menuSystem.init(combat.getFont());
+    menuSystem.setFpsMode(static_cast<FpsLimitMode>(fpsMode));
+    menuSystem.setShowFpsCounter(true);
+
+    menuSystem.setOnStartGame([&]() {
+        window.setMouseCursorVisible(false);
+    });
+    menuSystem.setOnResetGame([&]() {
+        arena.loadRoom(1);
+        player.reset(arena.getSpawnPosition());
+        respawnEnemies();
+        combat.reset();
+        camera.setCenter(player.position);
+    });
+    menuSystem.setOnExitGame([&]() {
+        window.close();
+    });
+    menuSystem.setOnFpsModeChanged([&](FpsLimitMode m) {
+        applyFpsMode(static_cast<FpsMode>(m));
+    });
+
+    // На старте игра открывается в Главном Меню со свободным курсором мыши
+    window.setMouseCursorVisible(true);
 
     // FPS и тайминги производительности (активен по умолчанию, переключение по F3)
     sf::Clock fpsClock;
@@ -110,7 +136,6 @@ int main() {
     float accumulatedSwapMs = 0.0f;
     float avgCpuMs = 0.4f;
     float avgSwapMs = 6.5f;
-    bool showFpsCounter = true;
 
     while (window.isOpen()) {
         sf::Clock frameWorkClock;
@@ -119,49 +144,34 @@ int main() {
 
         sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
         sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel, camera);
+        sf::Vector2f mouseScreenPos(static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y));
         sf::Vector2f winSize(static_cast<float>(window.getSize().x), static_cast<float>(window.getSize().y));
-        float cx = winSize.x * 0.5f;
-        float cy = winSize.y * 0.5f;
-
-        sf::FloatRect resumeRect({cx - 160.0f, cy - 20.0f}, {320.0f, 50.0f});
-        sf::FloatRect exitRect({cx - 160.0f, cy + 45.0f}, {320.0f, 50.0f});
 
         while (const std::optional<sf::Event> event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) {
                 window.close();
             }
-            if (const auto* mbPressed = event->getIf<sf::Event::MouseButtonPressed>()) {
-                if (mbPressed->button == sf::Mouse::Button::Left && isPaused) {
-                    sf::Vector2f mousePos(static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y));
-                    if (resumeRect.contains(mousePos)) {
-                        isPaused = false;
-                        window.setMouseCursorVisible(false);
-                    } else if (exitRect.contains(mousePos)) {
-                        window.close();
-                    }
-                }
+
+            if (menuSystem.isInMenu()) {
+                menuSystem.handleEvent(*event, mouseScreenPos);
+                window.setMouseCursorVisible(menuSystem.isInMenu());
+                continue;
             }
+
             if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
                 if (keyPressed->code == sf::Keyboard::Key::Escape) {
                     if (mapEditor.isActive()) {
                         mapEditor.toggle(window, camera, player);
                     } else {
-                        isPaused = !isPaused;
-                        window.setMouseCursorVisible(isPaused);
+                        menuSystem.openPauseMenu();
+                        window.setMouseCursorVisible(true);
                     }
+                    continue;
                 }
-                if (isPaused) {
-                    if (keyPressed->code == sf::Keyboard::Key::Enter || keyPressed->code == sf::Keyboard::Key::Space) {
-                        isPaused = false;
-                        window.setMouseCursorVisible(false);
-                    } else if (keyPressed->code == sf::Keyboard::Key::Q) {
-                        window.close();
-                    }
-                } else {
-                    // F3 - переключение отображения FPS счетчика
-                    if (keyPressed->code == sf::Keyboard::Key::F3) {
-                        showFpsCounter = !showFpsCounter;
-                    }
+                // F3 - переключение отображения FPS счетчика
+                if (keyPressed->code == sf::Keyboard::Key::F3) {
+                    menuSystem.setShowFpsCounter(!menuSystem.getShowFpsCounter());
+                }
                     // F4 - переключение лимитера частоты кадров (Uncapped -> 200 -> 240 -> 144 -> 60 -> VSync)
                     if (keyPressed->code == sf::Keyboard::Key::F4) {
                         FpsMode nextMode = (fpsMode == FpsMode::UNCAPPED) ? FpsMode::FPS_200 :
@@ -248,9 +258,7 @@ int main() {
                         std::cout << "[AI COMBAT] Инициирована атака/комбо врагов!" << std::endl;
                     }
                 }
-            }
 
-            if (!isPaused) {
                 if (mapEditor.isActive()) {
                     if (!enemies.empty()) {
                         mapEditor.handleInput(event, arena, player, enemies.front(), window, camera);
@@ -260,10 +268,9 @@ int main() {
                     combat.handleInput(event, player, mouseWorld);
                 }
             }
-        }
 
         // Обновление состояний
-        if (!isPaused) {
+        if (!menuSystem.isInMenu()) {
             if (mapEditor.isActive()) {
                 if (!enemies.empty()) {
                     mapEditor.update(dt, arena, player, enemies.front(), window, camera);
@@ -346,6 +353,9 @@ int main() {
         window.setView(window.getDefaultView());
         if (mapEditor.isActive()) {
             mapEditor.drawUI(window, arena, combat.getFont(), camera);
+        } else if (menuSystem.isInMenu()) {
+            menuSystem.draw(window, mouseScreenPos);
+            window.setMouseCursorVisible(menuSystem.isInMenu());
         } else {
             combat.drawUI(window, &player);
 
@@ -363,7 +373,7 @@ int main() {
                     sf::FloatRect titleBounds = deathTitle.getLocalBounds();
                     deathTitle.setOrigin({titleBounds.position.x + titleBounds.size.x * 0.5f, 
                                           titleBounds.position.y + titleBounds.size.y * 0.5f});
-                    deathTitle.setPosition({winSize.x * 0.5f, winSize.y * 0.44f});
+                    deathTitle.setPosition(sf::Vector2f(winSize.x * 0.5f, winSize.y * 0.44f));
                     window.draw(deathTitle);
 
                     sf::Text deathSub(*combat.getFont(), toSfString("Возрождение в комнате 1... [Пробел / Enter для ускорения]"), 18);
@@ -371,74 +381,8 @@ int main() {
                     sf::FloatRect subBounds = deathSub.getLocalBounds();
                     deathSub.setOrigin({subBounds.position.x + subBounds.size.x * 0.5f, 
                                         subBounds.position.y + subBounds.size.y * 0.5f});
-                    deathSub.setPosition({winSize.x * 0.5f, winSize.y * 0.54f});
+                    deathSub.setPosition(sf::Vector2f(winSize.x * 0.5f, winSize.y * 0.54f));
                     window.draw(deathSub);
-                }
-            } else if (isPaused) {
-                // Окно и кнопки Паузы (Pause Menu)
-                sf::RectangleShape pauseOverlay(winSize);
-                pauseOverlay.setFillColor(sf::Color(10, 14, 22, 215));
-                window.draw(pauseOverlay);
-
-                float panelW = 440.0f;
-                float panelH = 290.0f;
-                sf::RectangleShape panel({panelW, panelH});
-                panel.setOrigin({panelW * 0.5f, panelH * 0.5f});
-                panel.setPosition({cx, cy});
-                panel.setFillColor(sf::Color(20, 25, 36, 248));
-                panel.setOutlineThickness(3.0f);
-                panel.setOutlineColor(sf::Color(75, 120, 190, 235));
-                window.draw(panel);
-
-                if (combat.getFont()) {
-                    const sf::Font& font = *combat.getFont();
-
-                    // Заголовок
-                    sf::Text title(font, toSfString("ПАУЗА"), 42);
-                    title.setFillColor(sf::Color(240, 245, 255));
-                    title.setStyle(sf::Text::Bold);
-                    title.setOutlineThickness(2.0f);
-                    title.setOutlineColor(sf::Color(10, 15, 30, 250));
-                    sf::FloatRect tb = title.getLocalBounds();
-                    title.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
-                    title.setPosition({cx, cy - 88.0f});
-                    window.draw(title);
-
-                    sf::Vector2f mousePos(static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y));
-
-                    // Кнопка ПРОДОЛЖИТЬ
-                    bool hoverResume = resumeRect.contains(mousePos);
-                    sf::RectangleShape btnResume(resumeRect.size);
-                    btnResume.setPosition(resumeRect.position);
-                    btnResume.setFillColor(hoverResume ? sf::Color(45, 95, 175) : sf::Color(30, 48, 75));
-                    btnResume.setOutlineThickness(hoverResume ? 2.5f : 1.5f);
-                    btnResume.setOutlineColor(hoverResume ? sf::Color(130, 190, 255) : sf::Color(65, 95, 135));
-                    window.draw(btnResume);
-
-                    sf::Text txtResume(font, toSfString("ПРОДОЛЖИТЬ [ESC]"), 20);
-                    txtResume.setFillColor(hoverResume ? sf::Color(255, 255, 255) : sf::Color(220, 230, 245));
-                    sf::FloatRect rb = txtResume.getLocalBounds();
-                    txtResume.setOrigin({rb.position.x + rb.size.x * 0.5f, rb.position.y + rb.size.y * 0.5f});
-                    txtResume.setPosition({resumeRect.position.x + resumeRect.size.x * 0.5f, 
-                                           resumeRect.position.y + resumeRect.size.y * 0.5f});
-                    window.draw(txtResume);
-
-                    // Кнопка ВЫХОД
-                    bool hoverExit = exitRect.contains(mousePos);
-                    sf::RectangleShape btnExit(exitRect.size);
-                    btnExit.setPosition(exitRect.position);
-                    btnExit.setFillColor(hoverExit ? sf::Color(165, 45, 55) : sf::Color(65, 28, 35));
-                    btnExit.setOutlineThickness(hoverExit ? 2.5f : 1.5f);
-                    btnExit.setOutlineColor(hoverExit ? sf::Color(255, 110, 120) : sf::Color(125, 55, 65));
-                    window.draw(btnExit);
-
-                    sf::Text txtExit(font, toSfString("ВЫЙТИ ИЗ ИГРЫ [Q]"), 20);
-                    txtExit.setFillColor(hoverExit ? sf::Color(255, 255, 255) : sf::Color(240, 210, 215));
-                    sf::FloatRect eb = txtExit.getLocalBounds();
-                    txtExit.setOrigin({eb.position.x + eb.size.x * 0.5f, eb.position.y + eb.size.y * 0.5f});
-                    txtExit.setPosition({exitRect.position.x + exitRect.size.x * 0.5f, 
-                                         exitRect.position.y + exitRect.size.y * 0.5f});
-                    window.draw(txtExit);
                 }
             } else {
                 crosshair.Draw(window);
@@ -446,7 +390,7 @@ int main() {
         }
 
         // 3. Отрисовка счетчика FPS (в правом верхнем углу)
-        if (showFpsCounter && combat.getFont()) {
+        if (menuSystem.getShowFpsCounter() && combat.getFont()) {
             const sf::Font& font = *combat.getFont();
             bool isVsyncWaiting = (avgSwapMs > 2.0f && avgSwapMs > avgCpuMs * 2.0f);
             int detectedHz = static_cast<int>(std::round(currentFps));

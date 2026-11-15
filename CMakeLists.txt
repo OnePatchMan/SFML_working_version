@@ -15,6 +15,7 @@ add_executable(Test
     src/entities/Enemy.cpp
     src/combat/CombatSystem.cpp
     src/audio/SoundManager.cpp
+    src/ui/MenuSystem.cpp
 )
 
 target_include_directories(Test PRIVATE
