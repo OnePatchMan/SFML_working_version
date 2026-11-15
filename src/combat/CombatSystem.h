@@ -86,7 +86,8 @@ public:
         float angularVelocity = 0.0f;   // Скорость вращения (град/с)
         bool active = true;             // Активен ли в мире
         bool grounded = false;          // Упал ли на землю
-        float hitCooldown = 0.0f;       // Кулдаун между ударами по врагам
+        bool hasHit = false;            // Булава наносит урон строго 1 раз за бросок и больше ударить не может
+        float hitCooldown = 0.0f;       // Кулдаун между проверками попадания
         float lifetime = 25.0f;         // Время жизни до автовозврата
         float pickupCooldown = 0.22f;   // Задержка перед подбором игроком
         bool isUpwardThrow = false;     // Бросок вверх / вверх-прямо (закручивание и зависание)

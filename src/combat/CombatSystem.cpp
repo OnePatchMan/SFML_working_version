@@ -226,6 +226,7 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
 
     mace.active = true;
     mace.grounded = false;
+    mace.hasHit = false;
     mace.hitCooldown = 0.0f;
     mace.lifetime = 25.0f;
     mace.pickupCooldown = 0.22f;
@@ -968,56 +969,21 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     enemy.velocity.y = 0.0f;
                 }
 
-                // Особая логика комбо 12df2 (толкает врага ТОЛЬКО по координате x на 600):
+                // Особая логика импульсов комбо: берется строго из KV таблицы баланса (_knockX, _knockY)
                 if (_comboDisplayName.find("1-2-df2") != std::string::npos ||
                     _comboDisplayName.find("12df2") != std::string::npos ||
-                    _comboDisplayName.find("DASH SMASH") != std::string::npos) {
-                    enemy.velocity.x = static_cast<float>(_attackDirection) * 600.0f;
-                    enemy.velocity.y = 0.0f;
-                }
-
-                // Особая логика комбо 12f1 (удар словно битой, враг отлетает далеко по оси X на 950):
-                if (_comboDisplayName.find("1-2-f1") != std::string::npos ||
+                    _comboDisplayName.find("DASH SMASH") != std::string::npos ||
+                    _comboDisplayName.find("1-2-f1") != std::string::npos ||
                     _comboDisplayName.find("12f1") != std::string::npos ||
-                    _comboDisplayName.find("BAT SWING") != std::string::npos) {
-                    enemy.velocity.x = static_cast<float>(_attackDirection) * 950.0f;
-                    enemy.velocity.y = 0.0f;
-                }
-
-                // Особая логика комбо 12 (удар об землю, враг чуть поднимается):
-                if (_comboDisplayName.find("COMBO 1-2:") != std::string::npos &&
-                    _comboDisplayName.find("1-2-df2") == std::string::npos &&
-                    _comboDisplayName.find("1-2-f1") == std::string::npos) {
-                    enemy.velocity.x = static_cast<float>(_attackDirection) * 320.0f;
-                    enemy.velocity.y = -240.0f;
-                }
-
-                // Особая логика комбо b21u2 (3-й удар снизу вверх по окружности, поднимает врага вверх):
-                if (_comboDisplayName.find("b2-1-u2") != std::string::npos ||
+                    _comboDisplayName.find("BAT SWING") != std::string::npos ||
+                    _comboDisplayName.find("b2-1-u2") != std::string::npos ||
                     _comboDisplayName.find("b21u2") != std::string::npos ||
-                    _comboDisplayName.find("SKY LAUNCHER") != std::string::npos) {
-                    enemy.velocity.x = static_cast<float>(_attackDirection) * 40.0f;
-                    enemy.velocity.y = -520.0f;
-                }
-
-                // Особая логика комбо b21 (2-й удар бьет рукояткой, слегка отодвигая врага от себя):
-                if ((_comboDisplayName.find("b2-1:") != std::string::npos ||
-                     _comboDisplayName.find("b2-1 ") != std::string::npos ||
-                     _comboDisplayName.find("HILT PUSH") != std::string::npos) &&
-                     _comboDisplayName.find("b2-1-u2") == std::string::npos &&
-                     _comboDisplayName.find("b21u2") == std::string::npos &&
-                     _comboDisplayName.find("SKY LAUNCHER") == std::string::npos) {
-                    enemy.velocity.x = static_cast<float>(_attackDirection) * 220.0f;
-                    enemy.velocity.y = -30.0f;
-                }
-
-                // Одиночный удар b2 (бьет далеко, притягивает врага к себе):
-                if ((_currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos) &&
-                    _comboDisplayName.find("1-1-b2") == std::string::npos &&
-                    _comboDisplayName.find("b2-1") == std::string::npos &&
-                    _comboDisplayName.find("b21u2") == std::string::npos) {
-                    enemy.velocity.x = -static_cast<float>(_attackDirection) * 420.0f;
-                    enemy.velocity.y = -50.0f;
+                    _comboDisplayName.find("SKY LAUNCHER") != std::string::npos ||
+                    _comboDisplayName.find("COMBO 1-2:") != std::string::npos ||
+                    _comboDisplayName.find("b2-1") != std::string::npos ||
+                    _currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos) {
+                    enemy.velocity.x = _knockX;
+                    enemy.velocity.y = _knockY;
                 }
 
                 bool isHeavyOrCombo = (_comboDisplayName.find("COMBO") != std::string::npos) ||
@@ -1363,7 +1329,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
         speed = std::hypot(it->velocity.x, it->velocity.y);
 
         // 2. Столкновение с врагами (Урон от скорости + форса + стан-лок + кровь при летале)
-        bool canHitEnemy = (it->hitCooldown <= 0.0f) && 
+        // Булава бьет СТРОГО 1 РАЗ за бросок и больше ударить не может (!it->hasHit)
+        bool canHitEnemy = (!it->hasHit) && (it->hitCooldown <= 0.0f) && 
                            (speed > 80.0f || (it->isUpwardThrow && (it->apexHoverTimer > 0.0f || it->velocity.y > 0.0f)));
         if (canHitEnemy) {
             for (Enemy* enemyPtr : enemiesList) {
@@ -1376,7 +1343,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                                (enemy.position.y - Enemy::HALF_H) - it->position.y);
 
                 if (eBounds.contains(it->position) || distToEnemy < 38.0f) {
-                    it->hitCooldown = 0.28f;
+                    it->hasHit = true; // Булава нанесла удар и больше в этом броске ударить не может!
+                    it->hitCooldown = 999.0f;
                     // Рассчитываем урон пропорционально скорости полета булавы
                     float speedFactor = std::clamp(speed / 950.0f, 0.20f, 1.25f);
                     if (it->isUpwardThrow) speedFactor = std::max(speedFactor, 0.65f);
@@ -1437,7 +1405,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     it->velocity.x = -it->velocity.x * 0.30f;
                     it->velocity.y = -220.0f;
                     it->angularVelocity = -it->angularVelocity * 0.75f;
-                    it->hitCooldown = 0.25f;
+                    it->hitCooldown = 999.0f; // Больше ударить не может
 
                     _shakeTimer = 0.06f;
                     _shakeIntensity = 3.5f;

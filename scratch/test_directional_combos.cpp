@@ -3629,7 +3629,14 @@ int main() {
         assert(damageDealt >= 4.0f); // Speed scaled damage
         assert(enemy.velocity.x > 250.0f); // Force pushed enemy!
         assert(enemy.getStunTimer() >= 0.40f); // Stun extended!
-        std::cout << "-> Verified: Mace hit enemy with speed-scaled damage, pushed force and extended stun!" << std::endl;
+        assert(!combat.getThrownMaces().empty() && combat.getThrownMaces().front().hasHit);
+        float hpAfterFirstHit = enemy.hp;
+        // Step while mace continues moving near enemy
+        for (int frame = 0; frame < 20; ++frame) {
+            tick(0.016f, arena, player, enemy, combat);
+        }
+        assert(enemy.hp == hpAfterFirstHit); // Mace cannot hit or deal damage a second time!
+        std::cout << "-> Verified: Mace hits strictly 1 time upon throw and cannot hit again!" << std::endl;
 
         // 5. Verify High-Speed Lethal Throw Blood Splatter
         combat.clearThrownMaces();
@@ -3760,8 +3767,10 @@ int main() {
                   << ", enemy vel: (" << enemy.velocity.x << ", " << enemy.velocity.y << ")" << std::endl;
         assert(combat.getCurrentComboName().find("1-2-f1") != std::string::npos ||
                combat.getCurrentComboName().find("BAT SWING") != std::string::npos);
-        // f1 бьет словно битой и враг отлетает далеко строго по координате x
-        assert(enemy.velocity.x == 950.0f);
+        // f1 бьет словно битой и враг отлетает далеко строго по координате x из KV таблицы
+        const ComboEntry* c12f1 = CombatConfig::getCombo("12f1");
+        float expectedKnockX = c12f1 ? c12f1->stats.knockX : 950.0f;
+        assert(enemy.velocity.x == expectedKnockX);
         assert(enemy.velocity.y == 0.0f);
 
         // Lethal Finisher Verification

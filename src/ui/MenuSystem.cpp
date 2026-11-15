@@ -541,8 +541,8 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         window.draw(txtDesc);
     }
 
-    // Анти-спам плашка
-    float noteY = startRowY + 10 * rowH + 6.0f;
+    // Анти-спам плашка строго под всеми строками комбо (без наложения на строки)
+    float noteY = startRowY + static_cast<float>(items.size()) * rowH + 12.0f;
     sf::Text antiSpam(*_font, toSfString("★ ПРАВИЛО АНТИ-СПАМА: Повтор одного и того же комбо дважды за 3 секунды наказывается оглушением игрока на 0.75с! Вариируйте связки!"), 13);
     antiSpam.setStyle(sf::Text::Bold);
     antiSpam.setFillColor(sf::Color(255, 190, 60));
