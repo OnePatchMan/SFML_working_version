@@ -4302,6 +4302,71 @@ int main() {
         std::cout << "-> PASSED: Passive spacing & Thrown weapon block verified 100%!" << std::endl;
     }
 
+    // -------------------------------------------------------------
+    // TEST 60: COMBO HITSTUN LOCKOUT (CANNOT BLOCK OR PUNISH MID-COMBO)
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 60] TESTING COMBO HITSTUN LOCKOUT (NO MID-COMBO BLOCK / PUNISH)..." << std::endl;
+        Arena arena;
+        Player player(arena.getSpawnPosition());
+        player.position = {200.0f, arena.getSpawnPosition().y};
+        if (!player.isFacingRight()) player.turnAround();
+        Enemy duelist({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)}, EnemyType::DUELIST_PASSIVE);
+        duelist.setSmartAI(true);
+        CombatSystem combat;
+        tick(0.1f, arena, player, duelist, combat);
+
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false);
+        if (!player.isFacingRight()) player.turnAround();
+        duelist.reset();
+        tick(0.1f, arena, player, duelist, combat); // Land on ground
+        assert(player.isOnGround());
+        duelist.position = {player.position.x + 40.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+
+        // 1. Initial clean hit (Attack 1) connects
+        duelist.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        duelist.isBlocking = false;
+        duelist.blockHoldTimer = 0.0f;
+        triggerLight(combat, player);
+        for (int f = 0; f < 6; ++f) tick(0.016f, arena, player, duelist, combat);
+        assert(combat.hasHitThisSwing());
+        assert(!duelist.isBlocking);
+        std::cout << "-> Hit 1 landed clean: duelist entered hitstun, isBlocking=false!" << std::endl;
+
+        // 2. While in hitstun, duelist's update() runs: verify block CANNOT be raised mid-combo!
+        duelist.update(0.016f, arena, player.position, false);
+        assert(!duelist.isBlocking);
+        assert(duelist.blockHoldTimer == 0.0f);
+        std::cout << "-> Verified duelist update during hitstun CANNOT raise block!" << std::endl;
+
+        // 3. Chain into next combo hit (Attack 1 -> 1)
+        duelist.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerLight(combat, player);
+        for (int f = 0; f < 6; ++f) tick(0.016f, arena, player, duelist, combat);
+        assert(combat.hasHitThisSwing());
+        std::cout << "DEBUG: hit2 hasHit=" << combat.hasHitThisSwing() 
+                  << " duelist.isBlocking=" << duelist.isBlocking 
+                  << " hurtTimer=" << duelist.hurtTimer 
+                  << " blockHoldTimer=" << duelist.blockHoldTimer 
+                  << " blockStunTimer=" << duelist.blockStunTimer << std::endl;
+        assert(!duelist.isBlocking);
+
+        // 4. Chain into 3rd hit (Triple Light Finisher 1-1-1)
+        duelist.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        triggerLight(combat, player);
+        for (int f = 0; f < 6; ++f) tick(0.016f, arena, player, duelist, combat);
+        assert(combat.hasHitThisSwing());
+        // Player MUST NOT be stunned by combo-blocked stunlock!
+        assert(!player.isStunned());
+        // Duelist MUST NOT punish the player!
+        assert(!duelist.isPunishing());
+        assert(duelist.aiComboState == AIComboState::IDLE);
+        std::cout << "-> Verified full 1-1-1 combo landed cleanly: player NOT stunned, duelist did NOT block or punish!" << std::endl;
+
+        std::cout << "-> PASSED: Mid-combo hitstun lockout verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;

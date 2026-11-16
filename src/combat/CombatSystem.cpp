@@ -766,7 +766,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     float scaledStun   = isFinisher ? _enemyStunTime : (_enemyStunTime * _currentHitstunDecay);
 
                     // Наносим урон и импульс врагу с проверкой блока и добивания
-                    bool targetWasBlocking = enemy.isBlocking;
+                    // Враг может заблокировать удар ТОЛЬКО если он уже блокирует или находится в блок-стане, но НЕ в чистом хитстане от ударов комбо!
+                    bool targetWasBlocking = enemy.isBlocking && (enemy.hurtTimer <= 0.0f || enemy.blockStunTimer > 0.0f);
                     bool targetWasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
                     enemy.takeDamage(scaledDamage, _knockX, _knockY, scaledStun);
                     bool enemyJustDied = !targetWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f);
@@ -1412,11 +1413,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                     if (blockedByGuard) {
                         // Обычная защита / блок щитом: урон снижен на 80%, короткий блок-стан
-                        maceDmg *= 0.20f;
-                        knockForce *= 0.25f;
-                        enemy.velocity += hitDir * knockForce;
-                        enemy.triggerStun(0.14f);
+                        enemy.blockStunTimer = 0.14f;
+                        float hpBefore = enemy.hp;
                         enemy.takeDamage(maceDmg, hitDir.x * knockForce, 0.0f, 0.14f);
+                        float dmgDealt = std::max(hpBefore - enemy.hp, 0.0f);
 
                         // Звук блока и маркер
                         SoundManager::get().play("1", 70.0f);
@@ -1440,7 +1440,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                         // Всплывающий урон при блоке
                         DamageNumber dn;
                         dn.position = it->position;
-                        dn.text = "-" + std::to_string(static_cast<int>(std::round(maceDmg)));
+                        dn.text = "-" + std::to_string(static_cast<int>(std::round(dmgDealt)));
                         dn.color = sf::Color(140, 210, 255);
                         _damageNumbers.push_back(dn);
                     } else {

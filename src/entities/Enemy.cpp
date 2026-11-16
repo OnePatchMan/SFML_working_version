@@ -130,7 +130,8 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime)
     // СИСТЕМА ЗАЩИТЫ / БЛОКА БОТА:
     // Снижает входящий урон на 80% (бот получает только 20% урона)
     // Входящий блок-стан от каждого удара
-    if (isBlocking) {
+    // Блок работает ТОЛЬКО если бот не находится в чистом хитстане от предыдущего удара комбо!
+    if (isBlocking && (hurtTimer <= 0.0f || blockStunTimer > 0.0f)) {
         amount *= 0.20f;
         hp -= amount;
         velocity.x = knockX * 0.25f * knockMultiplier;
@@ -150,6 +151,9 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime)
     hurtTimer = stunTime * stunMultiplier;
     velocity.x = knockX * knockMultiplier;
     velocity.y = knockY * knockMultiplier;
+    isBlocking = false; // Чистое попадание комбо гарантированно сбрасывает блок
+    blockHoldTimer = 0.0f;
+    blockStunTimer = 0.0f;
     attackState = EnemyAttackState::IDLE;
     attackStateTimer = 0.0f;
     attackCooldown = 1.6f;
@@ -481,6 +485,11 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             blockHoldTimer = 0.0f;
         }
     }
+    if (hurtTimer > 0.0f && blockStunTimer <= 0.0f) {
+        // Если бот находится в реальном хитстане (получает удары комбо), блок не может быть активен
+        isBlocking = false;
+        blockHoldTimer = 0.0f;
+    }
     if (blockStunTimer > 0.0f) {
         blockStunTimer -= dt;
         if (blockStunTimer <= 0.0f) blockStunTimer = 0.0f;
@@ -620,6 +629,11 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 // Во время уворота продолжаем смещение по инерции доджа
             } else if (isCounterStanceActive()) {
                 velocity.x = 0.0f; // Во время стойки парирования ждем удара игрока
+            } else if (hurtTimer > 0.0f && blockStunTimer <= 0.0f) {
+                // ВРАГ В ХИТСТАНЕ / ПОЛУЧАЕТ УРОН В КОМБО:
+                // Строго запрещено ставить блок, парировать, доджить или управлять движением!
+                isBlocking = false;
+                blockHoldTimer = 0.0f;
             } else if (aiComboState == AIComboState::IDLE) {
                 if (attackCooldown > 0.0f) attackCooldown -= dt;
 
