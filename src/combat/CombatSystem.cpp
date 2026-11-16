@@ -1397,48 +1397,97 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     // Само попадание еще чуть форсает врага
                     float knockForce = 180.0f + speed * 0.35f;
                     if (it->isUpwardThrow) knockForce = std::max(knockForce, 240.0f);
-                    enemy.velocity += hitDir * knockForce;
 
-                    // Продлевает стан-лок цели
-                    enemy.triggerStun(std::max(enemy.getStunTimer() + 0.38f, 0.50f));
-
-                    bool wasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
-                    enemy.takeDamage(maceDmg, hitDir.x * knockForce, hitDir.y * knockForce, 0.50f);
-
-                    // Если бросок был летальным — разлетается кровь в направлении форсы
-                    if (!wasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f)) {
-                        if (speed >= 500.0f) {
-                            if (Arena::getActive()) {
-                                Arena::getActive()->spawnFinisherBlood(enemy.position, hitDir, 65, enemy.maxHp);
-                            }
-                            _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -65.0f), 
-                                                            "★ LETHAL MACE THROW! ★", sf::Color(255, 60, 50), 1.0f, 1.0f, 1.25f, 255.0f});
-                        } else {
-                            if (Arena::getActive()) {
-                                Arena::getActive()->spawnKillBlood(enemy.position, hitDir, enemy.maxHp);
-                            }
+                    // Проверка блока летящего оружия дуэлянтами (на обычную защиту, не 100%)
+                    bool blockedByGuard = false;
+                    bool isDuelist = (enemy.getType() == EnemyType::DUELIST || enemy.getType() == EnemyType::DUELIST_PASSIVE);
+                    if (isDuelist && enemy.canBlock && !enemy.isDodging && enemy.hurtTimer <= 0.0f) {
+                        float blockChance = (enemy.getType() == EnemyType::DUELIST_PASSIVE) ? 0.75f : 0.60f;
+                        if (enemy.isBlocking || (static_cast<float>(_rng() % 1000) / 1000.0f <= blockChance)) {
+                            blockedByGuard = true;
+                            enemy.isBlocking = true;
+                            enemy.blockHoldTimer = 0.55f;
                         }
                     }
 
-                    // Всплывающий урон
-                    DamageNumber dn;
-                    dn.position = it->position;
-                    dn.text = "-" + std::to_string(static_cast<int>(std::round(maceDmg)));
-                    dn.color = sf::Color(255, 175, 40);
-                    _damageNumbers.push_back(dn);
+                    if (blockedByGuard) {
+                        // Обычная защита / блок щитом: урон снижен на 80%, короткий блок-стан
+                        maceDmg *= 0.20f;
+                        knockForce *= 0.25f;
+                        enemy.velocity += hitDir * knockForce;
+                        enemy.triggerStun(0.14f);
+                        enemy.takeDamage(maceDmg, hitDir.x * knockForce, 0.0f, 0.14f);
 
-                    // Искры попадания
-                    for (int s = 0; s < 12; ++s) {
-                        HitParticle p;
-                        p.position = it->position;
-                        float ang = (s * 30.0f) * 3.14159f / 180.0f;
-                        float sp = 120.0f + static_cast<float>(_rng() % 140);
-                        p.velocity = {std::cos(ang) * sp, std::sin(ang) * sp};
-                        p.size = 2.5f + static_cast<float>(_rng() % 3);
-                        p.color = sf::Color(255, 200, 60);
-                        p.lifetime = 0.22f;
-                        p.alpha = 255.0f;
-                        _hitParticles.push_back(p);
+                        // Звук блока и маркер
+                        SoundManager::get().play("1", 70.0f);
+                        _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -50.0f), 
+                                                        "BLOCKED!", sf::Color(80, 210, 255), 0.6f, 0.6f, 1.0f, 255.0f});
+
+                        // Голубые защитные искры блока
+                        for (int s = 0; s < 10; ++s) {
+                            HitParticle p;
+                            p.position = it->position;
+                            float ang = (s * 36.0f) * 3.14159f / 180.0f;
+                            float sp = 100.0f + static_cast<float>(_rng() % 100);
+                            p.velocity = {std::cos(ang) * sp, std::sin(ang) * sp};
+                            p.size = 2.5f;
+                            p.color = sf::Color(80, 215, 255);
+                            p.lifetime = 0.20f;
+                            p.alpha = 255.0f;
+                            _hitParticles.push_back(p);
+                        }
+
+                        // Всплывающий урон при блоке
+                        DamageNumber dn;
+                        dn.position = it->position;
+                        dn.text = "-" + std::to_string(static_cast<int>(std::round(maceDmg)));
+                        dn.color = sf::Color(140, 210, 255);
+                        _damageNumbers.push_back(dn);
+                    } else {
+                        // Прямое попадание без блока
+                        enemy.velocity += hitDir * knockForce;
+                        enemy.triggerStun(std::max(enemy.getStunTimer() + 0.38f, 0.50f));
+                        enemy.spinTimer = 0.70f;
+                        enemy.spinSpeed = 920.0f;
+
+                        bool wasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
+                        enemy.takeDamage(maceDmg, hitDir.x * knockForce, hitDir.y * knockForce, 0.50f);
+
+                        // Если бросок был летальным — разлетается кровь в направлении форсы
+                        if (!wasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f)) {
+                            if (speed >= 500.0f) {
+                                if (Arena::getActive()) {
+                                    Arena::getActive()->spawnFinisherBlood(enemy.position, hitDir, 65, enemy.maxHp);
+                                }
+                                _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -65.0f), 
+                                                                "★ LETHAL MACE THROW! ★", sf::Color(255, 60, 50), 1.0f, 1.0f, 1.25f, 255.0f});
+                            } else {
+                                if (Arena::getActive()) {
+                                    Arena::getActive()->spawnKillBlood(enemy.position, hitDir, enemy.maxHp);
+                                }
+                            }
+                        }
+
+                        // Всплывающий урон
+                        DamageNumber dn;
+                        dn.position = it->position;
+                        dn.text = "-" + std::to_string(static_cast<int>(std::round(maceDmg)));
+                        dn.color = sf::Color(255, 175, 40);
+                        _damageNumbers.push_back(dn);
+
+                        // Искры попадания
+                        for (int s = 0; s < 12; ++s) {
+                            HitParticle p;
+                            p.position = it->position;
+                            float ang = (s * 30.0f) * 3.14159f / 180.0f;
+                            float sp = 120.0f + static_cast<float>(_rng() % 140);
+                            p.velocity = {std::cos(ang) * sp, std::sin(ang) * sp};
+                            p.size = 2.5f + static_cast<float>(_rng() % 3);
+                            p.color = sf::Color(255, 200, 60);
+                            p.lifetime = 0.22f;
+                            p.alpha = 255.0f;
+                            _hitParticles.push_back(p);
+                        }
                     }
 
                     // Враг всегда начинает крутиться после попадания булавы

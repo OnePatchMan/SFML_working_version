@@ -4231,6 +4231,65 @@ int main() {
         std::cout << "-> PASSED: Room 1 Spawn & Anti-Global-Aggro verified 100%!" << std::endl;
     }
 
+    // -------------------------------------------------------------
+    // TEST 59: PASSIVE DUELIST NEUTRAL SPACING & THROWN WEAPON BLOCK
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 59] PASSIVE DUELIST SPACING & THROWN WEAPON GUARD..." << std::endl;
+        Arena arena;
+        Player player(arena.getSpawnPosition());
+        player.position = {200.0f, arena.getSpawnPosition().y};
+        Enemy passiveDuelist({400.0f, arena.getSpawnPosition().y}, EnemyType::DUELIST_PASSIVE);
+        passiveDuelist.setSmartAI(true);
+        CombatSystem combat;
+
+        // 1. In neutral at 200px distance, passive duelist must NOT walk towards player
+        passiveDuelist.behaviorState = AIBehaviorState::CHASE;
+        passiveDuelist.forceDetectPlayer(player.position);
+        tick(0.016f, arena, player, passiveDuelist, combat);
+        // Facing left (player is to left), velocity.x must NOT be negative (towards player)
+        assert(passiveDuelist.velocity.x == 0.0f);
+        assert(passiveDuelist.aiComboState == AIComboState::IDLE);
+        std::cout << "-> Verified Passive Duelist does NOT run at player, holds ground!" << std::endl;
+
+        // 2. When player gets inside spacing distance (< 90px), passive duelist steps BACK
+        player.position = {330.0f, arena.getSpawnPosition().y}; // 70px away
+        passiveDuelist.behaviorState = AIBehaviorState::CHASE;
+        passiveDuelist.forceDetectPlayer(player.position);
+        tick(0.016f, arena, player, passiveDuelist, combat);
+        // Stepping back from player on left means moving right (> 0)
+        assert(passiveDuelist.velocity.x > 0.0f);
+        std::cout << "-> Verified Passive Duelist steps back when player closes in (" << passiveDuelist.velocity.x << " px/s)!" << std::endl;
+
+        // 3. Duelist Blocks Thrown Flying Weapon (Mace)
+        combat.reset();
+        passiveDuelist.reset();
+        passiveDuelist.position = {player.position.x + 100.0f, player.position.y};
+        passiveDuelist.isBlocking = true;
+        passiveDuelist.blockHoldTimer = 0.5f;
+        float prevHp = passiveDuelist.hp;
+
+        player.setHasWeapon(true);
+        combat.throwWeapon(player, passiveDuelist.position);
+        assert(combat.getThrownMaces().size() == 1);
+
+        for (int frame = 0; frame < 15; ++frame) {
+            tick(0.016f, arena, player, passiveDuelist, combat);
+            if (passiveDuelist.hp < prevHp) break;
+        }
+
+        assert(passiveDuelist.isBlocking);
+        float damageTaken = prevHp - passiveDuelist.hp;
+        // Base mace damage is ~6-8, with 80% reduction should be ~1-3 damage
+        assert(damageTaken > 0.0f && damageTaken < 6.0f);
+        // Stun should be short blockstun (0.14s), not long 0.5s stun
+        assert(passiveDuelist.getStunTimer() <= 0.20f);
+        std::cout << "-> Verified Duelist blocks thrown mace: took " << damageTaken << " dmg (-80%), short blockstun (" 
+                  << passiveDuelist.getStunTimer() << "s)!" << std::endl;
+
+        std::cout << "-> PASSED: Passive spacing & Thrown weapon block verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;

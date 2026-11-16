@@ -682,10 +682,10 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                 isBlocking = true;
                                 blockHoldTimer = 0.50f;
                             }
-                            if (distToPlayer < 85.0f) {
-                                velocity.x = -dir * (baseSpeed * 0.70f); // Грамотный отход назад
+                            if (distToPlayer < spacingDist * 0.85f) {
+                                velocity.x = -dir * (baseSpeed * 0.70f); // Грамотный отход назад, держит дистанцию
                             } else {
-                                velocity.x = 0.0f;
+                                velocity.x = 0.0f; // Стоит на выверенной дистанции, выжидая ошибку
                             }
 
                             if (distToPlayer <= ecfg.counter.triggerDistance) {
@@ -696,8 +696,8 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                 }
                             }
                         } else {
-                            float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.75f) : baseSpeed;
-                            velocity.x = dir * stalkSpeed;
+                            // Пассивный дуэлянт НЕ БЕЖИТ на игрока, а выжидает его ошибки!
+                            velocity.x = 0.0f;
                         }
                     }
                     // 3. ПОВЕДЕНИЕ ЖИРНОГО ВРАГА (TANK):
@@ -747,11 +747,14 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     }
 
                     // В радиусе атаки автоматически начинаем комбо-серию
-                    float attackTriggerDist = (enemyType == EnemyType::TANK) ? 280.0f : 
-                                              (enemyType == EnemyType::DUELIST) ? 300.0f : 260.0f;
-                    if (distToPlayer < attackTriggerDist && vertDist < 80.0f && attackCooldown <= 0.0f) {
-                        behaviorState = AIBehaviorState::COMBAT;
-                        triggerComboSequence();
+                    // Пассивный дуэлянт сам не начинает комбо — он только выжидает ошибок игрока (станы, контрудары)
+                    if (enemyType != EnemyType::DUELIST_PASSIVE) {
+                        float attackTriggerDist = (enemyType == EnemyType::TANK) ? 280.0f : 
+                                                  (enemyType == EnemyType::DUELIST) ? 300.0f : 260.0f;
+                        if (distToPlayer < attackTriggerDist && vertDist < 80.0f && attackCooldown <= 0.0f) {
+                            behaviorState = AIBehaviorState::COMBAT;
+                            triggerComboSequence();
+                        }
                     }
                 }
             }

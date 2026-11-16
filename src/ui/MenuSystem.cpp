@@ -544,18 +544,18 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
     }
 
     // Анти-спам плашка строго под всеми строками комбо (в собственной аккуратной рамке, без наложения на строки)
-    float noteY = startRowY + static_cast<float>(items.size()) * rowH + 6.0f;
-    sf::RectangleShape noteBg({w - 30.0f, 25.0f});
+    float noteY = startRowY + static_cast<float>(items.size()) * rowH + 10.0f;
+    sf::RectangleShape noteBg({w - 30.0f, 26.0f});
     noteBg.setPosition(sf::Vector2f(x + 15.0f, noteY));
     noteBg.setFillColor(sf::Color(38, 28, 16, 220));
     noteBg.setOutlineThickness(1.0f);
     noteBg.setOutlineColor(sf::Color(180, 125, 35, 200));
     window.draw(noteBg);
 
-    sf::Text antiSpam(*_font, toSfString("★ ПРАВИЛО АНТИ-СПАМА: Повтор одного и того же комбо дважды за 2.5 секунды наказывается оглушением игрока на 0.75с! Варьируйте связки!"), 11);
+    sf::Text antiSpam(*_font, toSfString("[!] ПРАВИЛО АНТИ-СПАМА: Повтор одного и того же комбо дважды за 2.5 секунды наказывается оглушением игрока на 0.75с! Варьируйте связки!"), 11);
     antiSpam.setStyle(sf::Text::Bold);
     antiSpam.setFillColor(sf::Color(255, 195, 65));
-    antiSpam.setPosition(sf::Vector2f(x + 25.0f, noteY + 3.0f));
+    antiSpam.setPosition(sf::Vector2f(x + 25.0f, noteY + 5.0f));
     window.draw(antiSpam);
 }
 
