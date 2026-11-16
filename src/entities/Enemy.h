@@ -204,6 +204,9 @@ public:
     // Ветка продолжения зацепа (0 = Sky Launcher, 1 = Heavy Shove)
     int grappleBranchChoice = 0;
 
+    // Таймер бездействия игрока (для агрессивного дуэлянта)
+    float playerIdleTimer = 0.0f;
+
     // Кешированные текстовые элементы UI врага (исключают пересоздание sf::Text каждый кадр)
     mutable std::optional<sf::Text> _cachedNameText;
     mutable std::optional<sf::Text> _cachedDodgeText;
@@ -237,7 +240,7 @@ public:
     float getStunTimer() const { return hurtTimer; }
     bool isStunned() const { return hurtTimer > 0.0f; }
     void reset();
-    void update(float dt, const Arena& arena, const sf::Vector2f& playerPos = {0.0f, 0.0f}, bool playerIsStunned = false);
+    void update(float dt, const Arena& arena, const sf::Vector2f& playerPos = {0.0f, 0.0f}, bool playerIsStunned = false, bool playerIsAttacking = false);
     void draw(sf::RenderWindow& window, const sf::Font* font = nullptr);
     void applyAttackStats(const EnemyAttackStats& s, float dirX);
 

@@ -198,6 +198,7 @@ void Enemy::reset() {
     stunPunishCooldown = 0.0f;
     punishBannerTimer = 0.0f;
     grappleBranchChoice = 0;
+    playerIdleTimer = 0.0f;
     spacingTimer = 0.0f;
     blockHoldTimer = 0.0f;
     diveSlamBounce = false;
@@ -399,7 +400,7 @@ void Enemy::stagger(float duration) {
     dropCombo();
 }
 
-void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned) {
+void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking) {
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             deathFadeTimer -= dt;
@@ -422,6 +423,23 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     if (invisCooldownTimer > 0.0f) invisCooldownTimer -= dt;
     if (stunPunishCooldown > 0.0f) stunPunishCooldown -= dt;
     if (punishBannerTimer > 0.0f) punishBannerTimer -= dt;
+
+    // Таймер бездействия игрока (для агрессивного дуэлянта)
+    if (enemyType == EnemyType::DUELIST && !isDead && hurtTimer <= 0.0f) {
+        if (playerIsAttacking) {
+            playerIdleTimer = 0.0f;
+        } else if (!playerIsStunned) {
+            float distToPlayer = std::abs(playerPos.x - position.x);
+            float vertDist = std::abs(playerPos.y - position.y);
+            if (hasDetectedPlayer && distToPlayer < 240.0f && vertDist < 80.0f) {
+                playerIdleTimer += dt;
+            } else {
+                playerIdleTimer = 0.0f;
+            }
+        } else {
+            playerIdleTimer = 0.0f;
+        }
+    }
 
     // Тактическая невидимость пассивного дуэлянта (на 1с раз в 7с)
     if (enemyType == EnemyType::DUELIST_PASSIVE && !isDead && hurtTimer <= 0.0f) {
@@ -671,18 +689,58 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     }
 
                     // 1. ПОВЕДЕНИЕ АГРЕССИВНОГО ДУЭЛЯНТА (DUELIST AGGRESSIVE):
-                    // Бешеный напор без передышки, доджи сквозь игрока, непрерывный прессинг
+                    // Ближний выверенный спейсинг (~95px: прямо перед носом у игрока, но вне зоны базовых ударов ~90px).
+                    // НИКОГДА не подходит в упор! При бездействии игрока агрессивно атакует сам через дэши!
                     if (enemyType == EnemyType::DUELIST) {
-                        if (distToPlayer <= spacingDist && vertDist < 50.0f) {
-                            if (canDodge && dodgeCooldownTimer <= 0.0f && distToPlayer < 70.0f && (nextStarterChoice % 2 == 0)) {
-                                triggerDodge(dir); // Агрессивный додж вперед сквозь игрока!
-                            } else if (canCounter && counterCooldownTimer <= 0.0f && distToPlayer <= ecfg.counter.triggerDistance) {
-                                triggerCounterStance();
+                        float minSpacing = spacingDist * 0.94f; // ~101.5px (вне зоны удара с выпадом 104-106px)
+                        float maxSpacing = spacingDist * 1.15f; // ~124.2px
+
+                        if (distToPlayer < minSpacing && vertDist < 60.0f) {
+                            // Игрок приближается / напирает — дуэлянт отшагивает назад, никогда не подходя в упор!
+                            float backFloorX = position.x - dir * (halfW + 12.0f);
+                            bool floorBehind = arena.overlapsSolid(backFloorX, position.y + halfH + 8.0f, 6.0f, 4.0f, 4.0f);
+                            if (floorBehind) {
+                                velocity.x = -dir * (baseSpeed * 0.88f);
                             } else {
-                                velocity.x = dir * baseSpeed; // Давит вперед без передышки!
+                                velocity.x = 0.0f; // Не спрыгивать спиной с обрыва
+                            }
+
+                            // Если игрок напирает совсем в упор (<65px) — игра через дэши!
+                            if (canDodge && dodgeCooldownTimer <= 0.0f && distToPlayer < 65.0f) {
+                                triggerDodge(dir); // Стремительный додж сквозь игрока за спину!
+                            } else if (canCounter && counterCooldownTimer <= 0.0f && distToPlayer <= ecfg.counter.triggerDistance && playerIsAttacking) {
+                                triggerCounterStance();
+                            }
+                        } else if (distToPlayer > maxSpacing && vertDist < 90.0f) {
+                            // Игрок разрывает дистанцию — дуэлянт агрессивно поджимает вперед
+                            velocity.x = dir * baseSpeed;
+
+                            // Сближение через дэш при значительном разрыве
+                            if (canDodge && dodgeCooldownTimer <= 0.0f && distToPlayer > 135.0f && distToPlayer < 240.0f) {
+                                triggerDodge(dir);
                             }
                         } else {
-                            velocity.x = dir * baseSpeed;
+                            // ЗОЛОТАЯ БЛИЖНЯЯ ЗОНА СПЕЙСИНГА (88 - 109px, около 95px):
+                            // Стоит прямо у границы хитбокса, но удар игрока по нему не попадает!
+                            velocity.x = 0.0f;
+                        }
+
+                        // ПРОВЕРКА БЕЗДЕЙСТВИЯ ИГРОКА (Player Inactivity Attack):
+                        // Если игрок бездействует ~0.5с (зависит от интеллекта, нижняя граница ~0.25с — время атаки 2),
+                        // дуэлянт сам переходит в агрессивное нападение через дэш!
+                        float baseDelay = ecfg.duelist.idleAttackDelay;
+                        float minDelay = 0.25f;
+                        float intel = ecfg.duelist.intelligence;
+                        float idleThreshold = baseDelay - (intel - 0.5f) * (baseDelay - minDelay) * 2.0f;
+                        idleThreshold = std::clamp(idleThreshold, minDelay, baseDelay);
+
+                        if (playerIdleTimer >= idleThreshold && attackCooldown <= 0.0f && distToPlayer < 140.0f && vertDist < 60.0f) {
+                            playerIdleTimer = 0.0f;
+                            behaviorState = AIBehaviorState::COMBAT;
+                            triggerComboSequence();
+                            if (canDodge && dodgeCooldownTimer <= 0.0f) {
+                                triggerDodge(dir); // Игра через дэши: врывается рывком в атаку!
+                            }
                         }
                     }
                     // 2. ПОВЕДЕНИЕ ПАССИВНОГО ДУЭЛЯНТА (DUELIST PASSIVE):
@@ -781,12 +839,18 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
 
                     // В радиусе атаки автоматически начинаем комбо-серию
                     // Пассивный дуэлянт сам не начинает комбо — он только выжидает ошибок игрока (станы, контрудары)
-                    if (enemyType != EnemyType::DUELIST_PASSIVE) {
-                        float attackTriggerDist = (enemyType == EnemyType::TANK) ? 280.0f : 
-                                                  (enemyType == EnemyType::DUELIST) ? 300.0f : 260.0f;
+                    // Агрессивный дуэлянт управляет ближними атаками по бездействию игрока, а на дальней дистанции инициирует Grapple Pull
+                    if (enemyType == EnemyType::NORMAL || enemyType == EnemyType::TANK) {
+                        float attackTriggerDist = (enemyType == EnemyType::TANK) ? 280.0f : 260.0f;
                         if (distToPlayer < attackTriggerDist && vertDist < 80.0f && attackCooldown <= 0.0f) {
                             behaviorState = AIBehaviorState::COMBAT;
                             triggerComboSequence();
+                        }
+                    } else if (enemyType == EnemyType::DUELIST) {
+                        // На дальней дистанции (130 - 220px) агрессивный дуэлянт периодически начинает бой длинным зацепом Grapple Pull
+                        if (distToPlayer > 130.0f && distToPlayer < 220.0f && vertDist < 60.0f && attackCooldown <= 0.0f && (nextStarterChoice % 2 == 0)) {
+                            behaviorState = AIBehaviorState::COMBAT;
+                            triggerComboSequence(static_cast<int>(AIStarterType::STARTER_GRAPPLE_PULL));
                         }
                     }
                 }
@@ -826,6 +890,10 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 else if (enemyType == EnemyType::DUELIST_PASSIVE) curApproach = ecfg.duelistPassive.approachSpeed;
                 if (punishBannerTimer > 0.0f) curApproach *= 1.30f; // Ускоренный напор при панише стана
                 velocity.x = dir * curApproach; // Стремительный рывок на сближение
+                // Агрессивный дуэлянт: игра через дэши при сближении в комбо
+                if (enemyType == EnemyType::DUELIST && canDodge && dodgeCooldownTimer <= 0.0f && distToPlayer > 85.0f) {
+                    triggerDodge(dir);
+                }
             } else {
                 velocity.x = 0.0f;
                 switch (currentStarterType) {

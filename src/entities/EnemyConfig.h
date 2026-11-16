@@ -129,8 +129,9 @@ struct DuelistEnemyConfig {
     bool canDodge = true;
     float aggressiveness = 0.95f;
     float intelligence = 0.85f;
-    float dodgeCooldown = 2.00f;
-    float spacingDistance = 65.0f;
+    float dodgeCooldown = 1.50f;
+    float spacingDistance = 108.0f;
+    float idleAttackDelay = 0.50f;
 };
 
 struct DuelistPassiveConfig {
@@ -320,6 +321,7 @@ private:
             else if (key == "intelligence") _config.duelist.intelligence = std::stof(val);
             else if (key == "dodge_cooldown" || key == "dodgecooldown") _config.duelist.dodgeCooldown = std::stof(val);
             else if (key == "spacing_distance" || key == "spacingdistance") _config.duelist.spacingDistance = std::stof(val);
+            else if (key == "idle_attack_delay" || key == "idleattackdelay") _config.duelist.idleAttackDelay = std::stof(val);
         } else if (root == "DuelistPassive") {
             if (key == "hp" || key == "max_hp" || key == "maxhp") _config.duelistPassive.hp = std::stof(val);
             else if (key == "speed") _config.duelistPassive.speed = std::stof(val);

@@ -292,8 +292,9 @@ int main() {
             } else {
                 arena.update(dt);
                 player.update(dt, arena, mouseWorld);
+                bool playerIsAttacking = combat.isAttacking() || combat.getCooldown() > 0.0f;
                 for (auto& e : enemies) {
-                    e.update(dt, arena, player.position, player.isStunned());
+                    e.update(dt, arena, player.position, player.isStunned(), playerIsAttacking);
                 }
                 combat.update(dt, player, enemies);
 

@@ -14,7 +14,7 @@
 
 void tick(float dt, Arena& arena, Player& player, Enemy& enemy, CombatSystem& combat, const sf::Vector2f& mousePos = {0.0f, 0.0f}) {
     player.update(dt, arena, mousePos);
-    enemy.update(dt, arena, player.position, player.isStunned());
+    enemy.update(dt, arena, player.position, player.isStunned(), combat.isAttacking() || combat.getCooldown() > 0.0f);
     combat.update(dt, player, enemy);
 }
 
@@ -788,11 +788,11 @@ int main() {
         player.reset(arena.getSpawnPosition(), false);
         tick(0.1f, arena, player, enemy, combat);
 
-        // Place enemy 120px away in IDLE with cooldown active
+        // Place enemy 160px away in IDLE with cooldown active
         enemy.setType(EnemyType::DUELIST);
         enemy.reset();
         enemy.setSmartAI(true);
-        enemy.position = {player.position.x + 120.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.position = {player.position.x + 160.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
         enemy.isFacingLeft = true;
         enemy.attackCooldown = 0.5f; // cooldown is active
         enemy.aiComboState = AIComboState::IDLE;
@@ -4073,8 +4073,8 @@ int main() {
         enemy.setSmartAI(true);
         CombatSystem combat;
 
-        // Verify configuration: 2.0s dash cooldown for duelist and player
-        assert(EnemyConfig::get().duelist.dodgeCooldown == 2.00f);
+        // Verify configuration: 1.5s dash cooldown for duelist, 2.0s for player
+        assert(EnemyConfig::get().duelist.dodgeCooldown == 1.50f);
         assert(PlayerConfig::get().dashCooldown == 2.00f);
         assert(PlayerConfig::get().spotDodgeCooldown == 2.00f);
 
@@ -4128,7 +4128,7 @@ int main() {
         assert(enemy.aiComboState == AIComboState::STARTER_GRAPPLE_LAUNCHER_ACTIVE ||
                enemy.aiComboState == AIComboState::STARTER_GRAPPLE_SHOVE_ACTIVE);
 
-        std::cout << "-> PASSED: Aggressive Duelist Grapple Pull & 2.0s Dash verified 100%!" << std::endl;
+        std::cout << "-> PASSED: Aggressive Duelist Grapple Pull & 1.5s Dash verified 100%!" << std::endl;
     }
 
     // -------------------------------------------------------------
@@ -4186,17 +4186,17 @@ int main() {
     }
 
     // -------------------------------------------------------------
-    // TEST 58: ROOM 1 FIRST ENEMY PASSIVE DUELIST & ANTI-GLOBAL-AGGRO
+    // TEST 58: ROOM 1 FIRST ENEMY AGGRESSIVE DUELIST & ANTI-GLOBAL-AGGRO
     // -------------------------------------------------------------
     {
-        std::cout << "\n[TEST 58] ROOM 1 FIRST ENEMY (PASSIVE DUELIST) & AGGRO LEASH / RANGE..." << std::endl;
+        std::cout << "\n[TEST 58] ROOM 1 FIRST ENEMY (AGGRESSIVE DUELIST) & AGGRO LEASH / RANGE..." << std::endl;
         Arena arena;
         arena.loadRoom(1);
         const auto& spawns = arena.getEnemySpawns();
         assert(!spawns.empty());
-        // Verify first enemy next to player (at 12, 5) is DUELIST_PASSIVE (type 3)
-        assert(spawns[0].type == 3);
-        std::cout << "-> Verified Room 1 enemy_0 type is DUELIST_PASSIVE (3)!" << std::endl;
+        // Verify first enemy next to player (at 12, 5) is DUELIST (type 2)
+        assert(spawns[0].type == 2);
+        std::cout << "-> Verified Room 1 enemy_0 type is DUELIST (2)!" << std::endl;
 
         // Distant Enemy Stun Test:
         // Position player at x=100, duelist at distant location x=1500 (across the map)
@@ -4365,6 +4365,82 @@ int main() {
         std::cout << "-> Verified full 1-1-1 combo landed cleanly: player NOT stunned, duelist did NOT block or punish!" << std::endl;
 
         std::cout << "-> PASSED: Mid-combo hitstun lockout verified 100%!" << std::endl;
+    }
+
+    // -------------------------------------------------------------
+    // TEST 61: AGGRESSIVE DUELIST CLOSE SPACING (108PX) & IDLE ATTACK
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 61] AGGRESSIVE DUELIST: 108PX CLOSE SPACING, NO HUGGING, IDLE ATTACK & 1.5S DASH..." << std::endl;
+        Arena arena;
+        Player player(arena.getSpawnPosition());
+        player.position = {200.0f, arena.getSpawnPosition().y};
+        if (!player.isFacingRight()) player.turnAround();
+
+        Enemy duelist({player.position.x + 108.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)}, EnemyType::DUELIST);
+        duelist.setSmartAI(true);
+        duelist.attackCooldown = 0.5f; // Initial cooldown to test spacing
+        CombatSystem combat;
+
+        // 1. Verify config constants
+        assert(EnemyConfig::get().duelist.dodgeCooldown == 1.50f);
+        assert(EnemyConfig::get().duelist.spacingDistance == 108.0f);
+        assert(EnemyConfig::get().duelist.idleAttackDelay == 0.50f);
+
+        // 2. Sweet spot test: at 108px distance, duelist holds ground
+        tick(0.016f, arena, player, duelist, combat);
+        assert(duelist.velocity.x == 0.0f);
+        std::cout << "-> Verified Aggressive Duelist holds ground in ~108px sweet spot!" << std::endl;
+
+        // 3. Whiff test: player attacks standing at x=200 with duelist at x=308 (108px):
+        // Attack reaches 78px + 14px lunge + 12px enemy halfW = 104px < 108px -> must whiff!
+        triggerLight(combat, player);
+        for (int f = 0; f < 6; ++f) tick(0.016f, arena, player, duelist, combat);
+        assert(!combat.hasHitThisSwing());
+        assert(duelist.hp == duelist.maxHp);
+        std::cout << "-> Verified player basic attack with forward lunge WHIFFS safely outside duelist hitbox!" << std::endl;
+
+        // 4. No-hugging test: when player closes in (<100px, e.g. dist=75px), duelist steps back!
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false);
+        player.position = {200.0f, arena.getSpawnPosition().y};
+        if (!player.isFacingRight()) player.turnAround();
+        duelist.position = {player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        duelist.attackCooldown = 1.0f; // prevent immediate attack during spacing test
+        tick(0.016f, arena, player, duelist, combat);
+        assert(duelist.velocity.x > 0.0f); // steps away to the right
+        std::cout << "-> Verified Aggressive Duelist steps back when player closes in (never hugs in close)!" << std::endl;
+
+        // 5. Retreat test: when player retreats (>125px, e.g. dist=160px), duelist presses forward!
+        duelist.position.x = player.position.x + 160.0f;
+        tick(0.016f, arena, player, duelist, combat);
+        assert(duelist.velocity.x < 0.0f); // stalks forward to the left towards player
+        std::cout << "-> Verified Aggressive Duelist stalks forward when player retreats!" << std::endl;
+
+        // 6. Inactivity attack test:
+        // Duelist at 108px sweet spot, player idle (not attacking).
+        // Intelligence = 0.85 -> idleThreshold = 0.325s.
+        player.velocity = {0.0f, 0.0f};
+        player.position = {200.0f, arena.getSpawnPosition().y};
+        duelist.position = {player.position.x + 108.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        duelist.velocity = {0.0f, 0.0f};
+        duelist.attackCooldown = 0.0f;
+        duelist.playerIdleTimer = 0.0f;
+        duelist.forceDetectPlayer(player.position);
+        combat.reset();
+
+        // Advance 12 frames (0.192s): player idle, but threshold not reached yet
+        for (int i = 0; i < 12; ++i) tick(0.016f, arena, player, duelist, combat);
+        assert(duelist.playerIdleTimer >= 0.18f);
+        assert(duelist.aiComboState == AIComboState::IDLE);
+
+        // Advance another 10 frames (total > 0.35s > 0.325s threshold):
+        // Duelist MUST detect idle player and initiate attack aggressively with dash!
+        for (int i = 0; i < 10; ++i) tick(0.016f, arena, player, duelist, combat);
+        assert(duelist.aiComboState != AIComboState::IDLE);
+        std::cout << "-> Verified Duelist attacks when player is idle for > 0.325s!" << std::endl;
+
+        std::cout << "-> PASSED: Aggressive Duelist Spacing & Idle Attack verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;
