@@ -24,15 +24,17 @@ enum class AIBehaviorState {
 };
 
 enum class EnemyType {
-    NORMAL,  // Обычный: серый цвет, малое ХП (45), легкая броня, средняя скорость, дает 1 комбо, нет контратаки
-    TANK,    // Жирный: красный цвет, больше в 1.5 раза, много ХП (110), тяжелая броня, бьет дальше и больнее, медленный
-    DUELIST  // Дуэлянт: фиолетовый цвет, среднее ХП (65), быстрый, сложные комбо, контратаки, блок, доджи (включая идеальный)
+    NORMAL,           // Обычный: серый цвет, малое ХП (45), легкая броня, средняя скорость, дает 1 комбо, нет контратаки
+    TANK,             // Жирный: красный цвет, больше в 1.5 раза, много ХП (110), тяжелая броня, бьет дальше и больнее, медленный
+    DUELIST,          // Агрессивный дуэлянт: фиолетовый цвет, ХП 65, быстрый, длинный зацеп с притягиванием, бешеный напор
+    DUELIST_PASSIVE   // Пассивный дуэлянт: голубой цвет, ХП 65, выверенный спейсинг, блок/парирование, невидимость на 1с раз в 7с, паниш станов
 };
 
 enum class AIStarterType {
-    STARTER_1F2D1, // 1 -> f2 -> d1 (диагональный выпад и лаунчер)
-    STARTER_112,   // 1 -> 1 -> 2 (быстрые джебы и апперкот)
-    STARTER_21DB1  // 2 -> 1 -> db1 (тяжелый замах, рывок за спину и вертикальная подсечка)
+    STARTER_1F2D1,        // 1 -> f2 -> d1 (диагональный выпад и лаунчер)
+    STARTER_112,          // 1 -> 1 -> 2 (быстрые джебы и апперкот)
+    STARTER_21DB1,        // 2 -> 1 -> db1 (тяжелый замах, рывок за спину и вертикальная подсечка)
+    STARTER_GRAPPLE_PULL  // Длинный зацеп с притягиванием (Grapple Pull) -> лаунчер или толчок
 };
 
 enum class AIComboState {
@@ -65,6 +67,15 @@ enum class AIComboState {
     STARTER_21DB1_DASH_BEHIND,
     STARTER_21DB1_SWEEP_ACTIVE,
     STARTER_21DB1_SWEEP_RECOVERY,
+
+    // Стартер 4: Длинный зацеп с притягиванием и разветвлением (Grapple Pull)
+    STARTER_GRAPPLE_WINDUP,
+    STARTER_GRAPPLE_ACTIVE,
+    STARTER_GRAPPLE_RECOVERY,
+    STARTER_GRAPPLE_LAUNCHER_ACTIVE,
+    STARTER_GRAPPLE_LAUNCHER_RECOVERY,
+    STARTER_GRAPPLE_SHOVE_ACTIVE,
+    STARTER_GRAPPLE_SHOVE_RECOVERY,
 
     // Воздушная ветка (общая для всех стартеров):
     CHASE_JUMP_1,
@@ -180,6 +191,19 @@ public:
     bool hasDetectedPlayer = false;
     float alertEffectTimer = 0.0f;
 
+    // Параметры невидимости (пассивный дуэлянт: 1 сек раз в 7 сек)
+    float invisActiveTimer = 0.0f;
+    float invisCooldownTimer = 0.0f;
+    bool isInvisible() const { return invisActiveTimer > 0.0f; }
+
+    // Параметры наказания станов (паниш стана игрока)
+    float stunPunishCooldown = 0.0f;
+    float punishBannerTimer = 0.0f;
+    bool isPunishing() const { return punishBannerTimer > 0.0f; }
+
+    // Ветка продолжения зацепа (0 = Sky Launcher, 1 = Heavy Shove)
+    int grappleBranchChoice = 0;
+
     // Кешированные текстовые элементы UI врага (исключают пересоздание sf::Text каждый кадр)
     mutable std::optional<sf::Text> _cachedNameText;
     mutable std::optional<sf::Text> _cachedDodgeText;
@@ -191,6 +215,7 @@ public:
     mutable std::optional<sf::Text> _cachedAiBanner;
     mutable std::optional<sf::Text> _cachedParryText;
     mutable std::optional<sf::Text> _cachedWarnExText;
+    mutable std::optional<sf::Text> _cachedPunishText;
     mutable const sf::Font* _cachedFont = nullptr;
     mutable std::string _cachedLabel;
     mutable std::string _cachedComboName;
@@ -212,7 +237,7 @@ public:
     float getStunTimer() const { return hurtTimer; }
     bool isStunned() const { return hurtTimer > 0.0f; }
     void reset();
-    void update(float dt, const Arena& arena, const sf::Vector2f& playerPos = {0.0f, 0.0f});
+    void update(float dt, const Arena& arena, const sf::Vector2f& playerPos = {0.0f, 0.0f}, bool playerIsStunned = false);
     void draw(sf::RenderWindow& window, const sf::Font* font = nullptr);
     void applyAttackStats(const EnemyAttackStats& s, float dirX);
 
@@ -266,6 +291,13 @@ public:
 class DuelistEnemy : public Enemy {
 public:
     DuelistEnemy(sf::Vector2f spawnPos) : Enemy(spawnPos, EnemyType::DUELIST) {
+        setSmartAI(true);
+    }
+};
+
+class DuelistPassiveEnemy : public Enemy {
+public:
+    DuelistPassiveEnemy(sf::Vector2f spawnPos) : Enemy(spawnPos, EnemyType::DUELIST_PASSIVE) {
         setSmartAI(true);
     }
 };

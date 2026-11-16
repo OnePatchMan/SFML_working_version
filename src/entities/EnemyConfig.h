@@ -120,17 +120,34 @@ struct TankEnemyConfig {
 
 struct DuelistEnemyConfig {
     float hp = 65.0f;
-    float speed = 330.0f;
-    float approachSpeed = 390.0f;
+    float speed = 340.0f;
+    float approachSpeed = 420.0f;
     float damageMult = 1.15f;
     float scale = 1.0f;
     bool canCounter = true;
     bool canBlock = true;
     bool canDodge = true;
-    float aggressiveness = 0.65f;
+    float aggressiveness = 0.95f;
     float intelligence = 0.85f;
-    float dodgeCooldown = 2.20f;
-    float spacingDistance = 90.0f;
+    float dodgeCooldown = 2.00f;
+    float spacingDistance = 65.0f;
+};
+
+struct DuelistPassiveConfig {
+    float hp = 65.0f;
+    float speed = 320.0f;
+    float approachSpeed = 380.0f;
+    float damageMult = 1.15f;
+    float scale = 1.0f;
+    bool canCounter = true;
+    bool canBlock = true;
+    bool canDodge = true;
+    float aggressiveness = 0.25f;
+    float intelligence = 0.95f;
+    float dodgeCooldown = 2.00f;
+    float spacingDistance = 95.0f;
+    float invisDuration = 1.00f;
+    float invisCooldown = 7.00f;
 };
 
 struct EnemyGeneralStats {
@@ -166,6 +183,7 @@ struct EnemyAllConfig {
     NormalEnemyConfig normal;
     TankEnemyConfig tank;
     DuelistEnemyConfig duelist;
+    DuelistPassiveConfig duelistPassive;
 };
 
 class EnemyConfig {
@@ -302,6 +320,21 @@ private:
             else if (key == "intelligence") _config.duelist.intelligence = std::stof(val);
             else if (key == "dodge_cooldown" || key == "dodgecooldown") _config.duelist.dodgeCooldown = std::stof(val);
             else if (key == "spacing_distance" || key == "spacingdistance") _config.duelist.spacingDistance = std::stof(val);
+        } else if (root == "DuelistPassive") {
+            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.duelistPassive.hp = std::stof(val);
+            else if (key == "speed") _config.duelistPassive.speed = std::stof(val);
+            else if (key == "approach_speed" || key == "approachspeed") _config.duelistPassive.approachSpeed = std::stof(val);
+            else if (key == "damage_multiplier" || key == "damagemult") _config.duelistPassive.damageMult = std::stof(val);
+            else if (key == "scale") _config.duelistPassive.scale = std::stof(val);
+            else if (key == "can_counter" || key == "cancounter") _config.duelistPassive.canCounter = (std::stoi(val) != 0);
+            else if (key == "can_block" || key == "canblock") _config.duelistPassive.canBlock = (std::stoi(val) != 0);
+            else if (key == "can_dodge" || key == "candodge") _config.duelistPassive.canDodge = (std::stoi(val) != 0);
+            else if (key == "aggressiveness") _config.duelistPassive.aggressiveness = std::stof(val);
+            else if (key == "intelligence") _config.duelistPassive.intelligence = std::stof(val);
+            else if (key == "dodge_cooldown" || key == "dodgecooldown") _config.duelistPassive.dodgeCooldown = std::stof(val);
+            else if (key == "spacing_distance" || key == "spacingdistance") _config.duelistPassive.spacingDistance = std::stof(val);
+            else if (key == "invis_duration" || key == "invisduration") _config.duelistPassive.invisDuration = std::stof(val);
+            else if (key == "invis_cooldown" || key == "inviscooldown") _config.duelistPassive.invisCooldown = std::stof(val);
         } else if (root == "DummyAttack") {
             if (key == "windup") _config.stats.dummyWindup = std::stof(val);
             else if (key == "active_time" || key == "activetime") _config.stats.dummyActiveTime = std::stof(val);

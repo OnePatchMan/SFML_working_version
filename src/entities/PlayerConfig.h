@@ -16,11 +16,11 @@ struct PlayerStatsConfig {
 
     float dashSpeed = 1250.0f;
     float dashDuration = 0.09f;
-    float dashCooldown = 0.30f;
+    float dashCooldown = 2.00f;
     float iframeDuration = 0.13f;
 
     float spotDodgeDuration = 0.22f;
-    float spotDodgeCooldown = 0.32f;
+    float spotDodgeCooldown = 2.00f;
     float perfectDodgeWindow = 0.11f;
     float perfectDodgeEmpower = 1.40f;
 

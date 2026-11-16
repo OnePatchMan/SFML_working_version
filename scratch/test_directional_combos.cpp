@@ -14,7 +14,7 @@
 
 void tick(float dt, Arena& arena, Player& player, Enemy& enemy, CombatSystem& combat, const sf::Vector2f& mousePos = {0.0f, 0.0f}) {
     player.update(dt, arena, mousePos);
-    enemy.update(dt, arena, player.position);
+    enemy.update(dt, arena, player.position, player.isStunned());
     combat.update(dt, player, enemy);
 }
 
@@ -1177,7 +1177,7 @@ int main() {
         assert(pcfg.moveSpeed == 400.0f);
         assert(pcfg.jumpSpeed == 900.0f);
         assert(pcfg.dashSpeed == 1250.0f);
-        assert(pcfg.dashCooldown == 0.30f);
+        assert(pcfg.dashCooldown == 2.00f);
         assert(pcfg.spotDodgeDuration == 0.22f);
         assert(pcfg.halfW == 20.0f);
 
@@ -2789,7 +2789,7 @@ int main() {
         assert(duelistBot.canCounter == true);
         assert(duelistBot.canBlock == true);
         assert(duelistBot.canDodge == true);
-        assert(duelistBot.aggressiveness == 0.65f);
+        assert(duelistBot.aggressiveness == 0.95f);
         assert(duelistBot.intelligence == 0.85f);
         assert(duelistBot.maxComboHits == 3);
         assert(duelistBot.getAllowAirFollowup() == true);
@@ -2822,7 +2822,7 @@ int main() {
         assert(ecfg.normal.hp == 45.0f);
         assert(ecfg.tank.hp == 110.0f);
         assert(ecfg.duelist.hp == 65.0f);
-        assert(ecfg.duelist.aggressiveness == 0.65f);
+        assert(ecfg.duelist.aggressiveness == 0.95f);
         assert(ecfg.duelist.intelligence == 0.85f);
 
         std::cout << "-> PASSED: 2.5s Anti-Spam with Interleaved Combos & All 3 Archetypes (Normal, Tank, Duelist) fully verified!" << std::endl;
@@ -4060,6 +4060,129 @@ int main() {
         assert(enemy.isDead);
         assert(arena.getBloodParticles().size() > 20); // Finisher blood triggered!
         std::cout << "-> PASSED: Weapon Combo db1u1 (Sky Pop-Up & Diagonal Mace Juggle) verified 100%!" << std::endl;
+    }
+
+    // -------------------------------------------------------------
+    // TEST 56: AGGRESSIVE DUELIST & RELENTLESS PRESSURE
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 56] AGGRESSIVE DUELIST: GRAPPLE PULL COMBO & 2.0S DASH COOLDOWN..." << std::endl;
+        Arena arena;
+        Player player(arena.getSpawnPosition());
+        Enemy enemy(arena.getEnemySpawnPosition(), EnemyType::DUELIST);
+        enemy.setSmartAI(true);
+        CombatSystem combat;
+
+        // Verify configuration: 2.0s dash cooldown for duelist and player
+        assert(EnemyConfig::get().duelist.dodgeCooldown == 2.00f);
+        assert(PlayerConfig::get().dashCooldown == 2.00f);
+        assert(PlayerConfig::get().spotDodgeCooldown == 2.00f);
+
+        // Player dash cooldown test: trigger dash via LShift with move dir
+        player.setSimulatedMoveDir(1.0f);
+        sf::Event::KeyPressed kp;
+        kp.code = sf::Keyboard::Key::LShift;
+        sf::Event ev(kp);
+        player.handleInput(ev);
+        player.setSimulatedMoveDir(0.0f);
+
+        assert(player.isDashing());
+        assert(player.getDashCooldown() == 2.00f);
+
+        // Tick until dash ends
+        for (int i = 0; i < 15; ++i) tick(0.016f, arena, player, enemy, combat);
+        assert(!player.isDashing());
+        assert(player.getDashCooldown() > 1.50f);
+
+        // Attempt immediate second dash: should fail due to 2.0s cooldown
+        player.setSimulatedMoveDir(1.0f);
+        player.handleInput(ev);
+        player.setSimulatedMoveDir(0.0f);
+        assert(!player.isDashing());
+
+        // Aggressive Duelist Grapple Pull test:
+        // Position enemy facing right towards player at distance 140 (within 200px long grapple range)
+        enemy.position = {200.0f, arena.getSpawnPosition().y};
+        player.position = {340.0f, arena.getSpawnPosition().y};
+        enemy.triggerComboSequence(static_cast<int>(AIStarterType::STARTER_GRAPPLE_PULL));
+
+        assert(enemy.aiComboState == AIComboState::APPROACH);
+        // Next tick within 140px (< 175px grapple targetDist) enters windup
+        tick(0.016f, arena, player, enemy, combat);
+        assert(enemy.aiComboState == AIComboState::STARTER_GRAPPLE_WINDUP);
+        // Advance windup (0.10s)
+        tick(0.12f, arena, player, enemy, combat);
+        assert(enemy.aiComboState == AIComboState::STARTER_GRAPPLE_ACTIVE);
+        assert(enemy.getAttackHitbox().size.x >= 190.0f); // Long grapple attack!
+
+        // Active grapple hitbox pulls player towards enemy
+        float expectedPullDir = (player.position.x > enemy.position.x) ? -580.0f : 580.0f;
+        assert(enemy.currentAttackKnockX == expectedPullDir);
+
+        // Advance past active state (0.20s) to recovery and branching
+        tick(0.21f, arena, player, enemy, combat);
+        assert(enemy.aiComboState == AIComboState::STARTER_GRAPPLE_RECOVERY);
+
+        // Advance recovery (0.08s) -> branches into Launcher or Shove
+        tick(0.09f, arena, player, enemy, combat);
+        assert(enemy.aiComboState == AIComboState::STARTER_GRAPPLE_LAUNCHER_ACTIVE ||
+               enemy.aiComboState == AIComboState::STARTER_GRAPPLE_SHOVE_ACTIVE);
+
+        std::cout << "-> PASSED: Aggressive Duelist Grapple Pull & 2.0s Dash verified 100%!" << std::endl;
+    }
+
+    // -------------------------------------------------------------
+    // TEST 57: PASSIVE DUELIST: INVISIBILITY & STUN PUNISH
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 57] PASSIVE DUELIST: INVISIBILITY (1s/7s) & STUN PUNISH..." << std::endl;
+        Arena arena;
+        Player player(arena.getSpawnPosition());
+        Enemy enemy(arena.getEnemySpawnPosition(), EnemyType::DUELIST_PASSIVE);
+        enemy.setSmartAI(true);
+        CombatSystem combat;
+
+        // Verify configuration
+        assert(enemy.getType() == EnemyType::DUELIST_PASSIVE);
+        assert(EnemyConfig::get().duelistPassive.dodgeCooldown == 2.00f);
+        assert(EnemyConfig::get().duelistPassive.invisDuration == 1.00f);
+        assert(EnemyConfig::get().duelistPassive.invisCooldown == 7.00f);
+        assert(!enemy.isInvisible());
+
+        // Invisibility countdown test:
+        // Set combat state and cooldown timer almost expired (0.05s)
+        enemy.behaviorState = AIBehaviorState::CHASE;
+        enemy.invisCooldownTimer = 0.05f;
+        tick(0.06f, arena, player, enemy, combat);
+        assert(enemy.isInvisible());
+        assert(enemy.invisActiveTimer > 0.90f);
+
+        // Advance 0.5s -> still invisible
+        tick(0.50f, arena, player, enemy, combat);
+        assert(enemy.isInvisible());
+
+        // Advance 0.6s -> invisibility expired, cooldown reset to ~7.0s
+        tick(0.60f, arena, player, enemy, combat);
+        assert(!enemy.isInvisible());
+        assert(enemy.invisCooldownTimer > 5.5f);
+
+        // Stun Punish Mechanic:
+        // Position enemy near player
+        enemy.position = {player.position.x + 70.0f, player.position.y};
+        enemy.intelligence = 1.0f; // 100% chance to punish
+        enemy.stunPunishCooldown = 0.0f;
+
+        // Stun player
+        player.takeDamage(5.0f, 0.0f, 0.0f, 1.50f);
+        assert(player.isStunned());
+
+        // Update tick passes playerIsStunned=true
+        tick(0.016f, arena, player, enemy, combat);
+        assert(enemy.isPunishing());
+        assert(enemy.punishBannerTimer > 0.0f);
+        assert(enemy.aiComboState != AIComboState::IDLE);
+
+        std::cout << "-> PASSED: Passive Duelist Invisibility & Stun Punish verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

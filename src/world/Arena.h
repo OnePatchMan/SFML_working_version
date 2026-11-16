@@ -13,7 +13,7 @@ struct DoorBlock {
 
 struct EnemySpawnConfig {
     sf::Vector2f position;
-    int type = 0; // 0 = NORMAL, 1 = TANK, 2 = DUELIST
+    int type = 0; // 0 = NORMAL, 1 = TANK, 2 = DUELIST (Aggressive), 3 = DUELIST_PASSIVE (Passive)
 };
 
 enum class BloodDecalOrientation {

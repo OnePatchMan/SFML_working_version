@@ -39,7 +39,8 @@ int main() {
         } else {
             for (const auto& sp : spawns) {
                 EnemyType t = (sp.type == 1) ? EnemyType::TANK : 
-                              (sp.type == 2) ? EnemyType::DUELIST : EnemyType::NORMAL;
+                              (sp.type == 2) ? EnemyType::DUELIST : 
+                              (sp.type == 3) ? EnemyType::DUELIST_PASSIVE : EnemyType::NORMAL;
                 enemies.emplace_back(sp.position, t);
             }
         }
@@ -221,11 +222,12 @@ int main() {
                                   << (isSmartAIMode ? "УМНЫЙ ИИ (Комбо-боец)" : "ТРЕНИРОВОЧНЫЙ МАНЕКЕН (Dummy)") 
                                   << std::endl;
                     }
-                    // Y - циклическое переключение архетипов всех врагов (Normal -> Tank -> Duelist)
+                    // Y - циклическое переключение архетипов всех врагов (Normal -> Tank -> Duelist -> Duelist Passive)
                     if (keyPressed->code == sf::Keyboard::Key::Y) {
                         for (auto& e : enemies) {
                             EnemyType nextT = (e.getType() == EnemyType::NORMAL) ? EnemyType::TANK :
-                                              (e.getType() == EnemyType::TANK) ? EnemyType::DUELIST : EnemyType::NORMAL;
+                                              (e.getType() == EnemyType::TANK) ? EnemyType::DUELIST : 
+                                              (e.getType() == EnemyType::DUELIST) ? EnemyType::DUELIST_PASSIVE : EnemyType::NORMAL;
                             e.setType(nextT);
                             e.reset();
                         }
@@ -291,7 +293,7 @@ int main() {
                 arena.update(dt);
                 player.update(dt, arena, mouseWorld);
                 for (auto& e : enemies) {
-                    e.update(dt, arena, player.position);
+                    e.update(dt, arena, player.position, player.isStunned());
                 }
                 combat.update(dt, player, enemies);
 

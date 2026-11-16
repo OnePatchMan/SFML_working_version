@@ -58,9 +58,16 @@ void MapEditor::scanTileSprites() {
     }
     {
         IngameTileSpriteItem item;
-        item.name = "Дуэлянт";
+        item.name = "Дуэлянт (Агр)";
         item.filename = "enemy_duelist.png";
         item.tool = EditorTool::ENEMY_DUELIST;
+        _paletteSprites.push_back(std::move(item));
+    }
+    {
+        IngameTileSpriteItem item;
+        item.name = "Дуэлянт (Пасс)";
+        item.filename = "enemy_duelist_passive.png";
+        item.tool = EditorTool::ENEMY_DUELIST_PASSIVE;
         _paletteSprites.push_back(std::move(item));
     }
     {
@@ -246,9 +253,13 @@ void MapEditor::handleInput(const std::optional<sf::Event>& event, Arena& arena,
             _statusTimer = 2.0f;
         } else if (kp->code == sf::Keyboard::Key::Num7 || kp->code == sf::Keyboard::Key::Numpad7) {
             _tool = EditorTool::ENEMY_DUELIST;
-            _statusMessage = "Инструмент: Враг (Дуэлянт / Duelist - Доджи, блок, комбо)";
+            _statusMessage = "Инструмент: Враг (Дуэлянт Агрессивный - Фиолетовый, прессинг, длинный зацеп)";
             _statusTimer = 2.0f;
         } else if (kp->code == sf::Keyboard::Key::Num8 || kp->code == sf::Keyboard::Key::Numpad8) {
+            _tool = EditorTool::ENEMY_DUELIST_PASSIVE;
+            _statusMessage = "Инструмент: Враг (Дуэлянт Пассивный - Голубой, спейсинг, невидимость 1с/7с, паниш)";
+            _statusTimer = 2.0f;
+        } else if (kp->code == sf::Keyboard::Key::Num9 || kp->code == sf::Keyboard::Key::Numpad9) {
             _tool = EditorTool::ERASER;
             _statusMessage = "Инструмент: Ластик (стереть блок / врага)";
             _statusTimer = 2.0f;
@@ -561,11 +572,16 @@ void MapEditor::applyToolAt(int tx, int ty, Arena& arena, Player& player, Enemy&
         _statusTimer = 2.0f;
         return;
     }
-    if (_tool == EditorTool::ENEMY_SPAWN || _tool == EditorTool::ENEMY_TANK || _tool == EditorTool::ENEMY_DUELIST) {
+    if (_tool == EditorTool::ENEMY_SPAWN || _tool == EditorTool::ENEMY_TANK || 
+        _tool == EditorTool::ENEMY_DUELIST || _tool == EditorTool::ENEMY_DUELIST_PASSIVE) {
         arena.setTile(tx, ty, 0);
-        int enemyType = (_tool == EditorTool::ENEMY_TANK) ? 1 : (_tool == EditorTool::ENEMY_DUELIST) ? 2 : 0;
+        int enemyType = (_tool == EditorTool::ENEMY_TANK) ? 1 : 
+                        (_tool == EditorTool::ENEMY_DUELIST) ? 2 : 
+                        (_tool == EditorTool::ENEMY_DUELIST_PASSIVE) ? 3 : 0;
         arena.setEnemySpawnAt(tx, ty, enemyType);
-        std::string tName = (enemyType == 1) ? "Жирный (Tank)" : (enemyType == 2) ? "Дуэлянт (Duelist)" : "Обычный (Normal)";
+        std::string tName = (enemyType == 1) ? "Жирный (Tank)" : 
+                            (enemyType == 2) ? "Дуэлянт Агрессивный" : 
+                            (enemyType == 3) ? "Дуэлянт Пассивный" : "Обычный (Normal)";
         _statusMessage = "Враг [" + tName + "] установлен на [" + std::to_string(tx) + ", " + std::to_string(ty) + "] (Всего: " + std::to_string(arena.getEnemySpawns().size()) + ")";
         _statusTimer = 2.0f;
         return;
@@ -677,11 +693,16 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             outCol = sf::Color(255, 60, 60, 240);
             txtCol = sf::Color(255, 120, 120);
             typePrefix = "Tank#";
-        } else if (eType == 2) { // DUELIST
+        } else if (eType == 2) { // DUELIST AGGRESSIVE
             fillCol = sf::Color(170, 70, 230, 75);
             outCol = sf::Color(190, 90, 255, 240);
             txtCol = sf::Color(220, 150, 255);
-            typePrefix = "Duel#";
+            typePrefix = "D-Agr#";
+        } else if (eType == 3) { // DUELIST PASSIVE
+            fillCol = sf::Color(35, 150, 225, 75);
+            outCol = sf::Color(45, 185, 245, 240);
+            txtCol = sf::Color(100, 220, 255);
+            typePrefix = "D-Pas#";
         } else { // NORMAL
             fillCol = sf::Color(150, 150, 150, 75);
             outCol = sf::Color(210, 210, 210, 240);
@@ -753,6 +774,11 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             brushRect.setPosition({static_cast<float>(_lastHoverTile.x) * ts, static_cast<float>(_lastHoverTile.y) * ts});
             brushRect.setFillColor(sf::Color(170, 70, 230, 90));
             brushRect.setOutlineColor(sf::Color(200, 90, 255, 255));
+        } else if (_tool == EditorTool::ENEMY_DUELIST_PASSIVE) {
+            brushRect.setSize({ts, ts});
+            brushRect.setPosition({static_cast<float>(_lastHoverTile.x) * ts, static_cast<float>(_lastHoverTile.y) * ts});
+            brushRect.setFillColor(sf::Color(35, 150, 225, 90));
+            brushRect.setOutlineColor(sf::Color(45, 185, 245, 255));
         } else if (_tool == EditorTool::ERASER) {
             brushRect.setSize({bW, bH});
             brushRect.setPosition({bX, bY});
@@ -804,8 +830,9 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
         toolsStr += (_tool == EditorTool::PLAYER_SPAWN ? ">> [4] Игрок (P) <<  " : "[4] Игрок  ");
         toolsStr += (_tool == EditorTool::ENEMY_SPAWN ? ">> [5] Обычный (Norm) <<  " : "[5] Обычный  ");
         toolsStr += (_tool == EditorTool::ENEMY_TANK ? ">> [6] Жирный (Tank) <<  " : "[6] Жирный  ");
-        toolsStr += (_tool == EditorTool::ENEMY_DUELIST ? ">> [7] Дуэлянт (Duel) <<  " : "[7] Дуэлянт  ");
-        toolsStr += (_tool == EditorTool::ERASER ? ">> [8] Ластик <<  " : "[8] Ластик  ");
+        toolsStr += (_tool == EditorTool::ENEMY_DUELIST ? ">> [7] Дуэлянт-Агр <<  " : "[7] Дуэль-Агр  ");
+        toolsStr += (_tool == EditorTool::ENEMY_DUELIST_PASSIVE ? ">> [8] Дуэлянт-Пасс <<  " : "[8] Дуэль-Пасс  ");
+        toolsStr += (_tool == EditorTool::ERASER ? ">> [9] Ластик <<  " : "[9] Ластик  ");
         toolsStr += "|  Кисть: [B] " + std::to_string(_brushSize) + "x" + std::to_string(_brushSize);
 
         sf::Text toolsText(*font, toSfString(toolsStr), 14);
@@ -1055,7 +1082,8 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_SPAWN) hotkeyStr = "[5]";
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_TANK) hotkeyStr = "[6]";
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) hotkeyStr = "[7]";
-            else if (_paletteSprites[i].tool == EditorTool::ERASER) hotkeyStr = "[8]";
+            else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) hotkeyStr = "[8]";
+            else if (_paletteSprites[i].tool == EditorTool::ERASER) hotkeyStr = "[9]";
 
             if (!hotkeyStr.empty()) {
                 sf::Text hkTxt(*font, hotkeyStr, 10);
@@ -1083,6 +1111,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_SPAWN) colorBox.setFillColor(sf::Color(180, 180, 180));
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_TANK) colorBox.setFillColor(sf::Color(240, 50, 50));
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) colorBox.setFillColor(sf::Color(170, 70, 230));
+            else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) colorBox.setFillColor(sf::Color(45, 185, 245));
             else if (_paletteSprites[i].tool == EditorTool::ERASER) colorBox.setFillColor(sf::Color(60, 60, 60));
             colorBox.setOutlineColor(sf::Color(200, 220, 240, 150));
             colorBox.setOutlineThickness(1.0f);
@@ -1093,7 +1122,8 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
                 if (_paletteSprites[i].tool == EditorTool::PLAYER_SPAWN) letter = "P";
                 else if (_paletteSprites[i].tool == EditorTool::ENEMY_SPAWN) letter = "N";
                 else if (_paletteSprites[i].tool == EditorTool::ENEMY_TANK) letter = "T";
-                else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) letter = "D";
+                else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) letter = "DA";
+                else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) letter = "DP";
                 else if (_paletteSprites[i].tool == EditorTool::DOOR) letter = "D";
                 else if (_paletteSprites[i].tool == EditorTool::ERASER) letter = "X";
                 if (!letter.empty()) {

@@ -113,6 +113,8 @@ public:
     bool isCounterWhiffStun() const { return _counterWhiffStunActive && isStunned(); }
     float getCounterWindowTimer() const { return _counterWindowTimer; }
     float getCounterCooldown() const { return _counterCooldown; }
+    float getDashCooldown() const { return _dashCooldown; }
+    float getSpotDodgeCooldown() const { return _spotDodgeCooldown; }
     void triggerCounterStance();
     void endCounterSuccess();
     void cancelCounterStance() { _isCounterStance = false; _counterWindowTimer = 0.0f; }

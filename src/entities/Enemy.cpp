@@ -61,8 +61,27 @@ void Enemy::setType(EnemyType type) {
         canDodge = ecfg.duelist.canDodge;
         aggressiveness = ecfg.duelist.aggressiveness;
         intelligence = ecfg.duelist.intelligence;
-        maxComboHits = (intelligence >= 0.7f) ? 3 : 2;
-        allowAirFollowup = (intelligence >= 0.6f);
+        maxComboHits = 3;
+        allowAirFollowup = true;
+    } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+        maxHp = ecfg.duelistPassive.hp;
+        scale = ecfg.duelistPassive.scale;
+        halfW = HALF_W * scale;
+        halfH = HALF_H * scale;
+        stunMultiplier = 1.0f;
+        knockMultiplier = 1.0f;
+        damageMultiplier = ecfg.duelistPassive.damageMult;
+        hitboxScale = 1.0f;
+        windupMultiplier = 1.0f;
+        canCounter = ecfg.duelistPassive.canCounter;
+        canBlock = ecfg.duelistPassive.canBlock;
+        canDodge = ecfg.duelistPassive.canDodge;
+        aggressiveness = ecfg.duelistPassive.aggressiveness;
+        intelligence = ecfg.duelistPassive.intelligence;
+        maxComboHits = 3;
+        allowAirFollowup = true;
+        invisActiveTimer = 0.0f;
+        invisCooldownTimer = ecfg.duelistPassive.invisCooldown;
     }
     hp = maxHp;
     displayedHp = maxHp;
@@ -73,7 +92,9 @@ void Enemy::triggerDodge(float dir) {
     const auto& ecfg = EnemyConfig::get();
     isDodging = true;
     dodgeTimer = 0.24f;
-    dodgeCooldownTimer = ecfg.duelist.dodgeCooldown;
+    dodgeCooldownTimer = (enemyType == EnemyType::DUELIST_PASSIVE) 
+                         ? ecfg.duelistPassive.dodgeCooldown 
+                         : ecfg.duelist.dodgeCooldown;
     dodgeDirection = dir;
     if (std::abs(dir) > 0.01f) {
         velocity.x = dir * 450.0f;
@@ -168,6 +189,11 @@ void Enemy::reset() {
     dodgeCooldownTimer = 0.0f;
     isPerfectDodged = false;
     perfectDodgeEffectTimer = 0.0f;
+    invisActiveTimer = 0.0f;
+    invisCooldownTimer = 7.0f;
+    stunPunishCooldown = 0.0f;
+    punishBannerTimer = 0.0f;
+    grappleBranchChoice = 0;
     spacingTimer = 0.0f;
     blockHoldTimer = 0.0f;
     diveSlamBounce = false;
@@ -267,7 +293,7 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
     if (isDead || hurtTimer > 0.0f || aiComboState != AIComboState::IDLE) return;
 
     if (forcedStarter >= 0) {
-        currentStarterType = static_cast<AIStarterType>(forcedStarter % 3);
+        currentStarterType = static_cast<AIStarterType>(forcedStarter % 4);
         if (forcedHitLimit > 0) {
             maxComboHits = forcedHitLimit;
             allowAirFollowup = (forcedHitLimit >= 3);
@@ -275,48 +301,36 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
             maxComboHits = 3;
             allowAirFollowup = true;
         }
+        if (currentStarterType == AIStarterType::STARTER_GRAPPLE_PULL) {
+            grappleBranchChoice = (nextStarterChoice % 2);
+        }
     } else {
-        currentStarterType = static_cast<AIStarterType>(nextStarterChoice % 3);
-        nextStarterChoice = (nextStarterChoice + 1) % 3;
-
-        if (forcedHitLimit > 0) {
-            maxComboHits = forcedHitLimit;
-            allowAirFollowup = (forcedHitLimit >= 3);
+        if (enemyType == EnemyType::DUELIST) {
+            // Агрессивный дуэлянт чередует 4 стартера, включая длинный зацеп Grapple Pull
+            currentStarterType = static_cast<AIStarterType>(nextStarterChoice % 4);
+            nextStarterChoice = (nextStarterChoice + 1) % 4;
+            grappleBranchChoice = (nextStarterChoice % 2);
+            maxComboHits = 3;
+            allowAirFollowup = true;
+        } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+            currentStarterType = static_cast<AIStarterType>(nextStarterChoice % 3);
+            nextStarterChoice = (nextStarterChoice + 1) % 3;
+            maxComboHits = 3;
+            allowAirFollowup = true;
         } else {
-            if (enemyType == EnemyType::NORMAL) {
-                // Обычный враг дает 1 комбо
-                maxComboHits = 1;
-                allowAirFollowup = false;
-            } else if (enemyType == EnemyType::TANK) {
-                // Жирный враг делает связку из 1-2 ударов
-                maxComboHits = 2;
-                allowAirFollowup = false;
-            } else if (enemyType == EnemyType::DUELIST) {
-                // Дуэлянт: интеллект (intelligence) определяет сложность комбо
-                if (intelligence >= 0.75f) {
-                    maxComboHits = 3;
-                    allowAirFollowup = true; // Полный лаунчер и воздушное жонглирование
-                } else if (intelligence >= 0.5f) {
-                    maxComboHits = (nextStarterChoice % 2 == 0) ? 3 : 2;
-                    allowAirFollowup = (intelligence >= 0.6f);
-                } else {
-                    maxComboHits = 1;
-                    allowAirFollowup = false;
-                }
+            currentStarterType = static_cast<AIStarterType>(nextStarterChoice % 3);
+            nextStarterChoice = (nextStarterChoice + 1) % 3;
+
+            if (forcedHitLimit > 0) {
+                maxComboHits = forcedHitLimit;
+                allowAirFollowup = (forcedHitLimit >= 3);
             } else {
-                // Вариативность серий ИИ по умолчанию:
-                static std::mt19937 comboRng(12345);
-                std::uniform_int_distribution<int> dist(1, 100);
-                int roll = dist(comboRng);
-                if (roll <= 25) {
+                if (enemyType == EnemyType::NORMAL) {
                     maxComboHits = 1;
                     allowAirFollowup = false;
-                } else if (roll <= 60) {
+                } else if (enemyType == EnemyType::TANK) {
                     maxComboHits = 2;
                     allowAirFollowup = false;
-                } else {
-                    maxComboHits = 3;
-                    allowAirFollowup = (dist(comboRng) <= 60);
                 }
             }
         }
@@ -344,6 +358,9 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
                            (maxComboHits == 2) ? "AI: 2-1 (HEAVY STRING)" : 
                                                  "AI: 2-1-db1 (REVERSE SWEEP LAUNCHER)";
         break;
+    case AIStarterType::STARTER_GRAPPLE_PULL:
+        currentComboName = "AI: GRAPPLE PULL [LONG REACH]";
+        break;
     }
 }
 
@@ -352,7 +369,7 @@ void Enemy::dropCombo() {
     aiComboState = AIComboState::IDLE;
     attackState = EnemyAttackState::RECOVERY;
     attackStateTimer = ecfg.stats.whiffRecovery; // Увеличенный стан-лок/восстановление при промахе (Whiff Recovery)
-    attackCooldown = 0.65f; // Быстро возвращается к бою (высокая агрессивность)
+    attackCooldown = (enemyType == EnemyType::DUELIST) ? 0.25f : 0.65f; // Агрессивный дуэлянт восстанавливается быстрее
     currentComboName = "";
     isAirSuspended = false;
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
@@ -363,7 +380,11 @@ void Enemy::finishCombo(bool hitConfirmed) {
     aiComboState = AIComboState::IDLE;
     attackState = EnemyAttackState::RECOVERY;
     attackStateTimer = hitConfirmed ? ecfg.stats.hitRecovery : ecfg.stats.whiffRecovery;
-    attackCooldown = hitConfirmed ? 0.45f : 0.65f;
+    if (enemyType == EnemyType::DUELIST) {
+        attackCooldown = hitConfirmed ? 0.20f : 0.35f; // Бешеный напор агрессивного дуэлянта без передышки
+    } else {
+        attackCooldown = hitConfirmed ? 0.45f : 0.65f;
+    }
     currentComboName = "";
     isAirSuspended = false;
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
@@ -374,7 +395,7 @@ void Enemy::stagger(float duration) {
     dropCombo();
 }
 
-void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) {
+void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned) {
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             deathFadeTimer -= dt;
@@ -392,6 +413,38 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
     if (perfectDodgeEffectTimer > 0.0f) {
         perfectDodgeEffectTimer -= dt;
         if (perfectDodgeEffectTimer <= 0.0f) isPerfectDodged = false;
+    }
+    if (invisActiveTimer > 0.0f) invisActiveTimer -= dt;
+    if (invisCooldownTimer > 0.0f) invisCooldownTimer -= dt;
+    if (stunPunishCooldown > 0.0f) stunPunishCooldown -= dt;
+    if (punishBannerTimer > 0.0f) punishBannerTimer -= dt;
+
+    // Тактическая невидимость пассивного дуэлянта (на 1с раз в 7с)
+    if (enemyType == EnemyType::DUELIST_PASSIVE && !isDead && hurtTimer <= 0.0f) {
+        if (invisCooldownTimer <= 0.0f && behaviorState != AIBehaviorState::PATROL) {
+            invisActiveTimer = 1.0f;
+            invisCooldownTimer = 7.0f;
+            SoundManager::get().play("1", 35.0f);
+        }
+    }
+
+    // Реакция на стан игрока (Паниш станов дуэлянтами, шанс зависит от интеллекта)
+    if ((enemyType == EnemyType::DUELIST || enemyType == EnemyType::DUELIST_PASSIVE) && !isDead && hurtTimer <= 0.0f) {
+        if (playerIsStunned && stunPunishCooldown <= 0.0f && aiComboState == AIComboState::IDLE) {
+            float roll = static_cast<float>(rand() % 1000) / 1000.0f;
+            if (roll <= intelligence) {
+                // Бот видит стан игрока и мгновенно срывается в сокрушительный паниш!
+                isBlocking = false;
+                blockHoldTimer = 0.0f;
+                attackCooldown = 0.0f;
+                stunPunishCooldown = 1.6f;
+                punishBannerTimer = 1.2f;
+                behaviorState = AIBehaviorState::COMBAT;
+                triggerComboSequence();
+            } else {
+                stunPunishCooldown = 0.8f;
+            }
+        }
     }
     if (spinTimer > 0.0f) {
         spinTimer -= dt;
@@ -578,52 +631,56 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
                     } else if (enemyType == EnemyType::DUELIST) {
                         baseSpeed = ecfg.duelist.speed;
                         spacingDist = ecfg.duelist.spacingDistance;
+                    } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+                        baseSpeed = ecfg.duelistPassive.speed;
+                        spacingDist = ecfg.duelistPassive.spacingDistance;
                     }
 
-                    // 1. ПОВЕДЕНИЕ ДУЭЛЯНТА (DUELIST):
-                    // Умеет доджить, контратаковать, держать блок, выжидать (footsies)
+                    // 1. ПОВЕДЕНИЕ АГРЕССИВНОГО ДУЭЛЯНТА (DUELIST AGGRESSIVE):
+                    // Бешеный напор без передышки, доджи сквозь игрока, непрерывный прессинг
                     if (enemyType == EnemyType::DUELIST) {
                         if (distToPlayer <= spacingDist && vertDist < 50.0f) {
-                            if (aggressiveness < 0.60f) {
-                                // ПАССИВНЫЙ ДУЭЛЯНТ: выжидает в блоке, отступает и ловит на контратаку / додж
-                                if (canBlock && !isBlocking && blockHoldTimer <= 0.0f) {
-                                    isBlocking = true;
-                                    blockHoldTimer = 0.40f;
-                                }
-                                if (distToPlayer < 75.0f) {
-                                    velocity.x = -dir * (baseSpeed * 0.65f); // Отход назад для дистанции
-                                } else {
-                                    velocity.x = 0.0f;
-                                }
-
-                                if (distToPlayer <= ecfg.counter.triggerDistance) {
-                                    if (canCounter && counterCooldownTimer <= 0.0f) {
-                                        triggerCounterStance();
-                                    } else if (canDodge && dodgeCooldownTimer <= 0.0f) {
-                                        // Spot dodge на месте или уворот назад в зависимости от интеллекта
-                                        float dDir = (intelligence >= 0.7f && distToPlayer < 50.0f) ? 0.0f : -dir;
-                                        triggerDodge(dDir);
-                                    }
-                                }
+                            if (canDodge && dodgeCooldownTimer <= 0.0f && distToPlayer < 70.0f && (nextStarterChoice % 2 == 0)) {
+                                triggerDodge(dir); // Агрессивный додж вперед сквозь игрока!
+                            } else if (canCounter && counterCooldownTimer <= 0.0f && distToPlayer <= ecfg.counter.triggerDistance) {
+                                triggerCounterStance();
                             } else {
-                                // АГРЕССИВНЫЙ ДУЭЛЯНТ: напористо идет на врага, применяет додж сквозь игрока
-                                if (canDodge && dodgeCooldownTimer <= 0.0f && distToPlayer < 65.0f && intelligence >= 0.6f && (nextStarterChoice % 3 == 0)) {
-                                    triggerDodge(dir); // Додж вперед сквозь игрока!
-                                } else if (canCounter && counterCooldownTimer <= 0.0f && distToPlayer <= ecfg.counter.triggerDistance) {
+                                velocity.x = dir * baseSpeed; // Давит вперед без передышки!
+                            }
+                        } else {
+                            velocity.x = dir * baseSpeed;
+                        }
+                    }
+                    // 2. ПОВЕДЕНИЕ ПАССИВНОГО ДУЭЛЯНТА (DUELIST PASSIVE):
+                    // Выверенный спейсинг, блок, парирование, тактическая невидимость на 1с раз в 7с
+                    else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+                        if (isInvisible()) {
+                            // Во время невидимости скрытно обходит с фланга на повышенной скорости
+                            velocity.x = dir * (baseSpeed * 1.35f);
+                        } else if (distToPlayer <= spacingDist && vertDist < 50.0f) {
+                            if (canBlock && !isBlocking && blockHoldTimer <= 0.0f) {
+                                isBlocking = true;
+                                blockHoldTimer = 0.50f;
+                            }
+                            if (distToPlayer < 85.0f) {
+                                velocity.x = -dir * (baseSpeed * 0.70f); // Грамотный отход назад
+                            } else {
+                                velocity.x = 0.0f;
+                            }
+
+                            if (distToPlayer <= ecfg.counter.triggerDistance) {
+                                if (canCounter && counterCooldownTimer <= 0.0f) {
                                     triggerCounterStance();
-                                } else if (distToPlayer > 48.0f) {
-                                    velocity.x = dir * baseSpeed;
-                                } else {
-                                    velocity.x = 0.0f;
+                                } else if (canDodge && dodgeCooldownTimer <= 0.0f) {
+                                    triggerDodge(0.0f); // Спот-додж на месте
                                 }
                             }
                         } else {
-                            // Обычное преследование
-                            float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.8f) : baseSpeed;
+                            float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.75f) : baseSpeed;
                             velocity.x = dir * stalkSpeed;
                         }
                     }
-                    // 2. ПОВЕДЕНИЕ ЖИРНОГО ВРАГА (TANK):
+                    // 3. ПОВЕДЕНИЕ ЖИРНОГО ВРАГА (TANK):
                     // Медленный, тяжелая броня, при близком контакте может закрыться блоком
                     else if (enemyType == EnemyType::TANK) {
                         if (distToPlayer <= 65.0f && vertDist < 50.0f && canBlock && blockHoldTimer <= 0.0f && (nextStarterChoice % 2 == 0)) {
@@ -637,7 +694,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
                             velocity.x = 0.0f;
                         }
                     }
-                    // 3. ПОВЕДЕНИЕ ОБЫЧНОГО ВРАГА (NORMAL):
+                    // 4. ПОВЕДЕНИЕ ОБЫЧНОГО ВРАГА (NORMAL):
                     else {
                         if (distToPlayer > 48.0f) {
                             float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.8f) : baseSpeed;
@@ -670,7 +727,8 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
                     }
 
                     // В радиусе атаки автоматически начинаем комбо-серию
-                    float attackTriggerDist = (enemyType == EnemyType::TANK) ? 280.0f : 260.0f;
+                    float attackTriggerDist = (enemyType == EnemyType::TANK) ? 280.0f : 
+                                              (enemyType == EnemyType::DUELIST) ? 300.0f : 260.0f;
                     if (distToPlayer < attackTriggerDist && vertDist < 80.0f && attackCooldown <= 0.0f) {
                         behaviorState = AIBehaviorState::COMBAT;
                         triggerComboSequence();
@@ -687,13 +745,16 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
             isFacingLeft = (playerPos.x < position.x);
             dir = isFacingLeft ? -1.0f : 1.0f;
             float distToPlayer = std::abs(playerPos.x - position.x);
-            float targetDist = (currentStarterType == AIStarterType::STARTER_21DB1) ? 54.0f : 48.0f;
+            float targetDist = (currentStarterType == AIStarterType::STARTER_GRAPPLE_PULL) ? 175.0f :
+                               (currentStarterType == AIStarterType::STARTER_21DB1) ? 54.0f : 48.0f;
             if (enemyType == EnemyType::TANK) targetDist *= 1.3f;
             if (distToPlayer > targetDist) {
                 float curApproach = ecfg.stats.approachSpeed;
                 if (enemyType == EnemyType::NORMAL) curApproach = ecfg.normal.approachSpeed;
                 else if (enemyType == EnemyType::TANK) curApproach = ecfg.tank.approachSpeed;
                 else if (enemyType == EnemyType::DUELIST) curApproach = ecfg.duelist.approachSpeed;
+                else if (enemyType == EnemyType::DUELIST_PASSIVE) curApproach = ecfg.duelistPassive.approachSpeed;
+                if (punishBannerTimer > 0.0f) curApproach *= 1.30f; // Ускоренный напор при панише стана
                 velocity.x = dir * curApproach; // Стремительный рывок на сближение
             } else {
                 velocity.x = 0.0f;
@@ -718,6 +779,13 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
                     attackState = EnemyAttackState::WINDUP;
                     attackStateTimer = ecfg.starter3.windup;
                     currentComboName = "AI: 2-1-db1 (REVERSE SWEEP LAUNCHER)";
+                    break;
+                case AIStarterType::STARTER_GRAPPLE_PULL:
+                    aiComboState = AIComboState::STARTER_GRAPPLE_WINDUP;
+                    aiStateTimer = 0.10f;
+                    attackState = EnemyAttackState::WINDUP;
+                    attackStateTimer = 0.10f;
+                    currentComboName = "AI: GRAPPLE PULL [LONG REACH]";
                     break;
                 }
             }
@@ -1137,6 +1205,116 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos) 
                 velocity.x = 0.0f; // Прыжок строго на месте!
                 attackState = EnemyAttackState::IDLE;
                 isAirSuspended = false;
+            }
+            break;
+        }
+
+        // =========================================================
+        // СТАРТЕР 4: Длинный зацеп с притягиванием (Grapple Pull)
+        // =========================================================
+        case AIComboState::STARTER_GRAPPLE_WINDUP: {
+            aiStateTimer -= dt;
+            if (aiStateTimer <= 0.0f) {
+                aiComboState = AIComboState::STARTER_GRAPPLE_ACTIVE;
+                aiStateTimer = 0.20f;
+                attackState = EnemyAttackState::ATTACKING;
+                SoundManager::get().playAttack("1", "", false, 75.0f);
+                attackStateTimer = 0.20f;
+                attackHasHit = false;
+                currentHbw = 200.0f; // ДЛИННЫЙ ХИТБОКС (200px)
+                currentHbh = 50.0f;
+                currentHbyOffset = -22.0f;
+                currentAttackDamage = 2.0f;
+                currentAttackKnockX = -dir * 580.0f; // Притягивает игрока к себе!
+                currentAttackKnockY = -25.0f;
+                currentAttackStun = 0.38f;
+                currentAttackIsDiveSlam = false;
+            }
+            break;
+        }
+
+        case AIComboState::STARTER_GRAPPLE_ACTIVE: {
+            aiStateTimer -= dt;
+            if (aiStateTimer <= 0.0f) {
+                if (!attackHasHit) {
+                    finishCombo(false);
+                } else {
+                    aiComboState = AIComboState::STARTER_GRAPPLE_RECOVERY;
+                    aiStateTimer = 0.08f;
+                    attackState = EnemyAttackState::RECOVERY;
+                    attackStateTimer = 0.08f;
+                }
+            }
+            break;
+        }
+
+        case AIComboState::STARTER_GRAPPLE_RECOVERY: {
+            aiStateTimer -= dt;
+            if (aiStateTimer <= 0.0f) {
+                if (grappleBranchChoice == 0) {
+                    // Ветка А: Скай-Лаунчер (подброс в воздух)
+                    aiComboState = AIComboState::STARTER_GRAPPLE_LAUNCHER_ACTIVE;
+                    aiStateTimer = 0.16f;
+                    attackState = EnemyAttackState::ATTACKING;
+                    SoundManager::get().playAttack("2", "", false, 75.0f);
+                    attackStateTimer = 0.16f;
+                    attackHasHit = false;
+                    currentHbw = 70.0f;
+                    currentHbh = 65.0f;
+                    currentHbyOffset = -30.0f;
+                    currentAttackDamage = 3.0f;
+                    currentAttackKnockX = dir * 60.0f;
+                    currentAttackKnockY = -530.0f;
+                    currentAttackStun = 0.40f;
+                    currentComboName = "AI: GRAPPLE -> SKY LAUNCHER!";
+                } else {
+                    // Ветка Б: Силовой толчок (Heavy Shove)
+                    aiComboState = AIComboState::STARTER_GRAPPLE_SHOVE_ACTIVE;
+                    aiStateTimer = 0.16f;
+                    attackState = EnemyAttackState::ATTACKING;
+                    SoundManager::get().playAttack("2", "", false, 75.0f);
+                    attackStateTimer = 0.16f;
+                    attackHasHit = false;
+                    currentHbw = 75.0f;
+                    currentHbh = 50.0f;
+                    currentHbyOffset = -20.0f;
+                    currentAttackDamage = 3.5f;
+                    currentAttackKnockX = dir * 650.0f;
+                    currentAttackKnockY = -40.0f;
+                    currentAttackStun = 0.45f;
+                    currentComboName = "AI: GRAPPLE -> HEAVY SHOVE!";
+                }
+            }
+            break;
+        }
+
+        case AIComboState::STARTER_GRAPPLE_LAUNCHER_ACTIVE: {
+            const auto& ecfg = EnemyConfig::get();
+            aiStateTimer -= dt;
+            if (aiStateTimer <= 0.0f) {
+                if (!attackHasHit) {
+                    finishCombo(false);
+                } else {
+                    aiComboState = AIComboState::CHASE_JUMP_1;
+                    aiStateTimer = ecfg.air1.jumpDuration;
+                    currentComboName = "AI: a1-adw2 (AIR SLAM JUGGLE)";
+                    velocity.y = ecfg.air1.jumpVelY;
+                    attackState = EnemyAttackState::IDLE;
+                    isAirSuspended = false;
+                }
+            }
+            break;
+        }
+
+        case AIComboState::STARTER_GRAPPLE_SHOVE_ACTIVE: {
+            aiStateTimer -= dt;
+            if (aiStateTimer <= 0.0f) {
+                if (!attackHasHit) {
+                    finishCombo(false);
+                } else {
+                    finishCombo(true);
+                    triggerDodge(dir); // Додж вперед вдогонку
+                }
             }
             break;
         }
@@ -1671,16 +1849,26 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     // ЦВЕТОВЫЕ ОТЛИЧИЯ АРХЕТИПОВ:
     // Обычный — серый
     // Жирный (Танк) — красный
-    // Дуэлянт — фиолетовый
+    // Агрессивный дуэлянт — фиолетовый
+    // Пассивный дуэлянт — голубой
     sf::Color baseColor;
     if (enemyType == EnemyType::NORMAL) {
         baseColor = sf::Color(135, 140, 150); // Серый цвет
     } else if (enemyType == EnemyType::TANK) {
         baseColor = sf::Color(215, 38, 48);   // Красный цвет
     } else if (enemyType == EnemyType::DUELIST) {
-        baseColor = sf::Color(145, 45, 215);  // Фиолетовый цвет
+        baseColor = sf::Color(155, 45, 225);  // Фиолетовый цвет (агрессивный)
+    } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+        baseColor = sf::Color(45, 185, 245);  // Голубой цвет (пассивный)
     } else {
         baseColor = isSmartAI ? sf::Color(110, 45, 150) : sf::Color(220, 75, 55);
+    }
+
+    if (isInvisible()) {
+        body.setFillColor(sf::Color(45, 185, 245, 30));
+        body.setOutlineColor(sf::Color(70, 220, 255, 60));
+        window.draw(body);
+        return; // Полная невидимость: скрываем полоску ХП и маркеры!
     }
 
     if (isCounterStanceActive()) {
@@ -1691,6 +1879,7 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     } else if (attackState == EnemyAttackState::ATTACKING) {
         if (enemyType == EnemyType::TANK) body.setFillColor(sf::Color(255, 60, 50));
         else if (enemyType == EnemyType::DUELIST) body.setFillColor(sf::Color(255, 50, 220));
+        else if (enemyType == EnemyType::DUELIST_PASSIVE) body.setFillColor(sf::Color(70, 230, 255));
         else body.setFillColor(sf::Color(220, 120, 120));
     } else if (attackState == EnemyAttackState::WINDUP) {
         body.setFillColor(sf::Color(255, 130, 40));  // Оранжевый замах
@@ -1760,6 +1949,9 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         if (enemyType == EnemyType::DUELIST) {
             slash.setFillColor(sf::Color(220, 40, 255, 160));
             slash.setOutlineColor(sf::Color(255, 225, 80, 230));
+        } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+            slash.setFillColor(sf::Color(40, 210, 255, 160));
+            slash.setOutlineColor(sf::Color(140, 245, 255, 230));
         } else if (enemyType == EnemyType::TANK) {
             slash.setFillColor(sf::Color(255, 45, 30, 170));
             slash.setOutlineColor(sf::Color(255, 210, 60, 230));
@@ -1842,8 +2034,11 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
             label = "TANK [HEAVY]";
             labelColor = sf::Color(255, 90, 90);
         } else if (enemyType == EnemyType::DUELIST) {
-            label = "DUELIST";
+            label = "DUELIST [AGGRESSIVE]";
             labelColor = sf::Color(215, 120, 255);
+        } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+            label = "DUELIST [PASSIVE]";
+            labelColor = sf::Color(80, 220, 255);
         }
         if (label != _cachedLabel) {
             _cachedLabel = label;
@@ -1852,6 +2047,17 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         _cachedNameText->setFillColor(labelColor);
         _cachedNameText->setPosition({barX + 2.0f, barY - 13.0f});
         window.draw(*_cachedNameText);
+
+        // Индикатор паниша стана
+        if (punishBannerTimer > 0.0f) {
+            if (!_cachedPunishText) {
+                _cachedPunishText.emplace(*font, toSfString("! PUNISH !"), 10);
+                _cachedPunishText->setStyle(sf::Text::Bold);
+                _cachedPunishText->setFillColor(sf::Color(255, 215, 0));
+            }
+            _cachedPunishText->setPosition({position.x - 24.0f, barY - 26.0f});
+            window.draw(*_cachedPunishText);
+        }
 
         // Индикатор уворота
         if (isDodging && _cachedDodgeText) {

@@ -8,14 +8,15 @@
 #include "entities/Enemy.h"
 
 enum class EditorTool {
-    PLATFORM = 1,        // '=' Тайл 1 (платформа / пол)
-    WALL = 2,            // '#' Тайл 2 (монолитная стена / блок)
-    DOOR = 3,            // 'D' Тайл 3 (дверь / переход между комнатами)
-    PLAYER_SPAWN = 4,    // 'P' Спавн игрока
-    ENEMY_SPAWN = 5,     // 'N' Спавн обычного врага (Normal)
-    ENEMY_TANK = 6,      // 'T' Спавн жирного врага (Tank)
-    ENEMY_DUELIST = 7,   // 'U' Спавн дуэлянта (Duelist)
-    ERASER = 8           // '.' Ластик (стереть блок / врага)
+    PLATFORM = 1,              // '=' Тайл 1 (платформа / пол)
+    WALL = 2,                  // '#' Тайл 2 (монолитная стена / блок)
+    DOOR = 3,                  // 'D' Тайл 3 (дверь / переход между комнатами)
+    PLAYER_SPAWN = 4,          // 'P' Спавн игрока
+    ENEMY_SPAWN = 5,           // 'N' Спавн обычного врага (Normal)
+    ENEMY_TANK = 6,            // 'T' Спавн жирного врага (Tank)
+    ENEMY_DUELIST = 7,         // 'U' Спавн дуэлянта агрессивного (Duelist Aggressive)
+    ENEMY_DUELIST_PASSIVE = 8, // 'V' Спавн дуэлянта пассивного (Duelist Passive)
+    ERASER = 9                 // '.' Ластик (стереть блок / врага)
 };
 
 class MapEditor {

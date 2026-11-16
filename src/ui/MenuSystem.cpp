@@ -305,7 +305,7 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
         drawKeybindRow(window, col2X, startRowY + rowH * 3, colW, "F6", "Вкл / Выкл редактор комнат", sf::Color(255, 180, 80));
         drawKeybindRow(window, col2X, startRowY + rowH * 4, colW, "Backspace", "Сброс арены и респавн врагов");
         drawKeybindRow(window, col2X, startRowY + rowH * 5, colW, "Tab", "Режим ИИ (Манекен / Умный ИИ)");
-        drawKeybindRow(window, col2X, startRowY + rowH * 6, colW, "Y", "Смена архетипа (Normal/Tank/Duelist)");
+        drawKeybindRow(window, col2X, startRowY + rowH * 6, colW, "Y", "Смена архетипа (Norm/Tank/D-Agr/D-Pas)");
         drawKeybindRow(window, col2X, startRowY + rowH * 7, colW, "PageUp / Down", "Предыдущая / следующая комната");
         drawKeybindRow(window, col2X, startRowY + rowH * 8, colW, "T", "Принудительная атака / комбо бота");
         drawKeybindRow(window, col2X, startRowY + rowH * 9, colW, "Мышь", "Прицеливание броска булавы");
@@ -497,13 +497,13 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         {"db1 -> u1", "Sky Pop-Up [ОРУЖИЕ]", "Удар назад с разворотом (db1) -> апперкот (u1) с подбросом под диагональный бросок", sf::Color(255, 110, 180)}
     };
 
-    float startRowY = y + 28.0f;
-    float rowH = 26.0f;
+    float startRowY = y + 26.0f;
+    float rowH = 24.0f;
 
     for (size_t i = 0; i < items.size(); ++i) {
         float ry = startRowY + i * rowH;
 
-        sf::RectangleShape rowBg({w - 30.0f, rowH - 3.0f});
+        sf::RectangleShape rowBg({w - 30.0f, rowH - 2.0f});
         rowBg.setPosition(sf::Vector2f(x + 15.0f, ry));
         rowBg.setFillColor((i % 2 == 0) ? sf::Color(22, 28, 40, 255) : sf::Color(27, 35, 52, 255));
         rowBg.setOutlineThickness(1.0f);
@@ -511,48 +511,48 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         window.draw(rowBg);
 
         // Инпуты комбо
-        sf::Text txtIn(*_font, toSfString(items[i].inputs), 13);
+        sf::Text txtIn(*_font, toSfString(items[i].inputs), 12);
         txtIn.setStyle(sf::Text::Bold);
         txtIn.setFillColor(items[i].col);
-        txtIn.setPosition(sf::Vector2f(x + 28.0f, ry + 2.0f));
+        txtIn.setPosition(sf::Vector2f(x + 28.0f, ry + 1.0f));
         window.draw(txtIn);
 
         // Разделитель
-        sf::RectangleShape div1({2.0f, 16.0f});
+        sf::RectangleShape div1({2.0f, 15.0f});
         div1.setPosition(sf::Vector2f(x + 210.0f, ry + 3.0f));
         div1.setFillColor(sf::Color(48, 65, 92, 170));
         window.draw(div1);
 
         // Имя комбо
-        sf::Text txtName(*_font, toSfString(items[i].name), 13);
+        sf::Text txtName(*_font, toSfString(items[i].name), 12);
         txtName.setStyle(sf::Text::Bold);
         txtName.setFillColor(sf::Color(245, 250, 255));
-        txtName.setPosition(sf::Vector2f(x + 225.0f, ry + 2.0f));
+        txtName.setPosition(sf::Vector2f(x + 225.0f, ry + 1.0f));
         window.draw(txtName);
 
         // Разделитель
-        sf::RectangleShape div2({2.0f, 16.0f});
+        sf::RectangleShape div2({2.0f, 15.0f});
         div2.setPosition(sf::Vector2f(x + 470.0f, ry + 3.0f));
         div2.setFillColor(sf::Color(48, 65, 92, 170));
         window.draw(div2);
 
         // Описание эффекта на всю оставшуюся ширину
-        sf::Text txtDesc(*_font, toSfString(items[i].desc), 12);
+        sf::Text txtDesc(*_font, toSfString(items[i].desc), 11);
         txtDesc.setFillColor(sf::Color(190, 208, 230));
-        txtDesc.setPosition(sf::Vector2f(x + 485.0f, ry + 3.0f));
+        txtDesc.setPosition(sf::Vector2f(x + 485.0f, ry + 2.0f));
         window.draw(txtDesc);
     }
 
     // Анти-спам плашка строго под всеми строками комбо (в собственной аккуратной рамке, без наложения на строки)
     float noteY = startRowY + static_cast<float>(items.size()) * rowH + 6.0f;
-    sf::RectangleShape noteBg({w - 30.0f, 26.0f});
+    sf::RectangleShape noteBg({w - 30.0f, 25.0f});
     noteBg.setPosition(sf::Vector2f(x + 15.0f, noteY));
     noteBg.setFillColor(sf::Color(38, 28, 16, 220));
     noteBg.setOutlineThickness(1.0f);
     noteBg.setOutlineColor(sf::Color(180, 125, 35, 200));
     window.draw(noteBg);
 
-    sf::Text antiSpam(*_font, toSfString("★ ПРАВИЛО АНТИ-СПАМА: Повтор одного и того же комбо дважды за 2.5 секунды наказывается оглушением игрока на 0.75с! Варьируйте связки!"), 12);
+    sf::Text antiSpam(*_font, toSfString("★ ПРАВИЛО АНТИ-СПАМА: Повтор одного и того же комбо дважды за 2.5 секунды наказывается оглушением игрока на 0.75с! Варьируйте связки!"), 11);
     antiSpam.setStyle(sf::Text::Bold);
     antiSpam.setFillColor(sf::Color(255, 195, 65));
     antiSpam.setPosition(sf::Vector2f(x + 25.0f, noteY + 3.0f));
@@ -621,16 +621,20 @@ void MenuSystem::drawEnemiesTab(sf::RenderWindow& window, float x, float y, floa
         {"АРХЕТИП 2: TANK (ТЯЖЕЛЫЙ БРОНЕНОСЕЦ)", "HP: 110 | Скорость: Медленная | Броня: Тяжелая (В 1.5 раза крупнее)",
          "Красный силуэт. Обладает огромным запасом здоровья и высокой устойчивостью к оглушению. Наносит сокрушительный урон с большой дистанции замаха.",
          sf::Color(255, 80, 80)},
-        {"АРХЕТИП 3: DUELIST (ДУЭЛЯНТ-МАСТЕР)", "HP: 65 | Скорость: Очень высокая | Броня: Средняя",
-         "Фиолетовый силуэт. Самый опасный и хитрый противник: ставит энергощит, парирует ваши атаки лазурной стойкой, совершает идеальные доджи с золотой волной и проводит полноценные комбо-цепочки!",
-         sf::Color(215, 110, 255)}
+        {"АРХЕТИП 3: DUELIST [AGGRESSIVE] (ДУЭЛЯНТ АГРЕССИВНЫЙ)", "HP: 65 | Скорость: Высокая | КД Рывка: 2.0с | Агрессия: 95%",
+         "Фиолетовый силуэт. Беспощадный прессинг: начинает бой с длиннейшего зацепа (Grapple Pull) через пол-арены, притягивает вас и ветвит атаку в небесный подброс или мощный толчок, не оставляя передышки!",
+         sf::Color(180, 80, 255)},
+        {"АРХЕТИП 4: DUELIST [PASSIVE] (ДУЭЛЯНТ ПАССИВНЫЙ)", "HP: 60 | Скорость: Высокая | КД Рывка: 2.0с | Интеллект: 95%",
+         "Голубой силуэт. Хладнокровный мастер спейсинга: держит дистанцию, входит в невидимость на 1 сек раз в 7 сек, филигранно блокирует и парирует удары, моментально панишит игрока в стане!",
+         sf::Color(45, 185, 245)}
     };
 
-    float startY = y + 16.0f;
-    float cardH = 95.0f;
+    float startY = y + 12.0f;
+    float cardH = 76.0f;
+    float cardGap = 8.0f;
 
     for (size_t i = 0; i < items.size(); ++i) {
-        float cy = startY + i * (cardH + 12.0f);
+        float cy = startY + i * (cardH + cardGap);
 
         sf::RectangleShape cardBg({w - 30.0f, cardH});
         cardBg.setPosition(sf::Vector2f(x + 15.0f, cy));
@@ -639,26 +643,26 @@ void MenuSystem::drawEnemiesTab(sf::RenderWindow& window, float x, float y, floa
         cardBg.setOutlineColor(items[i].col);
         window.draw(cardBg);
 
-        sf::Text txtName(*_font, toSfString(items[i].name), 16);
+        sf::Text txtName(*_font, toSfString(items[i].name), 15);
         txtName.setStyle(sf::Text::Bold);
         txtName.setFillColor(items[i].col);
-        txtName.setPosition(sf::Vector2f(x + 30.0f, cy + 10.0f));
+        txtName.setPosition(sf::Vector2f(x + 28.0f, cy + 7.0f));
         window.draw(txtName);
 
-        sf::Text txtStats(*_font, toSfString(items[i].hpSpeed), 13);
+        sf::Text txtStats(*_font, toSfString(items[i].hpSpeed), 12);
         txtStats.setFillColor(sf::Color(255, 220, 120));
-        txtStats.setPosition(sf::Vector2f(x + 30.0f, cy + 34.0f));
+        txtStats.setPosition(sf::Vector2f(x + 28.0f, cy + 28.0f));
         window.draw(txtStats);
 
-        sf::Text txtDesc(*_font, toSfString(items[i].desc), 13);
+        sf::Text txtDesc(*_font, toSfString(items[i].desc), 12);
         txtDesc.setFillColor(sf::Color(210, 225, 245));
-        txtDesc.setPosition(sf::Vector2f(x + 30.0f, cy + 58.0f));
+        txtDesc.setPosition(sf::Vector2f(x + 28.0f, cy + 48.0f));
         window.draw(txtDesc);
     }
 
     // Состояния восприятия ИИ
-    float aiInfoY = startY + 3 * (cardH + 12.0f) + 8.0f;
-    sf::Text aiInfo(*_font, toSfString("ПОВЕДЕНИЕ ИИ: [Лазурный визор] Патруль платформы -> [Желтый маркер !] Замечает игрока -> [Красный визор] Погоня и комбо-атака"), 13);
+    float aiInfoY = startY + 4 * (cardH + cardGap) + 6.0f;
+    sf::Text aiInfo(*_font, toSfString("ПОВЕДЕНИЕ ИИ: [Лазурный визор] Патруль -> [Желтый маркер !] Замечает игрока -> [Красный визор] Атака -> [! PUNISH !] Наказание стана"), 12);
     aiInfo.setStyle(sf::Text::Bold);
     aiInfo.setFillColor(sf::Color(80, 225, 255));
     aiInfo.setPosition(sf::Vector2f(x + 20.0f, aiInfoY));
