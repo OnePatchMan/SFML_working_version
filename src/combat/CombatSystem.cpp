@@ -1287,10 +1287,13 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
     // ОБНОВЛЕНИЕ БРОШЕННЫХ БУЛАВ (THROWN MACE PHYSICS & IMPACT)
     // -------------------------------------------------------------
     for (auto it = _thrownMaces.begin(); it != _thrownMaces.end(); ) {
-        it->lifetime -= dt;
-        if (it->lifetime <= 0.0f) {
-            it = _thrownMaces.erase(it);
-            continue;
+        // Оружие, лежащее на земле (grounded), НЕ исчезает со временем и ждет подбора игроком!
+        if (!it->grounded) {
+            it->lifetime -= dt;
+            if (it->lifetime <= 0.0f) {
+                it = _thrownMaces.erase(it);
+                continue;
+            }
         }
 
         if (it->hitCooldown > 0.0f) it->hitCooldown -= dt;

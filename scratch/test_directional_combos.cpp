@@ -4102,7 +4102,7 @@ int main() {
 
         // Aggressive Duelist Grapple Pull test:
         // Position enemy facing right towards player at distance 140 (within 200px long grapple range)
-        enemy.position = {200.0f, arena.getSpawnPosition().y};
+        enemy.position = {200.0f, arena.getSpawnPosition().y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
         player.position = {340.0f, arena.getSpawnPosition().y};
         enemy.triggerComboSequence(static_cast<int>(AIStarterType::STARTER_GRAPPLE_PULL));
 
@@ -4127,6 +4127,14 @@ int main() {
         tick(0.09f, arena, player, enemy, combat);
         assert(enemy.aiComboState == AIComboState::STARTER_GRAPPLE_LAUNCHER_ACTIVE ||
                enemy.aiComboState == AIComboState::STARTER_GRAPPLE_SHOVE_ACTIVE);
+
+        // Ground-Only Grapple Pull test: when duelist is in mid-air, grapple pull is strictly forbidden!
+        enemy.reset();
+        enemy.position = {200.0f, arena.getSpawnPosition().y - 120.0f}; // high in the air
+        enemy.triggerComboSequence(static_cast<int>(AIStarterType::STARTER_GRAPPLE_PULL));
+        tick(0.016f, arena, player, enemy, combat);
+        assert(enemy.currentComboName.find("GRAPPLE") == std::string::npos);
+        std::cout << "-> Verified Grapple Pull is restricted to ground-only (blocked in mid-air)!" << std::endl;
 
         std::cout << "-> PASSED: Aggressive Duelist Grapple Pull & 1.5s Dash verified 100%!" << std::endl;
     }
@@ -4441,6 +4449,34 @@ int main() {
         std::cout << "-> Verified Duelist attacks when player is idle for > 0.325s!" << std::endl;
 
         std::cout << "-> PASSED: Aggressive Duelist Spacing & Idle Attack verified 100%!" << std::endl;
+    }
+
+    // -------------------------------------------------------------
+    // TEST 62: PERMANENT GROUNDED WEAPON (NO DESPAWN WHEN LYING ON FLOOR)
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 62] TESTING PERMANENT GROUNDED WEAPON (NO DESPAWN)..." << std::endl;
+        Arena arena;
+        Player player(arena.getSpawnPosition());
+        Enemy enemy(arena.getEnemySpawnPosition());
+        CombatSystem combat;
+
+        // Throw weapon downwards onto the solid floor
+        player.setHasWeapon(true);
+        combat.throwWeapon(player, player.position + sf::Vector2f(0.0f, 100.0f));
+        assert(!combat.getThrownMaces().empty());
+
+        // Simulate flight until it lands on the ground
+        for (int i = 0; i < 40; ++i) tick(0.016f, arena, player, enemy, combat);
+        assert(!combat.getThrownMaces().empty());
+        assert(combat.getThrownMaces()[0].grounded);
+
+        // Advance 30 seconds (previously lifetime was 25s)
+        for (int i = 0; i < 1875; ++i) tick(0.016f, arena, player, enemy, combat);
+        assert(!combat.getThrownMaces().empty());
+        assert(combat.getThrownMaces()[0].grounded);
+        std::cout << "-> Verified grounded mace persists indefinitely after 30+ seconds without despawning!" << std::endl;
+        std::cout << "-> PASSED: Grounded weapon permanence verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

@@ -311,8 +311,10 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
         }
     } else {
         if (enemyType == EnemyType::DUELIST) {
-            // Агрессивный дуэлянт чередует 4 стартера, включая длинный зацеп Grapple Pull
-            currentStarterType = static_cast<AIStarterType>(nextStarterChoice % 4);
+            // Агрессивный дуэлянт чередует 4 стартера, но длинный зацеп Grapple Pull разрешен ТОЛЬКО с земли!
+            bool isGrounded = Arena::getActive() ? Arena::getActive()->overlapsSolid(position.x, position.y + 3.0f, halfW, halfH, halfH) : true;
+            int starterPool = isGrounded ? 4 : 3;
+            currentStarterType = static_cast<AIStarterType>(nextStarterChoice % starterPool);
             nextStarterChoice = (nextStarterChoice + 1) % 4;
             grappleBranchChoice = (nextStarterChoice % 2);
             maxComboHits = 3;
@@ -847,8 +849,9 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                             triggerComboSequence();
                         }
                     } else if (enemyType == EnemyType::DUELIST) {
-                        // На дальней дистанции (130 - 220px) агрессивный дуэлянт периодически начинает бой длинным зацепом Grapple Pull
-                        if (distToPlayer > 130.0f && distToPlayer < 220.0f && vertDist < 60.0f && attackCooldown <= 0.0f && (nextStarterChoice % 2 == 0)) {
+                        // На дальней дистанции (130 - 220px) агрессивный дуэлянт СТРОГО С ЗЕМЛИ периодически начинает бой длинным зацепом Grapple Pull
+                        bool isGrounded = arena.overlapsSolid(position.x, position.y + 3.0f, halfW, halfH, halfH);
+                        if (isGrounded && distToPlayer > 130.0f && distToPlayer < 220.0f && vertDist < 60.0f && attackCooldown <= 0.0f && (nextStarterChoice % 2 == 0)) {
                             behaviorState = AIBehaviorState::COMBAT;
                             triggerComboSequence(static_cast<int>(AIStarterType::STARTER_GRAPPLE_PULL));
                         }
@@ -918,13 +921,24 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     attackStateTimer = ecfg.starter3.windup;
                     currentComboName = "AI: 2-1-db1 (REVERSE SWEEP LAUNCHER)";
                     break;
-                case AIStarterType::STARTER_GRAPPLE_PULL:
+                case AIStarterType::STARTER_GRAPPLE_PULL: {
+                    bool isGrounded = arena.overlapsSolid(position.x, position.y + 3.0f, halfW, halfH, halfH);
+                    if (!isGrounded) {
+                        // Если в воздухе — длинный зацеп запрещен, отменяем в обычный лаунчер 1f2d1
+                        aiComboState = AIComboState::LAUNCHER_1_WINDUP;
+                        aiStateTimer = ecfg.starter1.windup;
+                        attackState = EnemyAttackState::WINDUP;
+                        attackStateTimer = ecfg.starter1.windup;
+                        currentComboName = "AI: 1-f2-d1 (DIAGONAL LAUNCHER)";
+                        break;
+                    }
                     aiComboState = AIComboState::STARTER_GRAPPLE_WINDUP;
                     aiStateTimer = 0.10f;
                     attackState = EnemyAttackState::WINDUP;
                     attackStateTimer = 0.10f;
                     currentComboName = "AI: GRAPPLE PULL [LONG REACH]";
                     break;
+                }
                 }
             }
             break;
