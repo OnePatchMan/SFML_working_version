@@ -677,27 +677,46 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                         if (isInvisible()) {
                             // Во время невидимости скрытно обходит с фланга на повышенной скорости
                             velocity.x = dir * (baseSpeed * 1.35f);
-                        } else if (distToPlayer <= spacingDist && vertDist < 50.0f) {
-                            if (canBlock && !isBlocking && blockHoldTimer <= 0.0f) {
-                                isBlocking = true;
-                                blockHoldTimer = 0.50f;
-                            }
-                            if (distToPlayer < spacingDist * 0.85f) {
-                                velocity.x = -dir * (baseSpeed * 0.70f); // Грамотный отход назад, держит дистанцию
-                            } else {
-                                velocity.x = 0.0f; // Стоит на выверенной дистанции, выжидая ошибку
-                            }
+                        } else {
+                            // Активный выверенный спейсинг (держит идеальную дистанцию боя):
+                            // Коридор дистанции: minSpacing (~100px) и maxSpacing (~160px)
+                            float minSpacing = spacingDist * 0.88f;
+                            float maxSpacing = spacingDist * 1.40f;
 
-                            if (distToPlayer <= ecfg.counter.triggerDistance) {
-                                if (canCounter && counterCooldownTimer <= 0.0f) {
-                                    triggerCounterStance();
-                                } else if (canDodge && dodgeCooldownTimer <= 0.0f) {
-                                    triggerDodge(0.0f); // Спот-додж на месте
+                            if (distToPlayer < minSpacing && vertDist < 60.0f) {
+                                // Игрок напирает — дуэлянт пятится назад, сохраняя комфортную дистанцию
+                                float backFloorX = position.x - dir * (halfW + 12.0f);
+                                bool floorBehind = arena.overlapsSolid(backFloorX, position.y + halfH + 8.0f, 6.0f, 4.0f, 4.0f);
+                                if (floorBehind) {
+                                    velocity.x = -dir * (baseSpeed * 0.72f);
+                                } else {
+                                    velocity.x = 0.0f; // Не спрыгивать спиной с обрыва
+                                }
+
+                                if (canBlock && !isBlocking && blockHoldTimer <= 0.0f) {
+                                    isBlocking = true;
+                                    blockHoldTimer = 0.45f;
+                                }
+
+                                if (distToPlayer <= ecfg.counter.triggerDistance) {
+                                    if (canCounter && counterCooldownTimer <= 0.0f) {
+                                        triggerCounterStance();
+                                    } else if (canDodge && dodgeCooldownTimer <= 0.0f) {
+                                        triggerDodge(0.0f); // Спот-додж на месте
+                                    }
+                                }
+                            } else if (distToPlayer > maxSpacing && vertDist < 90.0f) {
+                                // Игрок отходит — пассивный дуэлянт подшагивает вперед, сохраняя дистанцию
+                                float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.60f) : (baseSpeed * 0.75f);
+                                velocity.x = dir * stalkSpeed;
+                            } else {
+                                // Идеальная зона спейсинга (золотая середина): держит стойку, следит за игроком
+                                velocity.x = 0.0f;
+                                if (canBlock && !isBlocking && blockHoldTimer <= 0.0f && (rand() % 100 < 20)) {
+                                    isBlocking = true;
+                                    blockHoldTimer = 0.35f;
                                 }
                             }
-                        } else {
-                            // Пассивный дуэлянт НЕ БЕЖИТ на игрока, а выжидает его ошибки!
-                            velocity.x = 0.0f;
                         }
                     }
                     // 3. ПОВЕДЕНИЕ ЖИРНОГО ВРАГА (TANK):
@@ -1611,7 +1630,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 if (currentStarterType == AIStarterType::STARTER_21DB1) {
                     currentAttackKnockX = curDir * ecfg.air2.finalKnockXVertical;
                 }
-                currentAttackIsDiveSlam = true;
+                currentAttackIsDiveSlam = false; // Финишер комбо — не активирует повторный дайв-слэм отскок игрока
                 velocity.y = ecfg.air2.diveSpeedY; // Пикируют вместе вниз
             }
             break;

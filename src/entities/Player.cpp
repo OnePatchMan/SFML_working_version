@@ -524,7 +524,7 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
                 // Отскок от пола ТОЛЬКО при ударе врага с дайв-слэмом или при получении урона от слэма
                 if (diveSlamBounce) {
                     velocity.y = -280.0f;
-                    velocity.x = diveSlamDir * 1150.0f;
+                    velocity.x *= 0.65f; // Сохраняем умеренный боковой импульс, не переназначая гигантскую скорость заново
                     diveSlamBounce = false;
                     _isOnGround = false;
                 } else if (_stunTimer > 0.0f && velocity.y > 450.0f) {

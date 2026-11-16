@@ -61,7 +61,7 @@ struct AirFollowup2Config {
     float jumpDuration = 0.32f;
     EnemyAttackStats hitA1_1{0.0f, 0.12f, 0.05f, 1.0f, 60.0f, -40.0f, 0.35f, 0.0f, 70.0f, 55.0f, -25.0f, false};
     EnemyAttackStats hitA1_2{0.0f, 0.12f, 0.05f, 1.0f, 60.0f, -40.0f, 0.35f, 0.0f, 65.0f, 50.0f, -25.0f, false};
-    EnemyAttackStats hitAdw2{0.0f, 0.30f, 0.50f, 2.5f, 1150.0f, -280.0f, 0.52f, 0.0f, 80.0f, 65.0f, -15.0f, true};
+    EnemyAttackStats hitAdw2{0.0f, 0.30f, 0.50f, 2.5f, 1150.0f, -280.0f, 0.52f, 0.0f, 80.0f, 65.0f, -15.0f, false};
     float diveSpeedY = 1200.0f;
     float finalKnockXVertical = 600.0f;
 };
@@ -145,7 +145,7 @@ struct DuelistPassiveConfig {
     float aggressiveness = 0.25f;
     float intelligence = 0.95f;
     float dodgeCooldown = 2.00f;
-    float spacingDistance = 95.0f;
+    float spacingDistance = 115.0f;
     float invisDuration = 1.00f;
     float invisCooldown = 7.00f;
 };

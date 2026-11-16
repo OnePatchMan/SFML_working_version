@@ -4243,23 +4243,35 @@ int main() {
         passiveDuelist.setSmartAI(true);
         CombatSystem combat;
 
-        // 1. In neutral at 200px distance, passive duelist must NOT walk towards player
+        // 1. In spacing sweet spot (at ~130px distance), passive duelist holds ground
+        player.position = {270.0f, arena.getSpawnPosition().y}; // 130px away
+        passiveDuelist.position = {400.0f, arena.getSpawnPosition().y};
         passiveDuelist.behaviorState = AIBehaviorState::CHASE;
         passiveDuelist.forceDetectPlayer(player.position);
         tick(0.016f, arena, player, passiveDuelist, combat);
-        // Facing left (player is to left), velocity.x must NOT be negative (towards player)
         assert(passiveDuelist.velocity.x == 0.0f);
         assert(passiveDuelist.aiComboState == AIComboState::IDLE);
-        std::cout << "-> Verified Passive Duelist does NOT run at player, holds ground!" << std::endl;
+        std::cout << "-> Verified Passive Duelist holds ground in spacing sweet spot (~130px)!" << std::endl;
 
-        // 2. When player gets inside spacing distance (< 90px), passive duelist steps BACK
+        // 2. When player gets inside spacing distance (< 100px, e.g. 70px), passive duelist steps BACK
         player.position = {330.0f, arena.getSpawnPosition().y}; // 70px away
         passiveDuelist.behaviorState = AIBehaviorState::CHASE;
         passiveDuelist.forceDetectPlayer(player.position);
         tick(0.016f, arena, player, passiveDuelist, combat);
         // Stepping back from player on left means moving right (> 0)
         assert(passiveDuelist.velocity.x > 0.0f);
+        assert(passiveDuelist.aiComboState == AIComboState::IDLE);
         std::cout << "-> Verified Passive Duelist steps back when player closes in (" << passiveDuelist.velocity.x << " px/s)!" << std::endl;
+
+        // 3. When player moves away (> 160px, e.g. 230px), passive duelist steps FORWARD to maintain spacing
+        player.position = {170.0f, arena.getSpawnPosition().y}; // 230px away
+        passiveDuelist.behaviorState = AIBehaviorState::CHASE;
+        passiveDuelist.forceDetectPlayer(player.position);
+        tick(0.016f, arena, player, passiveDuelist, combat);
+        // Stepping towards player on left means moving left (< 0)
+        assert(passiveDuelist.velocity.x < 0.0f);
+        assert(passiveDuelist.aiComboState == AIComboState::IDLE);
+        std::cout << "-> Verified Passive Duelist steps forward when player retreats (" << passiveDuelist.velocity.x << " px/s)!" << std::endl;
 
         // 3. Duelist Blocks Thrown Flying Weapon (Mace)
         combat.reset();
