@@ -4185,6 +4185,52 @@ int main() {
         std::cout << "-> PASSED: Passive Duelist Invisibility & Stun Punish verified 100%!" << std::endl;
     }
 
+    // -------------------------------------------------------------
+    // TEST 58: ROOM 1 FIRST ENEMY PASSIVE DUELIST & ANTI-GLOBAL-AGGRO
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 58] ROOM 1 FIRST ENEMY (PASSIVE DUELIST) & AGGRO LEASH / RANGE..." << std::endl;
+        Arena arena;
+        arena.loadRoom(1);
+        const auto& spawns = arena.getEnemySpawns();
+        assert(!spawns.empty());
+        // Verify first enemy next to player (at 12, 5) is DUELIST_PASSIVE (type 3)
+        assert(spawns[0].type == 3);
+        std::cout << "-> Verified Room 1 enemy_0 type is DUELIST_PASSIVE (3)!" << std::endl;
+
+        // Distant Enemy Stun Test:
+        // Position player at x=100, duelist at distant location x=1500 (across the map)
+        Player player(arena.getSpawnPosition());
+        player.position = {100.0f, arena.getSpawnPosition().y};
+        Enemy distantDuelist({1500.0f, arena.getSpawnPosition().y}, EnemyType::DUELIST);
+        distantDuelist.setSmartAI(true);
+        CombatSystem combat;
+
+        // Stun player: distant enemy MUST NOT aggro or punish from across the map!
+        player.takeDamage(5.0f, 0.0f, 0.0f, 1.50f);
+        assert(player.isStunned());
+
+        tick(0.016f, arena, player, distantDuelist, combat);
+        assert(!distantDuelist.isPunishing());
+        assert(distantDuelist.behaviorState == AIBehaviorState::PATROL);
+        assert(distantDuelist.aiComboState == AIComboState::IDLE);
+        std::cout << "-> Verified distant enemy across map does NOT aggro on player stun!" << std::endl;
+
+        // Leash Test:
+        // When enemy was in chase mode, but player is beyond leash range (> 600px), enemy returns to PATROL
+        distantDuelist.position = {800.0f, arena.getSpawnPosition().y};
+        distantDuelist.behaviorState = AIBehaviorState::CHASE;
+        distantDuelist.forceDetectPlayer(player.position);
+
+        // Update tick with player at x=100 (dist = 700px > 600px leash)
+        tick(0.016f, arena, player, distantDuelist, combat);
+        assert(distantDuelist.behaviorState == AIBehaviorState::PATROL);
+        assert(!distantDuelist.hasDetectedPlayer);
+        std::cout << "-> Verified enemy de-aggros and returns to PATROL when player is out of range!" << std::endl;
+
+        std::cout << "-> PASSED: Room 1 Spawn & Anti-Global-Aggro verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;

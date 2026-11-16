@@ -431,18 +431,30 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     // Реакция на стан игрока (Паниш станов дуэлянтами, шанс зависит от интеллекта)
     if ((enemyType == EnemyType::DUELIST || enemyType == EnemyType::DUELIST_PASSIVE) && !isDead && hurtTimer <= 0.0f) {
         if (playerIsStunned && stunPunishCooldown <= 0.0f && aiComboState == AIComboState::IDLE) {
-            float roll = static_cast<float>(rand() % 1000) / 1000.0f;
-            if (roll <= intelligence) {
-                // Бот видит стан игрока и мгновенно срывается в сокрушительный паниш!
-                isBlocking = false;
-                blockHoldTimer = 0.0f;
-                attackCooldown = 0.0f;
-                stunPunishCooldown = 1.6f;
-                punishBannerTimer = 1.2f;
-                behaviorState = AIBehaviorState::COMBAT;
-                triggerComboSequence();
-            } else {
-                stunPunishCooldown = 0.8f;
+            const auto& ecfg = EnemyConfig::get();
+            float absX = std::abs(playerPos.x - position.x);
+            float absY = std::abs(playerPos.y - position.y);
+            float distSq = (playerPos.x - position.x) * (playerPos.x - position.x) + (playerPos.y - position.y) * (playerPos.y - position.y);
+            bool inFacingDir = isFacingLeft ? (playerPos.x < position.x) : (playerPos.x > position.x);
+            bool canNotice = ((inFacingDir && absX <= ecfg.perception.viewDistance && absY <= ecfg.perception.verticalViewSpan) ||
+                              (distSq <= ecfg.perception.rearViewDistance * ecfg.perception.rearViewDistance && absY <= ecfg.perception.verticalViewSpan * 0.8f) ||
+                              (behaviorState != AIBehaviorState::PATROL && absX <= ecfg.perception.viewDistance * 1.2f && absY <= ecfg.perception.verticalViewSpan * 1.2f)) &&
+                             arena.hasLineOfSight(position, playerPos);
+
+            if (canNotice) {
+                float roll = static_cast<float>(rand() % 1000) / 1000.0f;
+                if (roll <= intelligence) {
+                    // Бот видит стан игрока и мгновенно срывается в сокрушительный паниш!
+                    isBlocking = false;
+                    blockHoldTimer = 0.0f;
+                    attackCooldown = 0.0f;
+                    stunPunishCooldown = 1.6f;
+                    punishBannerTimer = 1.2f;
+                    behaviorState = AIBehaviorState::COMBAT;
+                    triggerComboSequence();
+                } else {
+                    stunPunishCooldown = 0.8f;
+                }
             }
         }
     }
@@ -619,7 +631,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     float distToPlayer = std::abs(targetPos.x - position.x);
                     float vertDist = std::abs(targetPos.y - position.y);
 
-                    // Базовые параметры движения по архетипам
+                    // Ограничение дистанции преследования: если игрок убежал далеко или на другой ярус карты
+                    if (distToPlayer > pcfg.viewDistance * 1.35f || vertDist > pcfg.verticalViewSpan * 1.5f) {
+                        hasDetectedPlayer = false;
+                        behaviorState = AIBehaviorState::PATROL;
+                        patrolStartX = position.x;
+                        patrolWaitTimer = pcfg.patrolWaitTime;
+                        velocity.x = 0.0f;
+                    } else {
+                        // Базовые параметры движения по архетипам
                     float baseSpeed = 220.0f;
                     float spacingDist = 48.0f;
                     if (enemyType == EnemyType::NORMAL) {
@@ -735,6 +755,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     }
                 }
             }
+        }
 
         switch (aiComboState) {
         case AIComboState::IDLE:
@@ -745,6 +766,19 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             isFacingLeft = (playerPos.x < position.x);
             dir = isFacingLeft ? -1.0f : 1.0f;
             float distToPlayer = std::abs(playerPos.x - position.x);
+            float vertDist = std::abs(playerPos.y - position.y);
+
+            // Если игрок оторвался слишком далеко — прерываем комбо-наскок
+            if (distToPlayer > ecfg.perception.viewDistance * 1.35f || vertDist > ecfg.perception.verticalViewSpan * 1.5f) {
+                dropCombo();
+                behaviorState = AIBehaviorState::PATROL;
+                hasDetectedPlayer = false;
+                patrolStartX = position.x;
+                patrolWaitTimer = ecfg.perception.patrolWaitTime;
+                velocity.x = 0.0f;
+                break;
+            }
+
             float targetDist = (currentStarterType == AIStarterType::STARTER_GRAPPLE_PULL) ? 175.0f :
                                (currentStarterType == AIStarterType::STARTER_21DB1) ? 54.0f : 48.0f;
             if (enemyType == EnemyType::TANK) targetDist *= 1.3f;
@@ -1620,7 +1654,14 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             float distToPlayer = std::abs(targetPos.x - position.x);
             float vertDist = std::abs(targetPos.y - position.y);
 
-            if (attackState == EnemyAttackState::IDLE) {
+            // Ограничение дистанции преследования манекена
+            if (distToPlayer > pcfg.viewDistance * 1.35f || vertDist > pcfg.verticalViewSpan * 1.5f) {
+                hasDetectedPlayer = false;
+                behaviorState = AIBehaviorState::PATROL;
+                patrolStartX = position.x;
+                patrolWaitTimer = pcfg.patrolWaitTime;
+                velocity.x = 0.0f;
+            } else if (attackState == EnemyAttackState::IDLE) {
                 if (distToPlayer > 48.0f) {
                     velocity.x = dir * 180.0f;
                 } else {

@@ -1029,6 +1029,11 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
                 sf::Vector2f pos = {static_cast<float>(x * _tileSize), 
                                     static_cast<float>((y + 1) * _tileSize - 28.0f)};
                 _enemySpawns.push_back({pos, 2});
+            } else if (c == 'V') {
+                _map[y][x] = 0; // Пассивный дуэлянт (Duelist Passive)
+                sf::Vector2f pos = {static_cast<float>(x * _tileSize), 
+                                    static_cast<float>((y + 1) * _tileSize - 28.0f)};
+                _enemySpawns.push_back({pos, 3});
             } else {
                 _map[y][x] = 0; // Воздух (., пробел и т.д.)
             }
@@ -1093,11 +1098,12 @@ bool Arena::saveToAsciiFile(const std::string& asciiPath) const {
     int pTx = static_cast<int>(std::round(_spawnPosition.x / _tileSize));
     int pTy = static_cast<int>(std::round((_spawnPosition.y + 30.0f) / _tileSize)) - 1;
 
-    std::vector<sf::Vector2i> enemyTiles;
-    for (const auto& esp : _enemySpawnPositions) {
-        int ex = static_cast<int>(std::round(esp.x / _tileSize));
-        int ey = static_cast<int>(std::round((esp.y + 28.0f) / _tileSize)) - 1;
-        enemyTiles.push_back({ex, ey});
+    struct EnemyTileInfo { int x; int y; int type; };
+    std::vector<EnemyTileInfo> enemyTiles;
+    for (const auto& esp : _enemySpawns) {
+        int ex = static_cast<int>(std::round(esp.position.x / _tileSize));
+        int ey = static_cast<int>(std::round((esp.position.y + 28.0f) / _tileSize)) - 1;
+        enemyTiles.push_back({ex, ey, esp.type});
     }
 
     std::vector<std::string> rows;
@@ -1112,7 +1118,8 @@ bool Arena::saveToAsciiFile(const std::string& asciiPath) const {
                 bool isEnemy = false;
                 for (const auto& et : enemyTiles) {
                     if (x == et.x && y == et.y) {
-                        row += 'E';
+                        char cType = (et.type == 1) ? 'T' : (et.type == 2) ? 'U' : (et.type == 3) ? 'V' : 'E';
+                        row += cType;
                         isEnemy = true;
                         break;
                     }
@@ -1166,7 +1173,8 @@ bool Arena::saveToImageFile(const std::string& imagePath) const {
                 for (const auto& et : enemyTiles) {
                     if (x == et.x && y == et.y) {
                         sf::Color col = (et.type == 1) ? sf::Color(255, 30, 30) : 
-                                        (et.type == 2) ? sf::Color(170, 70, 230) : sf::Color(180, 180, 180);
+                                        (et.type == 2) ? sf::Color(170, 70, 230) : 
+                                        (et.type == 3) ? sf::Color(45, 185, 245) : sf::Color(180, 180, 180);
                         img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, col);
                         isEnemy = true;
                         break;
@@ -1228,8 +1236,16 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
                 _map[y][x] = 1;
                 if (y > lowestFloorRow) lowestFloorRow = y;
             }
-            // Бирюзовый / Cyan = Дверь (D)
-            else if (c.g > 180 && c.b > 180 && c.r < 80) {
+            // Голубой / Лазурный = Спавн пассивного дуэлянта (Duelist Passive)
+            else if ((c.r == 45 && c.g == 185 && c.b == 245) ||
+                     (c.r >= 30 && c.r <= 70 && c.g >= 160 && c.g <= 210 && c.b >= 225)) {
+                _map[y][x] = 0;
+                sf::Vector2f pos = {static_cast<float>(x * _tileSize), 
+                                    static_cast<float>((y + 1) * _tileSize - 28.0f)};
+                _enemySpawns.push_back({pos, 3});
+            }
+            // Бирюзовый / Cyan = Дверь (D) (sf::Color(0, 229, 255))
+            else if (c.g > 180 && c.b > 180 && c.r < 25) {
                 _map[y][x] = 3;
                 int target = (x < _width / 2) ? (_currentRoomIndex == 1 ? _totalRooms : _currentRoomIndex - 1) : (_currentRoomIndex % _totalRooms + 1);
                 _doors.push_back({x, y, target});
@@ -1241,7 +1257,7 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
                                   static_cast<float>((y + 1) * _tileSize - 30.0f)};
                 foundPlayerSpawn = true;
             }
-            // Пурпурный / Фиолетовый = Спавн дуэлянта (Duelist)
+            // Пурпурный / Фиолетовый = Спавн дуэлянта (Duelist Aggressive)
             else if (c.r > 150 && c.g < 100 && c.b > 150) {
                 _map[y][x] = 0;
                 sf::Vector2f pos = {static_cast<float>(x * _tileSize), 
