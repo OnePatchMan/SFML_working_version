@@ -2435,9 +2435,9 @@ int main() {
         assert(arena.getBloodParticles().empty());
 
         // 1. Spawn blood burst on unique finisher impact
-        arena.spawnFinisherBlood({500.0f, 600.0f}, {400.0f, -300.0f}, 60);
-        assert(arena.getBloodParticles().size() == 60);
-        std::cout << "-> Blood burst spawned 60 flying particles with gravity and velocity!" << std::endl;
+        arena.spawnFinisherBlood({500.0f, 600.0f}, {400.0f, -300.0f}, 27);
+        assert(arena.getBloodParticles().size() == 27);
+        std::cout << "-> Blood burst spawned 27 flying particles with gravity and velocity!" << std::endl;
 
         // 2. Simulate physics until particles hit arena floor/walls
         for (int frame = 0; frame < 180; ++frame) {
@@ -3074,10 +3074,10 @@ int main() {
         // 1. Test Dive Slam (a1a1adw2) downward-diagonal blood direction
         // Force vector points forward and down (+0.707, +0.707)
         sf::Vector2f diveSlamForce(0.707f, 0.707f);
-        arena.spawnFinisherBlood({400.0f, 300.0f}, diveSlamForce, 50);
+        arena.spawnFinisherBlood({400.0f, 300.0f}, diveSlamForce, 27);
 
-        assert(arena.getBloodParticles().size() == 50);
-        assert(arena.getBackgroundBloodStreakCount() > 0);
+        assert(arena.getBloodParticles().size() == 27);
+        assert(arena.getBackgroundBloodStreakCount() == 12);
 
         // Verify that blood particles fly forward and down
         float avgVelX = 0.0f;
@@ -3088,35 +3088,25 @@ int main() {
             assert(bp.velocity.x > 0.0f); // Directed forward
             assert(bp.velocity.y > 0.0f); // Directed DOWN towards the floor
         }
-        avgVelX /= 50.0f;
-        avgVelY /= 50.0f;
-        assert(avgVelX > 200.0f);
-        assert(avgVelY > 200.0f);
+        avgVelX /= 27.0f;
+        avgVelY /= 27.0f;
+        assert(avgVelX > 50.0f);
+        assert(avgVelY > 50.0f);
         std::cout << "-> Dive Slam finisher: blood flies diagonally down-forward (velX=" 
                   << avgVelX << ", velY=" << avgVelY << ") towards the floor!" << std::endl;
 
-        // 2. Test Background Blood Streaks dripping down over time
+        // 2. Background blood droplets are static and contained (no massive dripping streams flooding the walls)
         size_t initialBgCount = arena.getBackgroundBloodStreakCount();
         const auto& bgBefore = arena.getBackgroundBloodStreaks();
-        size_t streamIdx = 0;
+        assert(initialBgCount == 12);
         for (size_t i = 0; i < bgBefore.size(); ++i) {
-            if (!bgBefore[i].isBlotch && bgBefore[i].active) {
-                streamIdx = i;
-                break;
-            }
+            assert(!bgBefore[i].active);
+            assert(bgBefore[i].isBlotch);
         }
-        float initialLength = bgBefore[streamIdx].length;
-        float initialPosY = bgBefore[streamIdx].currentPos.y;
-
-        // Update physics and background dripping
         arena.update(0.10f);
-
         const auto& bgAfter = arena.getBackgroundBloodStreaks();
         assert(bgAfter.size() == initialBgCount);
-        assert(bgAfter[streamIdx].length > initialLength); // Length increases
-        assert(bgAfter[streamIdx].currentPos.y > initialPosY); // Dripping downwards
-        std::cout << "-> Background streaks actively dripping down: initialLen=" << initialLength 
-                  << " -> newLen=" << bgAfter[streamIdx].length << ", speed=" << bgAfter[streamIdx].dripSpeed << " px/s!" << std::endl;
+        std::cout << "-> Background blood droplets stay static without flooding walls!" << std::endl;
 
         // 3. Simulate particles hitting the floor blocks
         // In arena, y >= 15 is solid floor (tileTop = 15 * 32 = 480)
@@ -3231,7 +3221,7 @@ int main() {
         sf::Vector2f hitPos(400.0f, 600.0f);
         sf::Vector2f uppercutForce(0.05f, -0.99f); // Направлен строго вверх в потолок
 
-        arena.spawnFinisherBlood(hitPos, uppercutForce, 65);
+        arena.spawnFinisherBlood(hitPos, uppercutForce, 27);
 
         // 1. Проверяем, что НИ ОДИН след на фоне не вылетел за пределы потолка наружу
         for (const auto& streak : arena.getBackgroundBloodStreaks()) {
@@ -3240,30 +3230,7 @@ int main() {
         }
         std::cout << "-> Verified: ZERO background streaks spawned or penetrated above solid ceiling!" << std::endl;
 
-        // 2. Проверяем, что кровь ударилась о потолок, задержалась на нижней кромке и стекает вниз
-        bool sawCeilingDrippingStreak = false;
-        for (const auto& streak : arena.getBackgroundBloodStreaks()) {
-            if (std::abs(streak.startPos.y - ceilingBottom) < 1.0f) {
-                sawCeilingDrippingStreak = true;
-                break;
-            }
-        }
-        assert(sawCeilingDrippingStreak);
-        std::cout << "-> Verified: Blood hits ceiling block, stays on bottom edge (y=" << ceilingBottom << ") and drips down!" << std::endl;
-
-        // 3. Проверяем наличие случайных вторичных брызг в других направлениях (влево, вправо, вниз)
-        bool sawLeftSplash = false;
-        bool sawRightSplash = false;
-        bool sawDownwardSplash = false;
-        for (const auto& streak : arena.getBackgroundBloodStreaks()) {
-            if (streak.startPos.x < hitPos.x - 15.0f) sawLeftSplash = true;
-            if (streak.startPos.x > hitPos.x + 15.0f) sawRightSplash = true;
-            if (streak.startPos.y > hitPos.y + 10.0f) sawDownwardSplash = true;
-        }
-        assert(sawLeftSplash && sawRightSplash && sawDownwardSplash);
-        std::cout << "-> Verified: Randomized secondary splashes cover left, right and downward directions around main upward plume!" << std::endl;
-
-        // 4. Симулируем 60 кадров движения частиц крови и проверяем, что ни одна частица не пробила потолок
+        // 2. Симулируем 60 кадров движения частиц крови и проверяем, что ни одна частица не пробила потолок
         for (int frame = 0; frame < 60; ++frame) {
             arena.update(0.016f);
             for (const auto& bp : arena.getBloodParticles()) {
@@ -3274,107 +3241,74 @@ int main() {
         }
         std::cout << "-> Verified: Continuous collision stops 100% of flying particles at ceiling surface without tunneling!" << std::endl;
 
-        // 5. Проверяем запекание на гранях блоков
+        // 3. Проверяем запекание на гранях блоков
         assert(arena.getBloodDecalCount() > 0);
         std::cout << "-> Verified: Decals created on ceiling & surfaces where blood impacted!" << std::endl;
 
-        std::cout << "-> PASSED: Solid Block Containment & Multi-Directional BG Blood Splatter verified 100%!" << std::endl;
+        std::cout << "-> PASSED: Solid Block Containment & Clean Subtle BG Blood Splatter verified 100%!" << std::endl;
     }
 
     // -------------------------------------------------------------
-    // TEST 48: Finisher Blood Quantity Scaling with Enemy Max HP
+    // TEST 48: Clean Controlled Blood Quantity on Death & Finishers
     // -------------------------------------------------------------
     {
-        std::cout << "\n[TEST 48] Testing Finisher Blood Quantity Scaling with Enemy Max HP..." << std::endl;
+        std::cout << "\n[TEST 48] Testing Clean Controlled Blood Quantity on Death & Finishers..." << std::endl;
         Arena arena;
         sf::Vector2f burstDir(0.707f, 0.707f);
         sf::Vector2f spawnPos(400.0f, 400.0f);
 
-        // 1. Weak / Minion Enemy (Max HP = 20.0f)
+        // 1. Weak Enemy (20 HP)
         arena.clearBlood();
-        arena.spawnFinisherBlood(spawnPos, burstDir, 65, 20.0f);
+        arena.spawnFinisherBlood(spawnPos, burstDir, 27, 20.0f);
         size_t weakParticles = arena.getBloodParticles().size();
         size_t weakStreaks = arena.getBackgroundBloodStreakCount();
-        std::cout << "Weak Enemy (20 HP): particles=" << weakParticles << ", bgStreaks=" << weakStreaks << std::endl;
 
-        // 2. Normal Enemy (Max HP = 45.0f)
+        // 2. Tank Enemy (110 HP)
         arena.clearBlood();
-        arena.spawnFinisherBlood(spawnPos, burstDir, 65, 45.0f);
-        size_t normalParticles = arena.getBloodParticles().size();
-        size_t normalStreaks = arena.getBackgroundBloodStreakCount();
-        std::cout << "Normal Enemy (45 HP): particles=" << normalParticles << ", bgStreaks=" << normalStreaks << std::endl;
-
-        // 3. Duelist Enemy (Max HP = 65.0f)
-        arena.clearBlood();
-        arena.spawnFinisherBlood(spawnPos, burstDir, 65, 65.0f);
-        size_t duelistParticles = arena.getBloodParticles().size();
-        size_t duelistStreaks = arena.getBackgroundBloodStreakCount();
-        std::cout << "Duelist Enemy (65 HP): particles=" << duelistParticles << ", bgStreaks=" << duelistStreaks << std::endl;
-
-        // 4. Tank Enemy (Max HP = 110.0f)
-        arena.clearBlood();
-        arena.spawnFinisherBlood(spawnPos, burstDir, 65, 110.0f);
+        arena.spawnFinisherBlood(spawnPos, burstDir, 27, 110.0f);
         size_t tankParticles = arena.getBloodParticles().size();
         size_t tankStreaks = arena.getBackgroundBloodStreakCount();
-        std::cout << "Tank Enemy (110 HP): particles=" << tankParticles << ", bgStreaks=" << tankStreaks << std::endl;
 
-        // Verify strict monotonic increase: Weak < Normal < Duelist < Tank
-        assert(weakParticles < normalParticles);
-        assert(normalParticles < duelistParticles);
-        assert(duelistParticles < tankParticles);
+        // Blood remains compact, satisfying, and doesn't flood arena with hundreds of streaks
+        assert(weakParticles == 27);
+        assert(tankParticles == 27);
+        assert(weakStreaks == 12);
+        assert(tankStreaks == 12);
 
-        assert(weakStreaks < normalStreaks);
-        assert(normalStreaks < duelistStreaks);
-        assert(duelistStreaks < tankStreaks);
-
-        // Tank (110 HP vs 45 HP Normal) should have more than 2x blood
-        assert(tankParticles >= static_cast<size_t>(normalParticles * 2.0f));
-        assert(tankStreaks >= static_cast<size_t>(normalStreaks * 2.0f));
-
-        std::cout << "-> Verified: Blood volume scales dynamically with maxHp (Tank has " 
-                  << tankParticles << " particles & " << tankStreaks << " streaks vs Normal " 
-                  << normalParticles << " particles & " << normalStreaks << " streaks)!" << std::endl;
-
-        std::cout << "-> PASSED: Finisher Blood Quantity Scaling with Enemy Max HP verified 100%!" << std::endl;
+        std::cout << "-> Verified: Blood volume is strictly controlled (27 particles, 12 bg spots) without excessive flood!" << std::endl;
+        std::cout << "-> PASSED: Clean Controlled Blood Quantity verified 100%!" << std::endl;
     }
 
     // -------------------------------------------------------------
-    // TEST 49: Static Background Blood Spray & Combo 12df2 Horizontal Knockback
+    // TEST 49: Static Background Blood Droplets & Combo 12df2 Horizontal Knockback
     // -------------------------------------------------------------
     {
-        std::cout << "\n[TEST 49] Testing Static Background Blood Spray & Combo 12df2 (Strictly X=600)..." << std::endl;
+        std::cout << "\n[TEST 49] Testing Static Background Blood Droplets & Combo 12df2 (Strictly X=600)..." << std::endl;
         Arena arena;
         arena.clearBlood();
         sf::Vector2f burstDir(1.0f, 0.0f);
         sf::Vector2f spawnPos(400.0f, 400.0f);
 
-        // 1. Verify Static Spray Blood on Background Wall
-        arena.spawnFinisherBlood(spawnPos, burstDir, 65, 45.0f);
+        // 1. Verify Static Spray/Droplets on Background Wall
+        arena.spawnFinisherBlood(spawnPos, burstDir, 27, 45.0f);
         const auto& streaks = arena.getBackgroundBloodStreaks();
-        int sprayCount = 0;
+        assert(streaks.size() == 12);
         for (const auto& s : streaks) {
-            if (s.isSpray) {
-                sprayCount++;
-                assert(!s.active);
-                assert(s.length == 0.0f);
-                assert(s.dripSpeed == 0.0f);
-            }
+            assert(!s.active);
+            assert(s.length == 0.0f);
+            assert(s.dripSpeed == 0.0f);
         }
-        std::cout << "Spawned static spray droplets count: " << sprayCount << std::endl;
-        assert(sprayCount >= 25);
 
-        // Update arena for 2.0 seconds: streaks may drip, but spray droplets MUST remain completely static!
+        // Update arena for 2.0 seconds: droplets MUST remain completely static!
         for (int i = 0; i < 40; ++i) {
             arena.update(0.05f);
         }
         for (const auto& s : arena.getBackgroundBloodStreaks()) {
-            if (s.isSpray) {
-                assert(!s.active);
-                assert(s.length == 0.0f); // Did not drip!
-                assert(s.currentPos == s.startPos); // Position unchanged!
-            }
+            assert(!s.active);
+            assert(s.length == 0.0f); // Did not drip!
+            assert(s.currentPos == s.startPos); // Position unchanged!
         }
-        std::cout << "-> Verified: Background blood spray droplets do NOT drip and stay completely static!" << std::endl;
+        std::cout << "-> Verified: Background blood droplets do NOT drip and stay completely static!" << std::endl;
 
         // 2. Verify Base Combo 12 (Push Enemy)
         CombatSystem combat;
@@ -3705,9 +3639,9 @@ int main() {
         size_t bgCount = arena.getBackgroundBloodStreakCount();
         std::cout << "-> Kill blood spawned: particles=" << count << ", bgDroplets=" << bgCount << std::endl;
 
-        // 1. Verify small particle count ("прям мало")
-        assert(count >= 7 && count <= 14);
-        assert(bgCount >= 2 && bgCount <= 6);
+        // 1. Verify particle count (increased by 3x: 27 particles, 12 bgDroplets)
+        assert(count == 27);
+        assert(bgCount == 12);
 
         // 2. Verify short distance / low speed ("без сильной дальности" <= 250 px/s)
         for (const auto& bp : arena.getBloodParticles()) {

@@ -159,324 +159,18 @@ bool Arena::raycastSolid(sf::Vector2f start, sf::Vector2f target, sf::Vector2f& 
     return false;
 }
 
-void Arena::spawnFinisherBlood(sf::Vector2f pos, sf::Vector2f burstDir, int count, float maxHp) {
-    static std::mt19937 rng(1337);
-    std::uniform_real_distribution<float> angleDist(-0.35f, 0.35f); // Сфокусированный направленный конус
-    std::uniform_real_distribution<float> speedDist(650.0f, 1750.0f); // Повышенная скорость вылета: кровь летит гораздо дальше!
-    std::uniform_real_distribution<float> sizeDist(2.5f, 5.5f);
-    std::uniform_real_distribution<float> lifeDist(2.5f, 6.0f);
-
-    float baseHp = CombatConfig::getFinisherBloodBaseHp();
-    if (baseHp <= 0.0f) baseHp = 45.0f;
-
-    // Множитель объема и плотности крови от максимального здоровья жертвы:
-    // Чем больше maxHp (например, 110 у Танка vs 45 у Обычного), тем больше вылетает крови и тем массивнее потеки!
-    float hpScale = std::clamp(maxHp / baseHp, 0.35f, 4.0f);
-    float sizeScale = std::clamp(std::sqrt(hpScale), 0.75f, 1.55f);
-
-    float len = std::hypot(burstDir.x, burstDir.y);
-    sf::Vector2f baseDir = (len > 0.001f) ? (burstDir / len) : sf::Vector2f(0.0f, -1.0f);
-
-    // 1. Летящие в направлении форсы частицы крови (капли и брызги, летящие на дальнюю дистанцию)
-    int particleCount = std::max(15, static_cast<int>(std::round(count * hpScale)));
-    for (int i = 0; i < particleCount; ++i) {
-        BloodParticle p;
-        p.position = pos + sf::Vector2f(angleDist(rng) * 8.0f, angleDist(rng) * 8.0f);
-
-        float speed = speedDist(rng);
-        float spreadAngle = angleDist(rng);
-        float cosA = std::cos(spreadAngle);
-        float sinA = std::sin(spreadAngle);
-        sf::Vector2f dir = {
-            baseDir.x * cosA - baseDir.y * sinA,
-            baseDir.x * sinA + baseDir.y * cosA
-        };
-        // Летит строго по вектору форсы спецприема на высокую дистанцию
-        p.velocity = dir * speed;
-        p.radius = sizeDist(rng) * sizeScale;
-        p.lifetime = lifeDist(rng);
-        p.active = true;
-
-        int cIdx = rng() % 4;
-        if (cIdx == 0) p.color = sf::Color(160, 10, 16, 240);
-        else if (cIdx == 1) p.color = sf::Color(195, 18, 26, 245);
-        else if (cIdx == 2) p.color = sf::Color(125, 5, 10, 235);
-        else p.color = sf::Color(175, 14, 22, 240);
-
-        _bloodParticles.push_back(p);
-    }
-
-    // 2. Густая кровь на заднем фоне (основной шлейф в направлении удара + случайные брызги в других направлениях)
-    sf::Vector2f normalDir(-baseDir.y, baseDir.x);
-
-    // Вспомогательная лямбда размещения следа на заднем фоне с трассировкой луча:
-    // если на пути есть твердый блок (потолок, стена, пол) — кровь ударяется о блок, задерживается на грани и стекает!
-    auto placeBgStreak = [&](BackgroundBloodStreak& streak, sf::Vector2f target) {
-        sf::Vector2f hitPoint;
-        sf::Vector2i hitTile;
-        sf::Vector2f hitNormal;
-        if (raycastSolid(pos, target, hitPoint, hitTile, hitNormal)) {
-            // Кровь ударилась о твердый блок: задерживается на грани и стекает!
-            if (hitNormal.y > 0.5f) {
-                // Удар в нижнюю кромку потолка
-                streak.startPos = sf::Vector2f(hitPoint.x, static_cast<float>((hitTile.y + 1) * _tileSize));
-                streak.currentPos = streak.startPos;
-                streak.length = 0.0f;
-                if (streak.maxLength > 0.0f) {
-                    streak.active = true;
-                }
-                // Задерживается на блоке: запекаем декаль на кромке потолка
-                BloodDecal decal;
-                decal.color = streak.color;
-                decal.thickness = 2.5f;
-                decal.orientation = BloodDecalOrientation::HORIZONTAL;
-                float stripLen = std::clamp(streak.width * 2.2f, 6.0f, 20.0f);
-                float tileLeft = static_cast<float>(hitTile.x * _tileSize);
-                float tileRight = static_cast<float>((hitTile.x + 1) * _tileSize);
-                decal.position = {std::clamp(hitPoint.x - stripLen * 0.5f, tileLeft, tileRight - stripLen), static_cast<float>((hitTile.y + 1) * _tileSize - 2.5f)};
-                decal.length = stripLen;
-                decal.radiusX = stripLen * 0.5f;
-                decal.radiusY = 2.5f;
-                _bloodDecals.push_back(decal);
-            } else if (std::abs(hitNormal.x) > 0.5f) {
-                // Удар в боковую грань стены
-                float wallX = (hitNormal.x < 0.0f) ? static_cast<float>(hitTile.x * _tileSize)
-                                                   : static_cast<float>((hitTile.x + 1) * _tileSize);
-                streak.startPos = sf::Vector2f(wallX, hitPoint.y);
-                streak.currentPos = streak.startPos;
-                streak.length = 0.0f;
-                if (streak.maxLength > 0.0f) {
-                    streak.active = true;
-                }
-                // Задерживается на блоке: запекаем декаль на кромке стены
-                BloodDecal decal;
-                decal.color = streak.color;
-                decal.thickness = 2.5f;
-                decal.orientation = BloodDecalOrientation::VERTICAL;
-                float stripLen = std::clamp(streak.width * 2.2f, 6.0f, 20.0f);
-                float tileTop = static_cast<float>(hitTile.y * _tileSize);
-                float tileBottom = static_cast<float>((hitTile.y + 1) * _tileSize);
-                float dX = (hitNormal.x < 0.0f) ? wallX : (wallX - 2.5f);
-                decal.position = {dX, std::clamp(hitPoint.y - stripLen * 0.5f, tileTop, tileBottom - stripLen)};
-                decal.length = stripLen;
-                decal.radiusX = 2.5f;
-                decal.radiusY = stripLen * 0.5f;
-                _bloodDecals.push_back(decal);
-            } else {
-                // Удар в верхнюю кромку пола
-                streak.startPos = sf::Vector2f(hitPoint.x, static_cast<float>(hitTile.y * _tileSize));
-                streak.currentPos = streak.startPos;
-                streak.length = 0.0f;
-                streak.active = false; // На полу не стекает вниз сквозь пол
-                BloodDecal decal;
-                decal.color = streak.color;
-                decal.thickness = 2.5f;
-                decal.orientation = BloodDecalOrientation::HORIZONTAL;
-                float stripLen = std::clamp(streak.width * 2.2f, 6.0f, 20.0f);
-                float tileLeft = static_cast<float>(hitTile.x * _tileSize);
-                float tileRight = static_cast<float>((hitTile.x + 1) * _tileSize);
-                decal.position = {std::clamp(hitPoint.x - stripLen * 0.5f, tileLeft, tileRight - stripLen), static_cast<float>(hitTile.y * _tileSize)};
-                decal.length = stripLen;
-                decal.radiusX = stripLen * 0.5f;
-                decal.radiusY = 2.5f;
-                _bloodDecals.push_back(decal);
-            }
-        } else {
-            // Свободное пространство перед задней стеной
-            streak.startPos = target;
-            streak.currentPos = target;
-            streak.length = 0.0f;
-        }
-    };
-
-    // 2.1. ОСНОВНОЙ ШЛЕЙФ: Плотные перекрывающиеся сгустки крови в эпицентре удара (Dense Blood Mass)
-    int blotchCount = std::max(10, static_cast<int>(std::round(28 * hpScale)));
-    for (int i = 0; i < blotchCount; ++i) {
-        BackgroundBloodStreak streak;
-        streak.isBlotch = true;
-        float fwd = -8.0f + static_cast<float>(rng() % 75);
-        float lat = angleDist(rng) * 36.0f;
-        sf::Vector2f target = pos + baseDir * fwd + normalDir * lat;
-
-        streak.maxLength = 0.0f;
-        streak.dripSpeed = 0.0f;
-        streak.width = (8.0f + static_cast<float>(rng() % 16)) * sizeScale;    // Ширина сгустка
-        streak.blotchH = (8.0f + static_cast<float>(rng() % 18)) * sizeScale;  // Высота сгустка
-        streak.active = false;
-
-        int cIdx = rng() % 4;
-        if (cIdx == 0) streak.color = sf::Color(72, 4, 8, 250);   // Темно-бордовый сгусток
-        else if (cIdx == 1) streak.color = sf::Color(98, 6, 12, 245);
-        else if (cIdx == 2) streak.color = sf::Color(128, 8, 16, 240);
-        else streak.color = sf::Color(155, 12, 20, 240);
-
-        placeBgStreak(streak, target);
-        _bgBloodStreaks.push_back(streak);
-    }
-
-    // 2.2. ОСНОВНОЙ ШЛЕЙФ: Толстые потоки (Heavy Dripping Streams)
-    int heavyCount = std::max(6, static_cast<int>(std::round(16 * hpScale)));
-    for (int i = 0; i < heavyCount; ++i) {
-        BackgroundBloodStreak streak;
-        float fwd = 8.0f + static_cast<float>(rng() % 220); // Дальний разлет вдоль форсы
-        float lat = angleDist(rng) * 42.0f;
-        sf::Vector2f target = pos + baseDir * fwd + normalDir * lat;
-
-        streak.maxLength = (60.0f + static_cast<float>(rng() % 160)) * sizeScale; // Длина потека
-        streak.dripSpeed = 32.0f + static_cast<float>(rng() % 40);  // Скорость 32..72 px/s
-        streak.width = (5.5f + static_cast<float>(rng() % 5)) * sizeScale;        // Толщина ручья
-        streak.active = true;
-
-        int cIdx = rng() % 3;
-        if (cIdx == 0) streak.color = sf::Color(105, 7, 12, 245);
-        else if (cIdx == 1) streak.color = sf::Color(135, 10, 18, 240);
-        else streak.color = sf::Color(165, 14, 22, 240);
-
-        placeBgStreak(streak, target);
-        _bgBloodStreaks.push_back(streak);
-    }
-
-    // 2.3. ОСНОВНОЙ ШЛЕЙФ: Средние ручьи (Medium Dripping Streams)
-    int medCount = std::max(10, static_cast<int>(std::round(26 * hpScale)));
-    for (int i = 0; i < medCount; ++i) {
-        BackgroundBloodStreak streak;
-        float fwd = 12.0f + static_cast<float>(rng() % 280);
-        float lat = angleDist(rng) * 48.0f;
-        sf::Vector2f target = pos + baseDir * fwd + normalDir * lat;
-
-        streak.maxLength = (40.0f + static_cast<float>(rng() % 130)) * sizeScale;
-        streak.dripSpeed = 25.0f + static_cast<float>(rng() % 32);
-        streak.width = (3.2f + static_cast<float>(rng() % 3)) * sizeScale;
-        streak.active = true;
-
-        int cIdx = rng() % 3;
-        if (cIdx == 0) streak.color = sf::Color(130, 9, 16, 235);
-        else if (cIdx == 1) streak.color = sf::Color(170, 15, 24, 235);
-        else streak.color = sf::Color(195, 20, 30, 240);
-
-        placeBgStreak(streak, target);
-        _bgBloodStreaks.push_back(streak);
-    }
-
-    // 2.4. ОСНОВНОЙ ШЛЕЙФ: Тонкие струйки (Fine Trickles)
-    int fineCount = std::max(12, static_cast<int>(std::round(30 * hpScale)));
-    for (int i = 0; i < fineCount; ++i) {
-        BackgroundBloodStreak streak;
-        float fwd = 15.0f + static_cast<float>(rng() % 350);
-        float lat = angleDist(rng) * 55.0f;
-        sf::Vector2f target = pos + baseDir * fwd + normalDir * lat;
-
-        streak.maxLength = (25.0f + static_cast<float>(rng() % 95)) * sizeScale;
-        streak.dripSpeed = 18.0f + static_cast<float>(rng() % 28);
-        streak.width = (1.5f + static_cast<float>(rng() % 2)) * sizeScale;
-        streak.active = true;
-
-        int cIdx = rng() % 3;
-        if (cIdx == 0) streak.color = sf::Color(140, 10, 18, 225);
-        else if (cIdx == 1) streak.color = sf::Color(180, 18, 26, 230);
-        else streak.color = sf::Color(205, 22, 32, 235);
-
-        placeBgStreak(streak, target);
-        _bgBloodStreaks.push_back(streak);
-    }
-
-    // 2.5. ОСНОВНОЙ ШЛЕЙФ: Мелкие крапинки (Spatter Specks)
-    int speckCount = std::max(15, static_cast<int>(std::round(45 * hpScale)));
-    for (int i = 0; i < speckCount; ++i) {
-        BackgroundBloodStreak streak;
-        float fwd = static_cast<float>(rng() % 380);
-        float lat = angleDist(rng) * 65.0f;
-        sf::Vector2f target = pos + baseDir * fwd + normalDir * lat;
-
-        streak.maxLength = (2.0f + static_cast<float>(rng() % 6)) * sizeScale;
-        streak.dripSpeed = 10.0f + static_cast<float>(rng() % 15);
-        streak.width = (2.0f + static_cast<float>(rng() % 3)) * sizeScale;
-        streak.active = true;
-
-        int cIdx = rng() % 3;
-        if (cIdx == 0) streak.color = sf::Color(120, 8, 14, 215);
-        else if (cIdx == 1) streak.color = sf::Color(165, 14, 22, 220);
-        else streak.color = sf::Color(190, 18, 28, 225);
-
-        placeBgStreak(streak, target);
-        _bgBloodStreaks.push_back(streak);
-    }
-
-    // 2.6. СЛУЧАЙНЫЕ БРЫЗГИ В ДРУГИХ НАПРАВЛЕНИЯХ (Randomized Secondary Splatters)
-    // Разлетаются во всех направлениях случайным образом, создавая естественное хаотичное рассеяние
-    int randSplashCount = std::max(14, static_cast<int>(std::round(38 * hpScale)));
-    std::uniform_real_distribution<float> randAngleDist(-3.14159f, 3.14159f);
-    for (int i = 0; i < randSplashCount; ++i) {
-        BackgroundBloodStreak streak;
-        float angle = randAngleDist(rng);
-        sf::Vector2f rDir(std::cos(angle), std::sin(angle));
-        float rDist = 15.0f + static_cast<float>(rng() % 150); // Меньший разлет, чем у основного шлейфа
-        sf::Vector2f target = pos + rDir * rDist;
-
-        streak.maxLength = (14.0f + static_cast<float>(rng() % 55)) * sizeScale;
-        streak.dripSpeed = 15.0f + static_cast<float>(rng() % 25);
-        streak.width = (1.3f + static_cast<float>(rng() % 3)) * sizeScale;   // Поменьше толщина ручейков
-        streak.active = (rng() % 5 != 0);                      // Часть застывает как точечные капли
-
-        int cIdx = rng() % 3;
-        if (cIdx == 0) streak.color = sf::Color(135, 9, 16, 230);
-        else if (cIdx == 1) streak.color = sf::Color(170, 14, 22, 235);
-        else streak.color = sf::Color(200, 18, 28, 240);
-
-        placeBgStreak(streak, target);
-        _bgBloodStreaks.push_back(streak);
-    }
-
-    // 2.7. СПРЕЕВИДНЫЕ БРЫЗГИ НА БГ (Fine Static Mist/Spray Droplets)
-    // Мелкие капли и крапинки тумана/спрея, оседающие на задней стене в широком конусе и не стекающие вниз
-    int sprayCount = std::max(25, static_cast<int>(std::round(55 * hpScale)));
-    std::uniform_real_distribution<float> sprayConeAngle(-0.85f, 0.85f); // Широкий спрей-конус
-    for (int i = 0; i < sprayCount; ++i) {
-        BackgroundBloodStreak streak;
-        streak.isSpray = true;
-        streak.isBlotch = false;
-        streak.length = 0.0f;
-        streak.maxLength = 0.0f;
-        streak.dripSpeed = 0.0f;
-        streak.active = false; // НЕ СТЕКАЕТ!
-
-        float spreadA = sprayConeAngle(rng);
-        float cosA = std::cos(spreadA);
-        float sinA = std::sin(spreadA);
-        sf::Vector2f sprayDir = {
-            baseDir.x * cosA - baseDir.y * sinA,
-            baseDir.x * sinA + baseDir.y * cosA
-        };
-        float dist = 10.0f + static_cast<float>(rng() % 360);
-        sf::Vector2f target = pos + sprayDir * dist;
-
-        // Мелкий размер пиксельных капель спрея (1..3.5px)
-        streak.width = (1.0f + static_cast<float>(rng() % 3)) * sizeScale;
-        streak.blotchH = (1.0f + static_cast<float>(rng() % 3)) * sizeScale;
-
-        int cIdx = rng() % 4;
-        if (cIdx == 0) streak.color = sf::Color(140, 10, 16, 210);
-        else if (cIdx == 1) streak.color = sf::Color(175, 14, 22, 220);
-        else if (cIdx == 2) streak.color = sf::Color(110, 8, 12, 200);
-        else streak.color = sf::Color(195, 18, 26, 225);
-
-        placeBgStreak(streak, target);
-        _bgBloodStreaks.push_back(streak);
-    }
-}
-
 void Arena::spawnKillBlood(sf::Vector2f pos, sf::Vector2f knockDir, float maxHp) {
     static std::mt19937 rng(4242);
-    std::uniform_real_distribution<float> angleDist(-0.85f, 0.85f);
-    std::uniform_real_distribution<float> speedDist(80.0f, 210.0f); // Прям мало и без сильной дальности
-    std::uniform_real_distribution<float> sizeDist(1.3f, 2.7f);
-    std::uniform_real_distribution<float> lifeDist(1.1f, 2.0f);
+    std::uniform_real_distribution<float> angleDist(-0.65f, 0.65f);
+    std::uniform_real_distribution<float> speedDist(90.0f, 230.0f); // Компактная дальность без огромных фонтанов
+    std::uniform_real_distribution<float> sizeDist(1.4f, 2.8f);
+    std::uniform_real_distribution<float> lifeDist(1.2f, 2.2f);
 
     float len = std::hypot(knockDir.x, knockDir.y);
     sf::Vector2f baseDir = (len > 0.001f) ? (knockDir / len) : sf::Vector2f(0.0f, -1.0f);
 
-    // 1. Малое количество аккуратных капель крови (8-10 частиц)
-    int particleCount = 9;
+    // 1. Увеличенное в ~3 раза количество аккуратных капель крови при смерти (ранее 9 -> теперь 27)
+    int particleCount = 27;
     for (int i = 0; i < particleCount; ++i) {
         BloodParticle p;
         p.position = pos + sf::Vector2f(angleDist(rng) * 4.0f, angleDist(rng) * 4.0f);
@@ -489,8 +183,10 @@ void Arena::spawnKillBlood(sf::Vector2f pos, sf::Vector2f knockDir, float maxHp)
             baseDir.x * cosA - baseDir.y * sinA,
             baseDir.x * sinA + baseDir.y * cosA
         };
-        // Мягкая дуга вверх, капли красиво и компактно опадают на пол вокруг тела
-        dir.y -= 0.35f;
+        // Мягкая дуга вверх только для горизонтальных ударов (чтобы удары вниз летели в пол, а апперкоты вверх)
+        if (std::abs(baseDir.y) < 0.35f) {
+            dir.y -= 0.30f;
+        }
         float dLen = std::hypot(dir.x, dir.y);
         if (dLen > 0.001f) dir /= dLen;
 
@@ -508,12 +204,13 @@ void Arena::spawnKillBlood(sf::Vector2f pos, sf::Vector2f knockDir, float maxHp)
         _bloodParticles.push_back(p);
     }
 
-    // 2. Буквально 3-4 маленьких точечных брызга на заднем плане в радиусе 10-18px
-    for (int i = 0; i < 4; ++i) {
+    // 2. Точечные капли на заднем фоне (ранее 4 -> теперь в 3 раза больше, 12 шт.)
+    for (int i = 0; i < 12; ++i) {
         BackgroundBloodStreak streak;
         streak.isBlotch = true;
+        streak.isSpray = true;
         float offsetAngle = static_cast<float>(rng() % 360) * 3.14159f / 180.0f;
-        float offsetDist = 3.0f + static_cast<float>(rng() % 15);
+        float offsetDist = 3.0f + static_cast<float>(rng() % 18);
         streak.startPos = pos + sf::Vector2f(std::cos(offsetAngle) * offsetDist, std::sin(offsetAngle) * offsetDist);
         streak.currentPos = streak.startPos;
         streak.length = 0.0f;
@@ -530,6 +227,12 @@ void Arena::spawnKillBlood(sf::Vector2f pos, sf::Vector2f knockDir, float maxHp)
 
         _bgBloodStreaks.push_back(streak);
     }
+}
+
+void Arena::spawnFinisherBlood(sf::Vector2f pos, sf::Vector2f burstDir, int count, float maxHp) {
+    // Избыточный огромный фонтан крови убран по запросу игрока.
+    // Эффект финишера теперь аккуратный и естественный, как при обычной смерти.
+    spawnKillBlood(pos, burstDir, maxHp);
 }
 
 void Arena::update(float dt) {
