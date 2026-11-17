@@ -88,6 +88,13 @@ public:
     static float getThrowUpwardUpGravity() { ensureInitialized(); return _throwUpwardUpGravity; }
     static float getThrowUpwardFallGravity() { ensureInitialized(); return _throwUpwardFallGravity; }
 
+    // Параметры отскока от стены (Wall Bounce / Wall Splat как в Mortal Kombat X)
+    static float getWallBounceDamage() { ensureInitialized(); return _wallBounceDamage; }
+    static float getWallBounceForceDamp() { ensureInitialized(); return _wallBounceForceDamp; }
+    static float getWallBouncePopY() { ensureInitialized(); return _wallBouncePopY; }
+    static float getWallBounceMinSpeed() { ensureInitialized(); return _wallBounceMinSpeed; }
+    static float getWallBounceHitstun() { ensureInitialized(); return _wallBounceHitstun; }
+
     // Получение параметров базовой атаки по ключу ("1", "f2", "dw1", "d1", "a1" и т.д.)
     static AttackStats getBaseAttack(const std::string& type) {
         ensureInitialized();
@@ -240,6 +247,16 @@ public:
                             try { _throwUpwardUpGravity = std::stof(val); } catch (...) {}
                         } else if (key == "upward_fall_gravity" || key == "upwardfallgravity") {
                             try { _throwUpwardFallGravity = std::stof(val); } catch (...) {}
+                        } else if (key == "wall_bounce_damage" || key == "wallbouncedamage") {
+                            try { _wallBounceDamage = std::stof(val); } catch (...) {}
+                        } else if (key == "wall_bounce_force_damp" || key == "wallbounceforcedamp") {
+                            try { _wallBounceForceDamp = std::stof(val); } catch (...) {}
+                        } else if (key == "wall_bounce_pop_y" || key == "wallbouncepopy") {
+                            try { _wallBouncePopY = std::stof(val); } catch (...) {}
+                        } else if (key == "wall_bounce_min_speed" || key == "wallbounceminspeed") {
+                            try { _wallBounceMinSpeed = std::stof(val); } catch (...) {}
+                        } else if (key == "wall_bounce_hitstun" || key == "wallbouncehitstun") {
+                            try { _wallBounceHitstun = std::stof(val); } catch (...) {}
                         } else if (blockStack.size() >= 3) {
                             const std::string& section = blockStack[1];
                             const std::string& entryId = blockStack[2];
@@ -308,6 +325,11 @@ private:
     inline static float _throwUpwardApexHoverTime = 0.16f;
     inline static float _throwUpwardUpGravity = 850.0f;
     inline static float _throwUpwardFallGravity = 680.0f;
+    inline static float _wallBounceDamage = 4.5f;
+    inline static float _wallBounceForceDamp = 0.28f;
+    inline static float _wallBouncePopY = -320.0f;
+    inline static float _wallBounceMinSpeed = 200.0f;
+    inline static float _wallBounceHitstun = 0.50f;
     inline static std::unordered_map<std::string, AttackStats> _attacks;
     inline static std::vector<ComboEntry> _combos;
     inline static std::unordered_map<std::string, size_t> _comboIndexMap;

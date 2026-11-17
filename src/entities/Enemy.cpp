@@ -1,6 +1,7 @@
 #include "entities/Enemy.h"
 #include "world/Arena.h"
 #include "audio/SoundManager.h"
+#include "combat/CombatSystem.h"
 #include <iostream>
 
 Enemy::Enemy(sf::Vector2f spawnPos, EnemyType type)
@@ -147,6 +148,10 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime)
         return true;
     }
 
+    if (hurtTimer <= 0.0f) {
+        hasWallBounced = false;
+    }
+
     hp -= amount;
     hurtTimer = stunTime * stunMultiplier;
     velocity.x = knockX * knockMultiplier;
@@ -202,6 +207,7 @@ void Enemy::reset() {
     spacingTimer = 0.0f;
     blockHoldTimer = 0.0f;
     diveSlamBounce = false;
+    hasWallBounced = false;
     diveSlamDir = 1.0f;
     respawnTimer = 0.0f;
     deathFadeTimer = 0.0f;
@@ -1867,6 +1873,9 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
 
     // Проверка, стоит ли противник на твердой поверхности
     bool isGrounded = arena.overlapsSolid(position.x, position.y + 1.0f, halfW, halfH, halfH);
+    if (isGrounded && hurtTimer <= 0.0f) {
+        hasWallBounced = false;
+    }
 
     // Защита от застревания в стенах при ударах (De-penetration / Unstuck logic)
     if (arena.overlapsSolid(position.x, position.y, halfW, halfH, halfH)) {
@@ -1894,6 +1903,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     if (deltaX != 0.0f) {
         float stepSign = (deltaX > 0.0f) ? 1.0f : -1.0f;
         float remaining = std::abs(deltaX);
+        float preCollisionSpeedX = std::abs(velocity.x);
         while (remaining > 0.0f) {
             float step = std::min(remaining, 1.0f) * stepSign;
             float nextX = position.x + step;
@@ -1912,7 +1922,53 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 position.x = nextX;
                 remaining -= std::abs(step);
             } else {
-                velocity.x = 0.0f;
+                // Столкновение со стеной!
+                // Механика отскока от стены (Wall Bounce как в Mortal Kombat X):
+                float minSpeed = CombatConfig::getWallBounceMinSpeed();
+                if (hurtTimer > 0.0f && preCollisionSpeedX >= minSpeed && !hasWallBounced && !isDead) {
+                    hasWallBounced = true;
+                    float bounceDmg = CombatConfig::getWallBounceDamage();
+                    float forceDamp = CombatConfig::getWallBounceForceDamp();
+                    float popY = CombatConfig::getWallBouncePopY();
+                    float bounceHitstun = CombatConfig::getWallBounceHitstun();
+
+                    hp -= bounceDmg;
+                    if (hp <= 0.0f) {
+                        hp = 0.0f;
+                        isDead = true;
+                        deathFadeTimer = 0.6f;
+                        respawnTimer = 0.0f;
+                        if (Arena::getActive()) {
+                            Arena::getActive()->spawnKillBlood(position, sf::Vector2f(-stepSign * 0.707f, -0.707f), maxHp);
+                        }
+                    }
+
+                    // Сильно сниженная форса (25-30% скорости, макс 240px/s в сторону от стены)
+                    velocity.x = -stepSign * std::min(240.0f, preCollisionSpeedX * forceDamp);
+                    velocity.y = popY;
+                    hurtTimer = std::max(hurtTimer, bounceHitstun);
+
+                    if (CombatSystem::getActive()) {
+                        CombatSystem::getActive()->addSpecialMarker(
+                            position + sf::Vector2f(0.0f, -45.0f),
+                            "★ WALL BOUNCE! (-" + std::to_string(static_cast<int>(bounceDmg)) + " HP) ★",
+                            sf::Color(255, 140, 40), 1.15f
+                        );
+                        CombatSystem::getActive()->triggerShake(0.20f, 6.0f);
+                    }
+
+                    SoundManager::get().play("adw2", 50.0f);
+
+                    if (Arena::getActive()) {
+                        Arena::getActive()->spawnFinisherBlood(
+                            sf::Vector2f(position.x + stepSign * halfW, position.y),
+                            sf::Vector2f(-stepSign * 0.8f, -0.6f),
+                            20, maxHp
+                        );
+                    }
+                } else {
+                    velocity.x = 0.0f;
+                }
                 break;
             }
         }

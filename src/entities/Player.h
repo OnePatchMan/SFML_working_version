@@ -119,6 +119,8 @@ public:
     void endCounterSuccess();
     void cancelCounterStance() { _isCounterStance = false; _counterWindowTimer = 0.0f; }
 
+    bool wasWallBounced() const { return _hasWallBounced; }
+
     void setFacingLocked(bool locked) { _facingLocked = locked; }
     bool isFacingLocked() const { return _facingLocked; }
 
@@ -196,6 +198,7 @@ private:
     float _blockStunTimer = 0.0f;
 
     bool _hasWeapon = true; // С самого начала персонаж появляется с булавой
+    bool _hasWallBounced = false; // Отскок от стены (Wall Splat как в Mortal Kombat X)
     mutable sf::Texture _heldMaceTexture;
     mutable std::optional<sf::Sprite> _heldMaceSprite;
     mutable bool _heldMaceLoaded = false;

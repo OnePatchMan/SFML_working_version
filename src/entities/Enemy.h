@@ -207,6 +207,10 @@ public:
     // Таймер бездействия игрока (для агрессивного дуэлянта)
     float playerIdleTimer = 0.0f;
 
+    // Механика отскока от стены (Wall Bounce как в Mortal Kombat X)
+    bool hasWallBounced = false; // Ограничение: максимум 1 отскок от стены за серию джаггла
+    bool wasWallBounced() const { return hasWallBounced; }
+
     // Кешированные текстовые элементы UI врага (исключают пересоздание sf::Text каждый кадр)
     mutable std::optional<sf::Text> _cachedNameText;
     mutable std::optional<sf::Text> _cachedDodgeText;

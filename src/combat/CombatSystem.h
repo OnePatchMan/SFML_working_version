@@ -36,6 +36,19 @@ enum class AttackInput {
 class CombatSystem {
 public:
     CombatSystem();
+    ~CombatSystem();
+
+    static CombatSystem* getActive() { return s_active; }
+    static void setActive(CombatSystem* cs) { s_active = cs; }
+
+    void addSpecialMarker(const sf::Vector2f& pos, const std::string& text, const sf::Color& color, float scale = 1.0f) {
+        _specialComboMarkers.push_back({pos, text, color, 0.85f, 0.85f, scale, 255.0f});
+    }
+
+    void triggerShake(float duration, float intensity) {
+        _shakeTimer = duration;
+        _shakeIntensity = intensity;
+    }
 
     void handleInput(const std::optional<sf::Event>& event, Player& player, const sf::Vector2f& mouseWorld);
     void update(float dt, Player& player, Enemy& enemy);
@@ -197,4 +210,6 @@ private:
 
     void updateInternal(float dt, Player& player, const std::vector<Enemy*>& enemiesList);
     void triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld);
+
+    inline static CombatSystem* s_active = nullptr;
 };

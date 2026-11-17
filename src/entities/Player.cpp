@@ -1,5 +1,7 @@
 #include "entities/Player.h"
 #include "world/Arena.h"
+#include "audio/SoundManager.h"
+#include "combat/CombatSystem.h"
 #include <iostream>
 
 Player::Player(sf::Vector2f spawnPos)
@@ -108,6 +110,7 @@ void Player::reset(sf::Vector2f spawnPos, bool withWeapon) {
     _simulatedVerticalDir = 0.0f;
     _simulatedMoveDir = 0.0f;
     _hasWeapon = withWeapon; // С самого начала персонаж появляется с булавой в руках (по умолчанию withWeapon=true)
+    _hasWallBounced = false;
     hp = maxHp;
     displayedHp = maxHp;
     isDead = false;
@@ -136,6 +139,10 @@ bool Player::takeDamage(float amount, float knockX, float knockY, float stunTime
         velocity.y = 0.0f;
         _blockStunTimer = 0.14f;     // Стан-лок защищающегося от каждого заблокированного удара
         return true;
+    }
+
+    if (_stunTimer <= 0.0f) {
+        _hasWallBounced = false;
     }
 
     cancelAttackAnimation();
@@ -514,7 +521,49 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
     if (_collisionEnabled) {
         bool hitX = moveAxis(position.x, deltaX, true, position.y, arena);
         if (hitX) {
-            velocity.x = 0.0f; // При столкновении со стеной скорость отброса гасится, игрок не вдавливается в стену
+            float preCollisionSpeedX = std::abs(velocity.x);
+            float minSpeed = CombatConfig::getWallBounceMinSpeed();
+            if (_stunTimer > 0.0f && preCollisionSpeedX >= minSpeed && !_hasWallBounced && !isDead) {
+                _hasWallBounced = true;
+                float bounceDmg = CombatConfig::getWallBounceDamage() * 0.75f;
+                float forceDamp = CombatConfig::getWallBounceForceDamp();
+                float popY = CombatConfig::getWallBouncePopY() * 0.9f;
+                float bounceHitstun = CombatConfig::getWallBounceHitstun();
+
+                hp -= bounceDmg;
+                if (hp <= 0.0f) {
+                    hp = 0.0f;
+                    isDead = true;
+                }
+
+                float stepSign = (deltaX > 0.0f) ? 1.0f : -1.0f;
+                // Сильно сниженная форса (25-30% скорости, макс 220px/s в сторону от стены):
+                velocity.x = -stepSign * std::min(220.0f, preCollisionSpeedX * forceDamp);
+                velocity.y = popY;
+                _stunTimer = std::max(_stunTimer, bounceHitstun);
+                _isOnGround = false;
+
+                if (CombatSystem::getActive()) {
+                    CombatSystem::getActive()->addSpecialMarker(
+                        position + sf::Vector2f(0.0f, -50.0f),
+                        "★ WALL SPLAT! (-" + std::to_string(static_cast<int>(bounceDmg)) + " HP) ★",
+                        sf::Color(255, 60, 60), 1.15f
+                    );
+                    CombatSystem::getActive()->triggerShake(0.20f, 6.0f);
+                }
+
+                SoundManager::get().play("adw2", 50.0f);
+
+                if (Arena::getActive()) {
+                    Arena::getActive()->spawnFinisherBlood(
+                        sf::Vector2f(position.x + stepSign * HALF_W, position.y),
+                        sf::Vector2f(-stepSign * 0.8f, -0.6f),
+                        18, 100.0f
+                    );
+                }
+            } else {
+                velocity.x = 0.0f; // При столкновении со стеной скорость отброса гасится, игрок не вдавливается в стену
+            }
         }
 
         bool hitY = moveAxis(position.y, deltaY, false, position.x, arena);
@@ -545,6 +594,10 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
             _isOnGround = false;
         } else {
             _isOnGround = arena.overlapsSolid(position.x, position.y + 1.0f, HALF_W, TOP_OFFSET, BOTTOM_OFFSET);
+        }
+
+        if (_isOnGround && _stunTimer <= 0.0f) {
+            _hasWallBounced = false;
         }
     } else {
         position.x += deltaX;

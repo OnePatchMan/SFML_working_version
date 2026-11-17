@@ -4479,6 +4479,76 @@ int main() {
         std::cout << "-> PASSED: Grounded weapon permanence verified 100%!" << std::endl;
     }
 
+    // -------------------------------------------------------------
+    // TEST 63: WALL BOUNCE / WALL SPLAT (MORTAL KOMBAT X STYLE)
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 63] TESTING WALL BOUNCE & DAMPED FORCE (MORTAL KOMBAT X STYLE)..." << std::endl;
+        Arena arena;
+        arena.loadRoom(1);
+        Player player(arena.getSpawnPosition());
+        CombatSystem combat;
+        CombatSystem::setActive(&combat);
+
+        // 1. Setup enemy near left wall of arena
+        // In room 1, TILE_SIZE=64, col 0 is wall (x<64), free air is x>=64+12=76
+        // Place enemy at x=110, y=floor
+        Enemy enemy({110.0f, arena.getSpawnPosition().y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+        enemy.setSmartAI(false);
+        float startHp = enemy.hp;
+
+        // Apply knockback towards left wall (-500 px/s):
+        enemy.takeDamage(10.0f, -500.0f, -20.0f, 0.40f);
+        assert(enemy.hurtTimer > 0.0f);
+        assert(!enemy.wasWallBounced());
+
+        // Advance 5-6 frames to hit the left wall at x=76
+        for (int i = 0; i < 6; ++i) {
+            tick(0.016f, arena, player, enemy, combat);
+            if (enemy.wasWallBounced()) break;
+        }
+
+        // Verify Wall Bounce triggered
+        assert(enemy.wasWallBounced());
+        // Verify wall bounce damage applied: (startHp - 10.0f - 4.5f)
+        float expectedHp = startHp - 10.0f - CombatConfig::getWallBounceDamage();
+        assert(std::abs(enemy.hp - expectedHp) < 0.2f);
+        std::cout << "-> Verified Wall Bounce dealt impact damage (-4.5 HP) on wall hit: HP = " << enemy.hp << std::endl;
+
+        // Verify force is heavily reduced/damped (NOT 100% reflected across screen, but ~28%):
+        // 500 * 0.28 = 140 px/s away from wall (> 0, moving right, <= 240 px/s)
+        assert(enemy.velocity.x > 0.0f);
+        assert(enemy.velocity.x <= 240.0f);
+        assert(enemy.velocity.x < 500.0f * 0.50f);
+        std::cout << "-> Verified Wall Bounce force is heavily damped (velocity.x = " << enemy.velocity.x << " px/s, NOT 500 px/s)!" << std::endl;
+
+        // Verify vertical pop-up for corner air juggle:
+        assert(enemy.velocity.y < 0.0f);
+        assert(std::abs(enemy.velocity.y - CombatConfig::getWallBouncePopY()) < 50.0f);
+        std::cout << "-> Verified Wall Bounce popped enemy up (velocity.y = " << enemy.velocity.y << " px/s) for corner juggle!" << std::endl;
+
+        // Verify hitstun is refreshed/extended for easy combo continuation:
+        assert(enemy.hurtTimer >= 0.40f);
+        std::cout << "-> Verified hitstun extended to " << enemy.hurtTimer << "s for corner combo link!" << std::endl;
+
+        // 2. Anti-infinite limiter test: hitting the wall again before landing does NOT wall-bounce again
+        float hpBeforeSecondHit = enemy.hp;
+        enemy.velocity.x = -400.0f; // force into wall again while still in air
+        for (int i = 0; i < 4; ++i) tick(0.016f, arena, player, enemy, combat);
+        // Should NOT take another wall bounce damage:
+        assert(enemy.hp == hpBeforeSecondHit);
+        std::cout << "-> Verified anti-infinite limiter: only 1 Wall Bounce allowed per combo sequence!" << std::endl;
+
+        // 3. Ground recovery reset test:
+        // When enemy lands on solid ground and recovers from stun, wall bounce resets
+        for (int i = 0; i < 90; ++i) tick(0.016f, arena, player, enemy, combat);
+        assert(enemy.hurtTimer <= 0.0f);
+        assert(!enemy.wasWallBounced());
+        std::cout << "-> Verified Wall Bounce state resets when enemy lands and recovers to neutral!" << std::endl;
+
+        std::cout << "-> PASSED: Wall Bounce & Damped Force (MKX style) verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;

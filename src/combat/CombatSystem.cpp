@@ -8,10 +8,17 @@
 #include <algorithm>
 
 CombatSystem::CombatSystem() {
+    s_active = this;
     std::string fontPath = resolveAssetPath("assets/fonts/font.ttf");
     _fontLoaded = _font.openFromFile(fontPath);
     std::string macePath = resolveAssetPath("assets/sprites/mace_tenderizer.png");
     _maceTextureLoaded = _maceTexture.loadFromFile(macePath);
+}
+
+CombatSystem::~CombatSystem() {
+    if (s_active == this) {
+        s_active = nullptr;
+    }
 }
 
 void CombatSystem::reset() {
