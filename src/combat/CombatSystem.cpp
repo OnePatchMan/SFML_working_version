@@ -1463,19 +1463,13 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                         bool wasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
                         enemy.takeDamage(maceDmg, hitDir.x * knockForce, hitDir.y * knockForce, 0.50f);
 
-                        // Если бросок был летальным — разлетается кровь в направлении форсы
+                        // Если бросок был летальным — разлетается куча крови в направлении форсы
                         if (!wasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f)) {
-                            if (speed >= 500.0f) {
-                                if (Arena::getActive()) {
-                                    Arena::getActive()->spawnFinisherBlood(enemy.position, hitDir, 65, enemy.maxHp);
-                                }
-                                _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -65.0f), 
-                                                                "★ LETHAL MACE THROW! ★", sf::Color(255, 60, 50), 1.0f, 1.0f, 1.25f, 255.0f});
-                            } else {
-                                if (Arena::getActive()) {
-                                    Arena::getActive()->spawnKillBlood(enemy.position, hitDir, enemy.maxHp);
-                                }
+                            if (Arena::getActive()) {
+                                Arena::getActive()->spawnFinisherBlood(enemy.position, hitDir, 65, enemy.maxHp);
                             }
+                            _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -65.0f), 
+                                                            "★ LETHAL MACE THROW! ★", sf::Color(255, 60, 50), 1.0f, 1.0f, 1.25f, 255.0f});
                         }
 
                         // Всплывающий урон
