@@ -1960,10 +1960,9 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     SoundManager::get().play("adw2", 50.0f);
 
                     if (Arena::getActive()) {
-                        Arena::getActive()->spawnFinisherBlood(
+                        Arena::getActive()->spawnWallBounceBlood(
                             sf::Vector2f(position.x + stepSign * halfW, position.y),
-                            sf::Vector2f(-stepSign * 0.8f, -0.6f),
-                            20, maxHp
+                            sf::Vector2f(-stepSign * 0.8f, -0.6f)
                         );
                     }
                 } else {
