@@ -131,6 +131,12 @@ public:
     void setTile(int tx, int ty, int tile);
 
     void resize(int newWidth, int newHeight);
+    void clearRoom(int fillTile = 0);
+    bool duplicateRoom(int targetRoom);
+    void restoreFromSnapshot(int w, int h, const std::vector<int>& tiles,
+                             const std::vector<DoorBlock>& doors,
+                             const std::vector<EnemySpawnConfig>& enemySpawns,
+                             sf::Vector2f playerSpawn);
 
     bool reload();
     bool saveToAsciiFile(const std::string& asciiPath = "assets/config/map.txt") const;

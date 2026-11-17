@@ -1713,6 +1713,47 @@ void Arena::resize(int newWidth, int newHeight) {
     _width = newWidth;
     _height = newHeight;
     _map = std::move(newMap);
+    _tilemapDirty = true;
+}
+
+void Arena::clearRoom(int fillTile) {
+    for (int y = 0; y < _height; ++y) {
+        for (int x = 0; x < _width; ++x) {
+            _map[y][x] = fillTile;
+        }
+    }
+    _doors.clear();
+    _enemySpawns.clear();
+    syncEnemySpawnPositions();
+    _tilemapDirty = true;
+}
+
+bool Arena::duplicateRoom(int targetRoom) {
+    if (targetRoom < 1 || targetRoom > _totalRooms || targetRoom == _currentRoomIndex) return false;
+    std::string base = "assets/maps/room_" + std::to_string(targetRoom);
+    saveToAsciiFile(base + ".txt");
+    saveToImageFile(base + ".png");
+    saveToKVCoordinates(base + ".kv");
+    return true;
+}
+
+void Arena::restoreFromSnapshot(int w, int h, const std::vector<int>& tiles,
+                                const std::vector<DoorBlock>& doors,
+                                const std::vector<EnemySpawnConfig>& enemySpawns,
+                                sf::Vector2f playerSpawn) {
+    _width = w;
+    _height = h;
+    _map.assign(h, std::vector<int>(w, 0));
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            _map[y][x] = tiles[y * w + x];
+        }
+    }
+    _doors = doors;
+    _enemySpawns = enemySpawns;
+    syncEnemySpawnPositions();
+    _spawnPosition = playerSpawn;
+    _tilemapDirty = true;
 }
 
 bool Arena::isDoor(int tx, int ty) const {

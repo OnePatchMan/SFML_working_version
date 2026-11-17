@@ -50,6 +50,7 @@ int main() {
         }
     };
     respawnEnemies();
+    mapEditor.setRespawnCallback([&]() { respawnEnemies(); });
 
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
     sf::RenderWindow window(desktop, "FightingComboGame", sf::State::Fullscreen);
@@ -197,9 +198,13 @@ int main() {
                     }
                     // F6 - Переключение режима ручного редактора карты
                     if (keyPressed->code == sf::Keyboard::Key::F6) {
-                        mapEditor.toggle(window, camera, player);
-                        if (!mapEditor.isActive()) {
-                            respawnEnemies();
+                        if (mapEditor.isPlaytesting()) {
+                            mapEditor.stopPlaytest(window, camera);
+                        } else {
+                            mapEditor.toggle(window, camera, player);
+                            if (!mapEditor.isActive()) {
+                                respawnEnemies();
+                            }
                         }
                         std::cout << "[EDITOR] " 
                                   << (mapEditor.isActive() ? "Режим редактора ВКЛЮЧЕН" : "Режим редактора ВЫКЛЮЧЕН") 
@@ -214,13 +219,15 @@ int main() {
                     }
                     // Tab - переключение режима противников (Манекен / Умный ИИ)
                     if (keyPressed->code == sf::Keyboard::Key::Tab) {
-                        isSmartAIMode = !isSmartAIMode;
-                        for (auto& e : enemies) {
-                            e.setSmartAI(isSmartAIMode);
+                        if (!mapEditor.isActive()) {
+                            isSmartAIMode = !isSmartAIMode;
+                            for (auto& e : enemies) {
+                                e.setSmartAI(isSmartAIMode);
+                            }
+                            std::cout << "[MODE] Режим всех врагов: " 
+                                      << (isSmartAIMode ? "УМНЫЙ ИИ (Комбо-боец)" : "ТРЕНИРОВОЧНЫЙ МАНЕКЕН (Dummy)") 
+                                      << std::endl;
                         }
-                        std::cout << "[MODE] Режим всех врагов: " 
-                                  << (isSmartAIMode ? "УМНЫЙ ИИ (Комбо-боец)" : "ТРЕНИРОВОЧНЫЙ МАНЕКЕН (Dummy)") 
-                                  << std::endl;
                     }
                     // Y - циклическое переключение архетипов всех врагов (Normal -> Tank -> Duelist -> Duelist Passive)
                     if (keyPressed->code == sf::Keyboard::Key::Y) {
@@ -273,11 +280,14 @@ int main() {
                     }
                 }
 
-                if (mapEditor.isActive()) {
+                if (mapEditor.isActive() && !mapEditor.isPlaytesting()) {
                     if (!enemies.empty()) {
                         mapEditor.handleInput(event, arena, player, enemies.front(), window, camera);
                     }
                 } else {
+                    if (mapEditor.isActive() && mapEditor.isPlaytesting()) {
+                        mapEditor.handlePlaytestInput(event, window, camera);
+                    }
                     player.handleInput(event);
                     combat.handleInput(event, player, mouseWorld);
                 }
@@ -285,7 +295,7 @@ int main() {
 
         // Обновление состояний
         if (!menuSystem.isInMenu()) {
-            if (mapEditor.isActive()) {
+            if (mapEditor.isActive() && !mapEditor.isPlaytesting()) {
                 if (!enemies.empty()) {
                     mapEditor.update(dt, arena, player, enemies.front(), window, camera);
                 }
@@ -361,7 +371,7 @@ int main() {
             combat.drawWorld(window, player);
             player.draw(window);
 
-            if (mapEditor.isActive()) {
+            if (mapEditor.isActive() && !mapEditor.isPlaytesting()) {
                 mapEditor.drawWorld(window, arena, mouseWorld, combat.getFont());
             }
         } else {
@@ -372,7 +382,12 @@ int main() {
         // 2. Отрисовка интерфейса
         window.setView(window.getDefaultView());
         if (mapEditor.isActive()) {
-            mapEditor.drawUI(window, arena, combat.getFont(), camera);
+            if (mapEditor.isPlaytesting()) {
+                combat.drawUI(window, &player);
+                mapEditor.drawPlaytestUI(window, combat.getFont());
+            } else {
+                mapEditor.drawUI(window, arena, combat.getFont(), camera);
+            }
         } else if (menuSystem.isInMenu()) {
             menuSystem.draw(window, mouseScreenPos);
             window.setMouseCursorVisible(menuSystem.isInMenu());

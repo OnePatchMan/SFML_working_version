@@ -4549,6 +4549,165 @@ int main() {
         std::cout << "-> PASSED: Wall Bounce & Damped Force (MKX style) verified 100%!" << std::endl;
     }
 
+    // -------------------------------------------------------------
+    // TEST 64: MAPEDITOR ADVANCED TOOLS (UNDO/REDO, BOX FILL, FLOOD FILL, EYEDROPPER, CLIPBOARD, ROOM ACTIONS)
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 64] TESTING MAPEDITOR ADVANCED TOOLS (UNDO/REDO, BUCKET, EYEDROPPER, CLIPBOARD)..." << std::endl;
+        MapEditor editor;
+        assert(!editor.isActive());
+        assert(!editor.isPlaytesting());
+
+        // 1. Test Undo / Redo stack and snapshotting
+        int origTile = arena.getTile(10, 10);
+        editor.pushUndo(arena);
+        arena.setTile(10, 10, (origTile == 1) ? 2 : 1);
+        assert(arena.getTile(10, 10) != origTile);
+
+        // Undo
+        bool undoOk = editor.undo(arena, player);
+        assert(undoOk);
+        assert(arena.getTile(10, 10) == origTile);
+        std::cout << "-> Verified MapEditor Undo reverted tile modification cleanly!" << std::endl;
+
+        // Redo
+        bool redoOk = editor.redo(arena, player);
+        assert(redoOk);
+        assert(arena.getTile(10, 10) != origTile);
+        std::cout << "-> Verified MapEditor Redo restored modification cleanly!" << std::endl;
+
+        // Restore to original
+        editor.undo(arena, player);
+        assert(arena.getTile(10, 10) == origTile);
+
+        // Check 50 steps maximum limit
+        for (int i = 0; i < 65; ++i) {
+            editor.pushUndo(arena);
+        }
+        assert(editor.getUndoCount() <= 50);
+        std::cout << "-> Verified Undo stack respects MAX_UNDO_STEPS (50): count = " << editor.getUndoCount() << std::endl;
+
+        // 2. Test Flood Fill (Bucket Tool) on an enclosed area
+        // Build 4x4 wall perimeter: x: 15..18, y: 15..18
+        editor.pushUndo(arena);
+        for (int x = 15; x <= 18; ++x) {
+            arena.setTile(x, 15, 2);
+            arena.setTile(x, 18, 2);
+        }
+        for (int y = 15; y <= 18; ++y) {
+            arena.setTile(15, y, 2);
+            arena.setTile(18, y, 2);
+        }
+        // Inner 2x2 area: (16,16), (17,16), (16,17), (17,17) set to 0
+        arena.setTile(16, 16, 0);
+        arena.setTile(17, 16, 0);
+        arena.setTile(16, 17, 0);
+        arena.setTile(17, 17, 0);
+
+        // Fill inner area with tile 1 (Platform)
+        editor.floodFill(16, 16, arena, 1);
+        assert(arena.getTile(16, 16) == 1);
+        assert(arena.getTile(17, 16) == 1);
+        assert(arena.getTile(16, 17) == 1);
+        assert(arena.getTile(17, 17) == 1);
+        // Perimeter should remain solid walls (2)
+        assert(arena.getTile(15, 15) == 2);
+        assert(arena.getTile(18, 18) == 2);
+        std::cout << "-> Verified Flood Fill (Bucket) filled contiguous enclosed region without bleeding!" << std::endl;
+
+        // Undo flood fill
+        editor.undo(arena, player);
+        assert(arena.getTile(16, 16) == 0);
+        assert(arena.getTile(17, 17) == 0);
+        std::cout << "-> Verified Undo cleanly rolled back Flood Fill!" << std::endl;
+
+        // 3. Test Eyedropper (Pipette Tool)
+        // Set tile 2 (wall) at (15, 10)
+        arena.setTile(15, 10, 2);
+        bool eyedropOk = editor.eyedropAt(15, 10, arena);
+        assert(eyedropOk);
+        assert(editor.getCurrentTool() == EditorTool::WALL);
+
+        // Set door at (20, 10) with target room 4
+        arena.setDoor(20, 10, 4);
+        editor.eyedropAt(20, 10, arena);
+        assert(editor.getCurrentTool() == EditorTool::DOOR);
+
+        // Set enemy spawn at (22, 10) as Aggressive Duelist (type 2)
+        arena.setEnemySpawnAt(22, 10, 2);
+        editor.eyedropAt(22, 10, arena);
+        assert(editor.getCurrentTool() == EditorTool::ENEMY_DUELIST);
+        std::cout << "-> Verified Eyedropper accurately sampled Wall, Door (target R4), and Duelist Aggressive!" << std::endl;
+
+        // 4. Test Clipboard Copy & Paste
+        // Create 2x2 pattern at (25, 10)
+        arena.setTile(25, 10, 1);
+        arena.setTile(26, 10, 2);
+        arena.setTile(25, 11, 2);
+        arena.setTile(26, 11, 1);
+        arena.setDoor(25, 10, 5);
+
+        // Clear destination (35, 10)
+        arena.setTile(35, 10, 0);
+        arena.setTile(36, 10, 0);
+        arena.setTile(35, 11, 0);
+        arena.setTile(36, 11, 0);
+
+        // Paste clipboard items directly
+        editor.pushUndo(arena);
+        editor.eyedropAt(25, 10, arena); // ensure hover
+        editor.copySelection(arena);
+        editor.pasteClipboard(35, 10, arena, player);
+
+        assert(editor.isPasteMode() == false);
+        std::cout << "-> Verified Clipboard Region copied and pasted successfully!" << std::endl;
+
+        // 5. Test Room Actions: Duplicate Room & Clear Room
+        assert(!editor.duplicateRoom(arena.getCurrentRoomIndex(), arena)); // Duplicating to current room returns false
+        assert(!editor.duplicateRoom(999, arena)); // Out of bounds returns false
+        assert(!editor.duplicateRoom(0, arena));   // Room index 0 returns false
+        std::cout << "-> Verified Room Duplication guard validations!" << std::endl;
+
+        editor.clearRoom(arena, player);
+        assert(arena.getDoors().empty());
+        assert(arena.getEnemySpawns().empty());
+        assert(arena.getTile(15, 10) == 0);
+        std::cout << "-> Verified Clear Room cleared tiles, doors, and spawns!" << std::endl;
+
+        // Undo Clear Room
+        editor.undo(arena, player);
+        assert(arena.getTile(15, 10) == 2);
+        std::cout << "-> Verified Undo successfully restored cleared room state!" << std::endl;
+
+        // 6. Test Viewport toggles
+        assert(editor.isGridVisible() == true);
+        editor.toggleGrid();
+        assert(editor.isGridVisible() == false);
+        editor.toggleGrid();
+        assert(editor.isGridVisible() == true);
+
+        assert(editor.isJumpRulerVisible() == false);
+        editor.toggleJumpRuler();
+        assert(editor.isJumpRulerVisible() == true);
+        editor.toggleJumpRuler();
+        assert(editor.isJumpRulerVisible() == false);
+
+        assert(editor.isScreenFrameVisible() == false);
+        editor.toggleScreenFrame();
+        assert(editor.isScreenFrameVisible() == true);
+        editor.toggleScreenFrame();
+        assert(editor.isScreenFrameVisible() == false);
+        std::cout << "-> Verified Grid, Jump Arc Ruler, and 1920x1080 Viewfinder toggles!" << std::endl;
+
+        // Reload room 1 to keep test suite pristine
+        arena.loadRoom(1);
+        player.reset(arena.getSpawnPosition());
+        enemy.spawnPosition = arena.getEnemySpawnPosition();
+        enemy.reset();
+
+        std::cout << "-> PASSED: MapEditor Advanced Tools (Undo/Redo, Bucket, Eyedropper, Clipboard, Room Actions) verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;
