@@ -346,6 +346,7 @@ private:
     void drawWorld();
     void drawUI();
     void drawModal();
+    void drawNamingModal();
     void drawJumpArc();
     void drawSimulationHUD();
 };

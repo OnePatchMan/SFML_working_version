@@ -1208,21 +1208,78 @@ void EditorApp::createNamedRoom(const std::string& name) {
     }), cleanName.end());
 
     if (cleanName.empty()) {
-        cleanName = "room_" + std::to_string(_roomList.size() + 1);
+        int nextNum = 1;
+        for (const auto& r : _canvasRooms) {
+            if (r.name.rfind("room_", 0) == 0) {
+                try {
+                    int n = std::stoi(r.name.substr(5));
+                    if (n >= nextNum) nextNum = n + 1;
+                } catch (...) {}
+            }
+        }
+        cleanName = "room_" + std::to_string(nextNum);
     }
 
+    // 1. Синхронизируем и сохраняем текущую активную комнату
     syncCurrentRoomToCanvas();
+    saveToGame();
 
-    _currentRoomName = cleanName;
+    // 2. Вычисляем индекс новой комнаты
+    int rIndex = 1;
     if (cleanName.rfind("room_", 0) == 0) {
-        try { _currentRoomIndex = std::stoi(cleanName.substr(5)); } catch (...) {}
+        try { rIndex = std::stoi(cleanName.substr(5)); } catch (...) {}
+    } else {
+        int maxIdx = 0;
+        for (const auto& r : _canvasRooms) maxIdx = std::max(maxIdx, r.index);
+        rIndex = maxIdx + 1;
     }
 
+    // 3. Инициализируем дефолтную геометрию новой комнаты (80x20)
+    _currentRoomName = cleanName;
+    _currentRoomIndex = rIndex;
     initDefaultRoom();
     _hasPlayerSpawn = false;
-    saveToGame();
+
+    // 4. Позиция на холсте: размещаем правее самой правой существующей комнаты
+    sf::Vector2f newOffset(0.0f, 0.0f);
+    if (!_canvasRooms.empty()) {
+        float maxX = 0.0f;
+        float rightmostY = 0.0f;
+        for (const auto& cr : _canvasRooms) {
+            float rRight = cr.offset.x + cr.width * _tileSize;
+            if (rRight > maxX) {
+                maxX = rRight;
+                rightmostY = cr.offset.y;
+            }
+        }
+        newOffset = { maxX + 8.0f * _tileSize, rightmostY };
+    }
+
+    // 5. Создаем CanvasRoom и добавляем в список комнат
+    CanvasRoom newCr;
+    newCr.name = cleanName;
+    newCr.index = rIndex;
+    newCr.width = _width;
+    newCr.height = _height;
+    newCr.offset = newOffset;
+    newCr.hasCustomLayoutPos = true;
+    newCr.map = _map;
+    newCr.doors = _doors;
+    newCr.enemySpawns = _enemySpawns;
+    newCr.triggers = _triggers;
+    newCr.hasPlayerSpawn = false;
+
+    _canvasRooms.push_back(newCr);
+
+    // 6. Сохраняем новую комнату на диск!
+    int newIdx = static_cast<int>(_canvasRooms.size()) - 1;
+    saveRoomByIndex(newIdx);
+
+    // 7. Обновляем каталог комнат
     scanRooms();
 
+    // 8. Выбираем созданную комнату
+    syncCanvasToCurrentRoom(cleanName);
     for (size_t i = 0; i < _roomList.size(); ++i) {
         if (_roomList[i].id == cleanName) {
             _roomBrowserSelected = static_cast<int>(i);
@@ -1230,11 +1287,16 @@ void EditorApp::createNamedRoom(const std::string& name) {
         }
     }
 
+    if (_activeTab == PaletteTab::ROOMS) {
+        _activeTab = PaletteTab::BLOCKS;
+    }
+
+    // 9. Центрируем камеру на новой комнате
     sf::Vector2f roomCenter = getActiveRoomOffset() + sf::Vector2f(static_cast<float>(_width) * _tileSize * 0.5f, static_cast<float>(_height) * _tileSize * 0.5f);
     _cameraPos = roomCenter;
     _camera.setCenter(_cameraPos);
 
-    _statusMessage = "Создана и открыта комната: " + cleanName + "!";
+    _statusMessage = "Комната [" + cleanName + "] успешно создана и сохранена!";
     _statusTimer = 3.5f;
 }
 
@@ -2551,9 +2613,7 @@ void EditorApp::handleEvents() {
                 if (unicode == 8) { // Backspace
                     if (!_newRoomNameInput.empty()) _newRoomNameInput.pop_back();
                 } else if (unicode == 13 || unicode == 10) { // Enter
-                    if (!_newRoomNameInput.empty()) {
-                        createNamedRoom(_newRoomNameInput);
-                    }
+                    createNamedRoom(_newRoomNameInput);
                     _isNamingRoom = false;
                 } else if (unicode == 27) { // Escape
                     _isNamingRoom = false;
@@ -2570,12 +2630,52 @@ void EditorApp::handleEvents() {
                     _isNamingRoom = false;
                     continue;
                 } else if (kp->code == sf::Keyboard::Key::Enter) {
-                    if (!_newRoomNameInput.empty()) {
-                        createNamedRoom(_newRoomNameInput);
-                    }
+                    createNamedRoom(_newRoomNameInput);
                     _isNamingRoom = false;
                     continue;
                 }
+            }
+            if (const auto* mbP = event->getIf<sf::Event::MouseButtonPressed>()) {
+                if (mbP->button == sf::Mouse::Button::Left) {
+                    sf::Vector2i mPixel = sf::Mouse::getPosition(_window);
+                    sf::Vector2f mPos(static_cast<float>(mPixel.x), static_cast<float>(mPixel.y));
+                    float winW = static_cast<float>(_window.getSize().x);
+                    float winH = static_cast<float>(_window.getSize().y);
+                    float mw = 480.0f;
+                    float mh = 210.0f;
+                    float mx = (winW - mw) / 2.0f;
+                    float my = (winH - mh) / 2.0f;
+
+                    // Кнопка [ X ] в шапке
+                    sf::FloatRect closeBtnRect({mx + mw - 32.0f, my + 8.0f}, {24.0f, 24.0f});
+                    if (closeBtnRect.contains(mPos)) {
+                        _isNamingRoom = false;
+                        continue;
+                    }
+
+                    // Кнопка [ ✔ Создать комнату ]
+                    sf::FloatRect createBtnRect({mx + 20.0f, my + 124.0f}, {210.0f, 38.0f});
+                    if (createBtnRect.contains(mPos)) {
+                        createNamedRoom(_newRoomNameInput);
+                        _isNamingRoom = false;
+                        continue;
+                    }
+
+                    // Кнопка [ ✕ Отмена ]
+                    sf::FloatRect cancelBtnRect({mx + 250.0f, my + 124.0f}, {210.0f, 38.0f});
+                    if (cancelBtnRect.contains(mPos)) {
+                        _isNamingRoom = false;
+                        continue;
+                    }
+
+                    // Клик вне диалогового окна закрывает его
+                    sf::FloatRect modalBox({mx, my}, {mw, mh});
+                    if (!modalBox.contains(mPos)) {
+                        _isNamingRoom = false;
+                        continue;
+                    }
+                }
+                continue;
             }
             continue;
         }
@@ -5084,57 +5184,116 @@ void EditorApp::drawRoomBrowser() {
             _window.draw(subTxt);
         }
     }
+}
 
-    // Модальное окно создания и наименования новой комнаты
-    if (_isNamingRoom) {
-        sf::RectangleShape modalShade({winW, winH});
-        modalShade.setFillColor(sf::Color(0, 0, 0, 180));
-        _window.draw(modalShade);
+void EditorApp::drawNamingModal() {
+    if (!_isNamingRoom) return;
 
-        float mw = 460.0f;
-        float mh = 180.0f;
-        float mx = (winW - mw) / 2.0f;
-        float my = (winH - mh) / 2.0f;
+    float winW = static_cast<float>(_window.getSize().x);
+    float winH = static_cast<float>(_window.getSize().y);
 
-        sf::RectangleShape mBox({mw, mh});
-        mBox.setPosition({mx, my});
-        mBox.setFillColor(sf::Color(20, 26, 38, 255));
-        mBox.setOutlineColor(sf::Color(0, 215, 255));
-        mBox.setOutlineThickness(2.5f);
-        _window.draw(mBox);
+    // Полупрозрачное затемнение всего экрана
+    sf::RectangleShape shade({winW, winH});
+    shade.setPosition({0.0f, 0.0f});
+    shade.setFillColor(sf::Color(0, 0, 0, 185));
+    _window.draw(shade);
 
-        if (_fontLoaded) {
-            sf::Text mTitle(_font, toSfString("[ СОЗДАНИЕ И ИМЕНОВАНИЕ НОВОЙ КОМНАТЫ ]"), 13);
-            mTitle.setStyle(sf::Text::Bold);
-            mTitle.setFillColor(sf::Color(255, 215, 0));
-            mTitle.setPosition({mx + 18.0f, my + 14.0f});
-            _window.draw(mTitle);
+    float mw = 480.0f;
+    float mh = 210.0f;
+    float mx = (winW - mw) / 2.0f;
+    float my = (winH - mh) / 2.0f;
 
-            sf::Text mPrompt(_font, toSfString("Введите имя комнаты (например: boss_arena, cave_1):"), 11);
-            mPrompt.setFillColor(sf::Color(180, 205, 230));
-            mPrompt.setPosition({mx + 18.0f, my + 42.0f});
-            _window.draw(mPrompt);
+    // Фоновый блок окна
+    sf::RectangleShape mBox({mw, mh});
+    mBox.setPosition({mx, my});
+    mBox.setFillColor(sf::Color(18, 24, 34, 255));
+    mBox.setOutlineColor(sf::Color(0, 210, 255));
+    mBox.setOutlineThickness(2.5f);
+    _window.draw(mBox);
 
-            // Поле ввода текста
-            sf::RectangleShape inputField({mw - 36.0f, 38.0f});
-            inputField.setPosition({mx + 18.0f, my + 68.0f});
-            inputField.setFillColor(sf::Color(12, 16, 24));
-            inputField.setOutlineColor(sf::Color(0, 200, 255));
-            inputField.setOutlineThickness(1.5f);
-            _window.draw(inputField);
+    // Шапка диалогового окна
+    sf::RectangleShape mHead({mw, 38.0f});
+    mHead.setPosition({mx, my});
+    mHead.setFillColor(sf::Color(26, 36, 52, 255));
+    _window.draw(mHead);
 
-            std::string displayText = _newRoomNameInput + "_";
-            sf::Text inTxt(_font, toSfString(displayText), 14);
-            inTxt.setStyle(sf::Text::Bold);
-            inTxt.setFillColor(sf::Color(100, 240, 255));
-            inTxt.setPosition({mx + 28.0f, my + 77.0f});
-            _window.draw(inTxt);
+    sf::Vector2i mPixel = sf::Mouse::getPosition(_window);
+    sf::Vector2f mPos(static_cast<float>(mPixel.x), static_cast<float>(mPixel.y));
 
-            sf::Text mHint(_font, toSfString("[ Enter ] — Создать и открыть  |  [ Esc ] — Отмена"), 11);
-            mHint.setFillColor(sf::Color(140, 165, 195));
-            mHint.setPosition({mx + 60.0f, my + 130.0f});
-            _window.draw(mHint);
-        }
+    if (_fontLoaded) {
+        // Заголовок
+        sf::Text mTitle(_font, toSfString("[ + ] СОЗДАНИЕ НОВОЙ КОМНАТЫ"), 13);
+        mTitle.setStyle(sf::Text::Bold);
+        mTitle.setFillColor(sf::Color(255, 215, 0));
+        mTitle.setPosition({mx + 16.0f, my + 10.0f});
+        _window.draw(mTitle);
+
+        // Кнопка [ X ] в шапке
+        sf::FloatRect closeBtnRect({mx + mw - 32.0f, my + 8.0f}, {24.0f, 24.0f});
+        bool hoverClose = closeBtnRect.contains(mPos);
+        sf::Text closeBtn(_font, toSfString("X"), 13);
+        closeBtn.setStyle(sf::Text::Bold);
+        closeBtn.setFillColor(hoverClose ? sf::Color(255, 120, 120) : sf::Color(200, 70, 70));
+        closeBtn.setPosition({mx + mw - 24.0f, my + 10.0f});
+        _window.draw(closeBtn);
+
+        // Подсказка над полем ввода
+        sf::Text mPrompt(_font, toSfString("Введите название комнаты (или оставьте пустым для авто-имени):"), 11);
+        mPrompt.setFillColor(sf::Color(170, 200, 230));
+        mPrompt.setPosition({mx + 20.0f, my + 48.0f});
+        _window.draw(mPrompt);
+
+        // Поле ввода текста
+        sf::RectangleShape inputField({mw - 40.0f, 38.0f});
+        inputField.setPosition({mx + 20.0f, my + 72.0f});
+        inputField.setFillColor(sf::Color(11, 15, 22));
+        inputField.setOutlineColor(sf::Color(0, 190, 245));
+        inputField.setOutlineThickness(1.5f);
+        _window.draw(inputField);
+
+        std::string displayText = _newRoomNameInput.empty() ? "(например: room_11, boss_arena, cave_1)" : (_newRoomNameInput + "_");
+        sf::Text inTxt(_font, toSfString(displayText), 13);
+        inTxt.setFillColor(_newRoomNameInput.empty() ? sf::Color(90, 120, 150) : sf::Color(120, 240, 255));
+        inTxt.setPosition({mx + 30.0f, my + 81.0f});
+        _window.draw(inTxt);
+
+        // Кнопка [ ✔ Создать комнату ]
+        sf::FloatRect createBtnRect({mx + 20.0f, my + 124.0f}, {210.0f, 38.0f});
+        bool hoverCreate = createBtnRect.contains(mPos);
+        sf::RectangleShape createBtn({210.0f, 38.0f});
+        createBtn.setPosition({mx + 20.0f, my + 124.0f});
+        createBtn.setFillColor(hoverCreate ? sf::Color(35, 145, 80) : sf::Color(24, 110, 58));
+        createBtn.setOutlineColor(hoverCreate ? sf::Color(120, 255, 170) : sf::Color(60, 210, 110));
+        createBtn.setOutlineThickness(1.5f);
+        _window.draw(createBtn);
+
+        sf::Text crTxt(_font, toSfString("✔ Создать комнату"), 13);
+        crTxt.setStyle(sf::Text::Bold);
+        crTxt.setFillColor(sf::Color::White);
+        crTxt.setPosition({mx + 45.0f, my + 133.0f});
+        _window.draw(crTxt);
+
+        // Кнопка [ ✕ Отмена ]
+        sf::FloatRect cancelBtnRect({mx + 250.0f, my + 124.0f}, {210.0f, 38.0f});
+        bool hoverCancel = cancelBtnRect.contains(mPos);
+        sf::RectangleShape cancelBtn({210.0f, 38.0f});
+        cancelBtn.setPosition({mx + 250.0f, my + 124.0f});
+        cancelBtn.setFillColor(hoverCancel ? sf::Color(80, 35, 40) : sf::Color(55, 28, 32));
+        cancelBtn.setOutlineColor(hoverCancel ? sf::Color(255, 120, 130) : sf::Color(180, 70, 80));
+        cancelBtn.setOutlineThickness(1.5f);
+        _window.draw(cancelBtn);
+
+        sf::Text canTxt(_font, toSfString("✕ Отмена"), 13);
+        canTxt.setStyle(sf::Text::Bold);
+        canTxt.setFillColor(sf::Color(240, 200, 200));
+        canTxt.setPosition({mx + 318.0f, my + 133.0f});
+        _window.draw(canTxt);
+
+        // Подсказка горячих клавиш внизу
+        sf::Text mHint(_font, toSfString("[ Enter ] — Создать  |  [ Esc ] — Отмена"), 11);
+        mHint.setFillColor(sf::Color(130, 160, 190));
+        mHint.setPosition({mx + 115.0f, my + 176.0f});
+        _window.draw(mHint);
     }
 }
 
@@ -5616,6 +5775,12 @@ void EditorApp::render() {
 
             _window.setView(_window.getDefaultView());
             drawUI();
+        }
+
+        // Модальное окно создания и именования новой комнаты
+        if (_isNamingRoom) {
+            _window.setView(_window.getDefaultView());
+            drawNamingModal();
         }
     }
 
