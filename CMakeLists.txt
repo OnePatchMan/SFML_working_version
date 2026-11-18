@@ -73,20 +73,34 @@ target_link_libraries(test_directional_combos PRIVATE
     SFML::Audio
 )
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../MapEditor/src/main.cpp")
+set(MAP_EDITOR_DIR "")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/MapEditor/src/main.cpp")
+    set(MAP_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tools/MapEditor")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../MapEditor/src/main.cpp")
+    set(MAP_EDITOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../MapEditor")
+endif()
+
+if(MAP_EDITOR_DIR)
     add_executable(MapEditor
-        ../MapEditor/src/main.cpp
-        ../MapEditor/src/EditorApp.cpp
+        ${MAP_EDITOR_DIR}/src/main.cpp
+        ${MAP_EDITOR_DIR}/src/EditorApp.cpp
+        src/world/Arena.cpp
+        src/entities/Player.cpp
+        src/entities/Enemy.cpp
+        src/combat/CombatSystem.cpp
+        src/audio/SoundManager.cpp
     )
 
     target_include_directories(MapEditor PRIVATE
-        ../MapEditor/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${MAP_EDITOR_DIR}/src
     )
 
     target_link_libraries(MapEditor PRIVATE
         SFML::Graphics
         SFML::Window
         SFML::System
+        SFML::Audio
     )
 endif()
 

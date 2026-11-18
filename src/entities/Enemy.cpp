@@ -83,6 +83,30 @@ void Enemy::setType(EnemyType type) {
         allowAirFollowup = true;
         invisActiveTimer = 0.0f;
         invisCooldownTimer = ecfg.duelistPassive.invisCooldown;
+    } else if (enemyType == EnemyType::DUMMY) {
+        maxHp = 9999.0f;
+        scale = 1.0f;
+        halfW = HALF_W * scale;
+        halfH = HALF_H * scale;
+        stunMultiplier = 1.0f;
+        knockMultiplier = 1.0f;
+        damageMultiplier = 0.0f;
+        hitboxScale = 1.0f;
+        windupMultiplier = 1.0f;
+        canCounter = false;
+        canBlock = false;
+        canDodge = false;
+        aggressiveness = 0.0f;
+        intelligence = 0.0f;
+        maxComboHits = 0;
+        allowAirFollowup = false;
+        isSmartAI = false;
+        dummyAccumDamage = 0.0f;
+        dummyResetTimer = 0.0f;
+        dummyOutOfStunTimer = 0.0f;
+        dummyLastGapFrames = 0;
+        dummyHadFirstHit = false;
+        dummyPopups.clear();
     }
     hp = maxHp;
     displayedHp = maxHp;
@@ -114,6 +138,55 @@ sf::FloatRect Enemy::getBounds() const {
 
 bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime) {
     if (isDead) return false;
+
+    // ОСОБАЯ ЛОГИКА ДЛЯ ТРЕНИРОВОЧНОГО МАНЕКЕНА (DUMMY):
+    // Полная чувствительность к физике / силе отталкивания, бессмертие, трекинг комбо-урона и фрейм-гэпа
+    if (enemyType == EnemyType::DUMMY) {
+        if (hurtTimer <= 0.0f) {
+            hasWallBounced = false;
+        }
+
+        // Расчет гэпа между ударами в кадрах (при 60 FPS):
+        // Сколько кадров манекен находился вне стана между двумя атаками
+        if (dummyHadFirstHit && dummyResetTimer > 0.0f) {
+            dummyLastGapFrames = static_cast<int>(std::round(dummyOutOfStunTimer * 60.0f));
+        } else {
+            dummyLastGapFrames = 0;
+            dummyAccumDamage = 0.0f;
+            dummyHadFirstHit = true;
+        }
+
+        dummyAccumDamage += amount;
+        dummyResetTimer = 5.0f; // сбрасывается каждые 5.0 секунд после прекращения ударов
+        dummyOutOfStunTimer = 0.0f;
+
+        // Всплывающее уведомление над головой (вылетает и плавно исчезает)
+        DummyFloatingPopup popup;
+        popup.timer = 1.3f;
+        popup.maxTimer = 1.3f;
+        popup.offset = {0.0f, -45.0f};
+        if (dummyLastGapFrames == 0) {
+            popup.text = "+" + std::to_string(static_cast<int>(std::round(amount))) + " (0f TRUE COMBO!)";
+            popup.color = sf::Color(100, 255, 120);
+        } else {
+            popup.text = "+" + std::to_string(static_cast<int>(std::round(amount))) + " (GAP: " + std::to_string(dummyLastGapFrames) + "f)";
+            popup.color = sf::Color(255, 180, 50);
+        }
+        dummyPopups.push_back(popup);
+
+        hurtTimer = stunTime * stunMultiplier;
+        velocity.x = knockX * knockMultiplier;
+        velocity.y = knockY * knockMultiplier;
+        isDead = false;
+        isAirSuspended = false;
+        attackState = EnemyAttackState::IDLE;
+        aiComboState = AIComboState::IDLE;
+        behaviorState = AIBehaviorState::CHASE;
+        hasDetectedPlayer = true;
+        hp = 9999.0f;
+        displayedHp = 9999.0f;
+        return true;
+    }
 
     // Проверка уворота / доджа дуэлянта (i-frames):
     if (isDodging) {
@@ -432,6 +505,30 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     if (stunPunishCooldown > 0.0f) stunPunishCooldown -= dt;
     if (punishBannerTimer > 0.0f) punishBannerTimer -= dt;
 
+    // Логика тренировочного манекена (Dummy): сброс урона через 5 секунд и вылетающие надписи
+    if (enemyType == EnemyType::DUMMY) {
+        if (dummyResetTimer > 0.0f) {
+            dummyResetTimer -= dt;
+            if (dummyResetTimer <= 0.0f) {
+                dummyAccumDamage = 0.0f;
+                dummyHadFirstHit = false;
+                dummyLastGapFrames = 0;
+            }
+        }
+        if (hurtTimer <= 0.0f) {
+            dummyOutOfStunTimer += dt;
+        }
+        for (auto it = dummyPopups.begin(); it != dummyPopups.end();) {
+            it->timer -= dt;
+            it->offset.y -= 45.0f * dt; // плавно вылетает вверх над головой
+            if (it->timer <= 0.0f) {
+                it = dummyPopups.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     // Таймер бездействия игрока (для агрессивного дуэлянта)
     if (enemyType == EnemyType::DUELIST && !isDead && hurtTimer <= 0.0f) {
         if (playerIsAttacking) {
@@ -547,6 +644,11 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 currentComboName = "";
             }
         }
+    } else if (enemyType == EnemyType::DUMMY) {
+        // Тренировочный манекен (Dummy) всегда стоит на месте, не патрулирует и не атакует
+        attackState = EnemyAttackState::IDLE;
+        attackStateTimer = 0.0f;
+        aiComboState = AIComboState::IDLE;
     } else {
         // =========================================================
         // СИСТЕМА ВОСПРИЯТИЯ, ОБНАРУЖЕНИЯ И ПАТРУЛИРОВАНИЯ
@@ -1910,7 +2012,8 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             if (!arena.overlapsSolid(nextX, position.y, halfW, halfH, halfH)) {
                 // Если противник в режиме патрулирования, он ни в коем случае не должен делать шаг,
                 // если его передний край теряет твердый пол (чтобы не падать вниз на нижний блок!)
-                if (behaviorState == AIBehaviorState::PATROL && attackState == EnemyAttackState::IDLE) {
+                // Во время получения урона / отталкивания (hurtTimer > 0) враг и манекен отлетают свободно без блокировки обрыва!
+                if (hurtTimer <= 0.0f && behaviorState == AIBehaviorState::PATROL && attackState == EnemyAttackState::IDLE && enemyType != EnemyType::DUMMY) {
                     bool hasFloor = arena.overlapsSolid(nextX + stepSign * (halfW - 2.0f), position.y + halfH + 8.0f, 4.0f, 4.0f, 4.0f);
                     if (!hasFloor) {
                         velocity.x = 0.0f;
@@ -2074,6 +2177,8 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         baseColor = sf::Color(155, 45, 225);  // Фиолетовый цвет (агрессивный)
     } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
         baseColor = sf::Color(45, 185, 245);  // Голубой цвет (пассивный)
+    } else if (enemyType == EnemyType::DUMMY) {
+        baseColor = sf::Color(220, 175, 75);  // Золотисто-древесный цвет (манекен)
     } else {
         baseColor = isSmartAI ? sf::Color(110, 45, 150) : sf::Color(220, 75, 55);
     }
@@ -2134,27 +2239,51 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(shieldBar);
     }
 
-    // Внутренний квадрат-мишень на теле манекена
-    sf::RectangleShape target({14.0f * scale, 14.0f * scale});
-    target.setOrigin({7.0f * scale, 7.0f * scale});
-    target.setPosition(position);
-    target.setFillColor(sf::Color(40, 40, 50, 160));
-    window.draw(target);
+    // Мишень / визор на теле
+    if (enemyType == EnemyType::DUMMY) {
+        // Мишень на теле манекена: круглая контрастная мишень с кольцами
+        sf::CircleShape targetRing(10.0f * scale);
+        targetRing.setOrigin({10.0f * scale, 10.0f * scale});
+        targetRing.setPosition(position);
+        targetRing.setFillColor(sf::Color(185, 45, 40));
+        targetRing.setOutlineThickness(1.5f);
+        targetRing.setOutlineColor(sf::Color(255, 255, 255, 220));
+        window.draw(targetRing);
 
-    // Простой глаз/визор с динамическим цветом в зависимости от восприятия (патруль/тревога/погоня)
-    float eyeX = isFacingLeft ? (position.x - 7.0f * scale) : (position.x + 3.0f * scale);
-    sf::RectangleShape eye({4.0f * scale, 4.0f * scale});
-    eye.setPosition({eyeX, position.y - 16.0f * scale});
-    sf::Color eyeColor = sf::Color(255, 245, 220);
-    if (behaviorState == AIBehaviorState::PATROL) {
-        eyeColor = sf::Color(60, 220, 255); // Спокойный лазурный визор
-    } else if (behaviorState == AIBehaviorState::ALERT) {
-        eyeColor = sf::Color(255, 225, 0);   // Золотой визор тревоги
-    } else if (behaviorState == AIBehaviorState::CHASE || behaviorState == AIBehaviorState::COMBAT) {
-        eyeColor = sf::Color(255, 50, 60);   // Алый визор атаки
+        sf::CircleShape targetInner(5.0f * scale);
+        targetInner.setOrigin({5.0f * scale, 5.0f * scale});
+        targetInner.setPosition(position);
+        targetInner.setFillColor(sf::Color(255, 255, 255, 240));
+        window.draw(targetInner);
+
+        sf::CircleShape targetDot(2.0f * scale);
+        targetDot.setOrigin({2.0f * scale, 2.0f * scale});
+        targetDot.setPosition(position);
+        targetDot.setFillColor(sf::Color(185, 45, 40));
+        window.draw(targetDot);
+    } else {
+        // Внутренний квадрат-мишень на теле противника
+        sf::RectangleShape target({14.0f * scale, 14.0f * scale});
+        target.setOrigin({7.0f * scale, 7.0f * scale});
+        target.setPosition(position);
+        target.setFillColor(sf::Color(40, 40, 50, 160));
+        window.draw(target);
+
+        // Простой глаз/визор с динамическим цветом в зависимости от восприятия (патруль/тревога/погоня)
+        float eyeX = isFacingLeft ? (position.x - 7.0f * scale) : (position.x + 3.0f * scale);
+        sf::RectangleShape eye({4.0f * scale, 4.0f * scale});
+        eye.setPosition({eyeX, position.y - 16.0f * scale});
+        sf::Color eyeColor = sf::Color(255, 245, 220);
+        if (behaviorState == AIBehaviorState::PATROL) {
+            eyeColor = sf::Color(60, 220, 255); // Спокойный лазурный визор
+        } else if (behaviorState == AIBehaviorState::ALERT) {
+            eyeColor = sf::Color(255, 225, 0);   // Золотой визор тревоги
+        } else if (behaviorState == AIBehaviorState::CHASE || behaviorState == AIBehaviorState::COMBAT) {
+            eyeColor = sf::Color(255, 50, 60);   // Алый визор атаки
+        }
+        eye.setFillColor(eyeColor);
+        window.draw(eye);
     }
-    eye.setFillColor(eyeColor);
-    window.draw(eye);
 
     // Отрисовка взмаха атаки
     if (attackState == EnemyAttackState::ATTACKING) {
@@ -2191,6 +2320,85 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
             _cachedParryText->setPosition({position.x - 18.0f, position.y - halfH - 30.0f});
             window.draw(*_cachedParryText);
         }
+    }
+
+    // Отрисовка постоянного тренировочного HUD манекена над головой (урон, таймер 5с, фрейм-гэп)
+    if (enemyType == EnemyType::DUMMY) {
+        float hudW = 136.0f;
+        float hudH = 32.0f;
+        float hudX = position.x - hudW / 2.0f;
+        float hudY = position.y - halfH - 42.0f;
+
+        // Плашка фона HUD
+        sf::RectangleShape hudBg({hudW, hudH});
+        hudBg.setPosition({hudX, hudY});
+        hudBg.setFillColor(sf::Color(16, 20, 28, 230));
+        hudBg.setOutlineThickness(1.5f);
+        hudBg.setOutlineColor(sf::Color(220, 175, 75, 230));
+        window.draw(hudBg);
+
+        // Полоска таймера сброса (5 секунд)
+        if (dummyResetTimer > 0.0f) {
+            float timerProgress = std::clamp(dummyResetTimer / 5.0f, 0.0f, 1.0f);
+            sf::RectangleShape resetBar({(hudW - 4.0f) * timerProgress, 3.0f});
+            resetBar.setPosition({hudX + 2.0f, hudY + hudH - 5.0f});
+            resetBar.setFillColor(sf::Color(255, 215, 0));
+            window.draw(resetBar);
+        }
+
+        if (font) {
+            if (!_cachedDummyHudText) {
+                _cachedDummyHudText.emplace(*font, "", 10);
+            }
+            // Текст 1: [ МАНЕКЕН ]
+            _cachedDummyHudText->setCharacterSize(9);
+            _cachedDummyHudText->setString(toSfString("[ МАНЕКЕН ]"));
+            _cachedDummyHudText->setFillColor(sf::Color(220, 175, 75));
+            _cachedDummyHudText->setPosition({hudX + 5.0f, hudY + 2.0f});
+            window.draw(*_cachedDummyHudText);
+
+            // Текст 2: Накопленный урон + таймер сброса (5с) + последний фрейм-гэп
+            std::string statsStr = "УРОН: " + std::to_string(static_cast<int>(std::round(dummyAccumDamage)));
+            if (dummyResetTimer > 0.0f) {
+                char tBuf[16];
+                std::snprintf(tBuf, sizeof(tBuf), " (%.1fc)", dummyResetTimer);
+                statsStr += tBuf;
+            }
+            statsStr += " | ГЭП: " + std::to_string(dummyLastGapFrames) + "f";
+
+            _cachedDummyHudText->setCharacterSize(9);
+            _cachedDummyHudText->setString(toSfString(statsStr));
+            _cachedDummyHudText->setFillColor(dummyResetTimer > 0.0f ? sf::Color(255, 230, 110) : sf::Color(170, 175, 185));
+            _cachedDummyHudText->setPosition({hudX + 5.0f, hudY + 14.0f});
+            window.draw(*_cachedDummyHudText);
+
+            // Отрисовка вылетающих и затухающих надписей над головой
+            if (!_cachedDummyPopupText) {
+                _cachedDummyPopupText.emplace(*font, "", 12);
+                _cachedDummyPopupText->setStyle(sf::Text::Bold);
+            }
+            for (const auto& pop : dummyPopups) {
+                float alpha = std::clamp((pop.timer / pop.maxTimer) * 255.0f, 0.0f, 255.0f);
+                sf::Color c = pop.color;
+                c.a = static_cast<std::uint8_t>(alpha);
+
+                sf::Vector2f popPos = position + pop.offset;
+                _cachedDummyPopupText->setString(toSfString(pop.text));
+                sf::FloatRect bounds = _cachedDummyPopupText->getLocalBounds();
+                _cachedDummyPopupText->setOrigin({bounds.size.x / 2.0f, bounds.size.y / 2.0f});
+
+                // Тень текста
+                _cachedDummyPopupText->setFillColor(sf::Color(0, 0, 0, static_cast<std::uint8_t>(alpha * 0.85f)));
+                _cachedDummyPopupText->setPosition({popPos.x + 1.0f, popPos.y + 1.0f});
+                window.draw(*_cachedDummyPopupText);
+
+                // Основной цвет
+                _cachedDummyPopupText->setFillColor(c);
+                _cachedDummyPopupText->setPosition(popPos);
+                window.draw(*_cachedDummyPopupText);
+            }
+        }
+        return; // Манекен отрисован, стандартный HUD врагов пропускается
     }
 
     // 2. Полоска здоровья над противником

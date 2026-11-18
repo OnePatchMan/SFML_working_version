@@ -11,6 +11,13 @@ struct DoorBlock {
     int targetRoom = 1;
 };
 
+struct ArenaTrigger {
+    int x = 0;
+    int y = 0;
+    int type = 0; // 0 = JumpPad, 1 = Spikes, 2 = TriggerZone
+    float power = 1000.0f;
+};
+
 struct EnemySpawnConfig {
     sf::Vector2f position;
     int type = 0; // 0 = NORMAL, 1 = TANK, 2 = DUELIST (Aggressive), 3 = DUELIST_PASSIVE (Passive)
@@ -150,11 +157,15 @@ public:
     bool loadFromKVCoordinates(const std::string& kvPath);
 
     bool loadRoom(int roomIndex);
+    bool loadRoomByName(const std::string& name);
     bool nextRoom();
     bool prevRoom();
     int getCurrentRoomIndex() const { return _currentRoomIndex; }
     int getTotalRooms() const { return _totalRooms; }
     std::string getCurrentRoomPath() const;
+    std::string getCurrentRoomName() const { return _currentRoomName; }
+    void setCurrentRoomName(const std::string& name) { _currentRoomName = name; }
+    const std::vector<ArenaTrigger>& getTriggers() const { return _triggers; }
 
     void draw(sf::RenderWindow& window);
     void markTilemapDirty() { _tilemapDirty = true; }
@@ -177,9 +188,15 @@ private:
 
     int _currentRoomIndex = 1;
     int _totalRooms = 10;
+    std::string _currentRoomName = "room_1";
     std::vector<DoorBlock> _doors;
+    std::vector<ArenaTrigger> _triggers;
     sf::Texture _doorTexture;
     bool _doorTextureLoaded = false;
+    sf::Texture _jumpPadTexture;
+    bool _jumpPadTextureLoaded = false;
+    sf::Texture _spikesTexture;
+    bool _spikesTextureLoaded = false;
     sf::Font _doorFont;
     bool _doorFontLoaded = false;
     mutable std::optional<sf::Text> _cachedDoorText;

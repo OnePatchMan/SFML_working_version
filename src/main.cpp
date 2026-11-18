@@ -1,6 +1,5 @@
 #include "core/Common.h"
 #include "world/Arena.h"
-#include "world/MapEditor.h"
 #include "entities/Player.h"
 #include "entities/PlayerConfig.h"
 #include "entities/Enemy.h"
@@ -26,7 +25,6 @@ int main() {
     Arena arena(ARENA_WIDTH, ARENA_HEIGHT);
     Player player(arena.getSpawnPosition());
     CombatSystem combat;
-    MapEditor mapEditor;
 
     bool isSmartAIMode = true;
     std::vector<Enemy> enemies;
@@ -40,7 +38,8 @@ int main() {
             for (const auto& sp : spawns) {
                 EnemyType t = (sp.type == 1) ? EnemyType::TANK : 
                               (sp.type == 2) ? EnemyType::DUELIST : 
-                              (sp.type == 3) ? EnemyType::DUELIST_PASSIVE : EnemyType::NORMAL;
+                              (sp.type == 3) ? EnemyType::DUELIST_PASSIVE : 
+                              (sp.type == 4) ? EnemyType::DUMMY : EnemyType::NORMAL;
                 enemies.emplace_back(sp.position, t);
             }
         }
@@ -50,7 +49,6 @@ int main() {
         }
     };
     respawnEnemies();
-    mapEditor.setRespawnCallback([&]() { respawnEnemies(); });
 
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
     sf::RenderWindow window(desktop, "FightingComboGame", sf::State::Fullscreen);
@@ -174,12 +172,8 @@ int main() {
 
             if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
                 if (keyPressed->code == sf::Keyboard::Key::Escape) {
-                    if (mapEditor.isActive()) {
-                        mapEditor.toggle(window, camera, player);
-                    } else {
-                        menuSystem.openPauseMenu();
-                        window.setMouseCursorVisible(true);
-                    }
+                    menuSystem.openPauseMenu();
+                    window.setMouseCursorVisible(true);
                     continue;
                 }
                 // F3 - переключение отображения FPS счетчика
@@ -196,20 +190,6 @@ int main() {
                                                                              FpsMode::UNCAPPED;
                         applyFpsMode(nextMode);
                     }
-                    // F6 - Переключение режима ручного редактора карты
-                    if (keyPressed->code == sf::Keyboard::Key::F6) {
-                        if (mapEditor.isPlaytesting()) {
-                            mapEditor.stopPlaytest(window, camera);
-                        } else {
-                            mapEditor.toggle(window, camera, player);
-                            if (!mapEditor.isActive()) {
-                                respawnEnemies();
-                            }
-                        }
-                        std::cout << "[EDITOR] " 
-                                  << (mapEditor.isActive() ? "Режим редактора ВКЛЮЧЕН" : "Режим редактора ВЫКЛЮЧЕН") 
-                                  << std::endl;
-                    }
                     // Backspace - сброс позиций и состояний (R используется для броска/подбора булавы)
                     if (keyPressed->code == sf::Keyboard::Key::Backspace) {
                         player.reset(arena.getSpawnPosition());
@@ -219,22 +199,23 @@ int main() {
                     }
                     // Tab - переключение режима противников (Манекен / Умный ИИ)
                     if (keyPressed->code == sf::Keyboard::Key::Tab) {
-                        if (!mapEditor.isActive()) {
-                            isSmartAIMode = !isSmartAIMode;
-                            for (auto& e : enemies) {
-                                e.setSmartAI(isSmartAIMode);
-                            }
-                            std::cout << "[MODE] Режим всех врагов: " 
-                                      << (isSmartAIMode ? "УМНЫЙ ИИ (Комбо-боец)" : "ТРЕНИРОВОЧНЫЙ МАНЕКЕН (Dummy)") 
-                                      << std::endl;
+                        isSmartAIMode = !isSmartAIMode;
+                        for (auto& e : enemies) {
+                            e.setType(isSmartAIMode ? EnemyType::NORMAL : EnemyType::DUMMY);
+                            e.setSmartAI(isSmartAIMode);
+                            e.reset();
                         }
+                        std::cout << "[MODE] Режим всех врагов: " 
+                                  << (isSmartAIMode ? "УМНЫЙ ИИ (Комбо-боец)" : "ТРЕНИРОВОЧНЫЙ МАНЕКЕН (Dummy)") 
+                                  << std::endl;
                     }
                     // Y - циклическое переключение архетипов всех врагов (Normal -> Tank -> Duelist -> Duelist Passive)
                     if (keyPressed->code == sf::Keyboard::Key::Y) {
                         for (auto& e : enemies) {
                             EnemyType nextT = (e.getType() == EnemyType::NORMAL) ? EnemyType::TANK :
                                               (e.getType() == EnemyType::TANK) ? EnemyType::DUELIST : 
-                                              (e.getType() == EnemyType::DUELIST) ? EnemyType::DUELIST_PASSIVE : EnemyType::NORMAL;
+                                              (e.getType() == EnemyType::DUELIST) ? EnemyType::DUELIST_PASSIVE : 
+                                              (e.getType() == EnemyType::DUELIST_PASSIVE) ? EnemyType::DUMMY : EnemyType::NORMAL;
                             e.setType(nextT);
                             e.reset();
                         }
@@ -252,20 +233,18 @@ int main() {
                                   << enemies.size() << " врагов заспавнены!" << std::endl;
                     }
                     // Быстрое переключение комнат в бою (PageUp / PageDown)
-                    if (!mapEditor.isActive()) {
-                        if (keyPressed->code == sf::Keyboard::Key::PageUp) {
-                            arena.nextRoom();
-                            player.reset(arena.getSpawnPosition());
-                            respawnEnemies();
-                            combat.reset();
-                            camera.setCenter(player.position);
-                        } else if (keyPressed->code == sf::Keyboard::Key::PageDown) {
-                            arena.prevRoom();
-                            player.reset(arena.getSpawnPosition());
-                            respawnEnemies();
-                            combat.reset();
-                            camera.setCenter(player.position);
-                        }
+                    if (keyPressed->code == sf::Keyboard::Key::PageUp) {
+                        arena.nextRoom();
+                        player.reset(arena.getSpawnPosition());
+                        respawnEnemies();
+                        combat.reset();
+                        camera.setCenter(player.position);
+                    } else if (keyPressed->code == sf::Keyboard::Key::PageDown) {
+                        arena.prevRoom();
+                        player.reset(arena.getSpawnPosition());
+                        respawnEnemies();
+                        combat.reset();
+                        camera.setCenter(player.position);
                     }
                     // T - атака врагов (или запуск комбо-связки умного ИИ)
                     if (keyPressed->code == sf::Keyboard::Key::T) {
@@ -280,82 +259,67 @@ int main() {
                     }
                 }
 
-                if (mapEditor.isActive() && !mapEditor.isPlaytesting()) {
-                    if (!enemies.empty()) {
-                        mapEditor.handleInput(event, arena, player, enemies.front(), window, camera);
-                    }
-                } else {
-                    if (mapEditor.isActive() && mapEditor.isPlaytesting()) {
-                        mapEditor.handlePlaytestInput(event, window, camera);
-                    }
-                    player.handleInput(event);
-                    combat.handleInput(event, player, mouseWorld);
-                }
+                player.handleInput(event);
+                combat.handleInput(event, player, mouseWorld);
             }
 
         // Обновление состояний
         if (!menuSystem.isInMenu()) {
-            if (mapEditor.isActive() && !mapEditor.isPlaytesting()) {
-                if (!enemies.empty()) {
-                    mapEditor.update(dt, arena, player, enemies.front(), window, camera);
-                }
-            } else {
-                arena.update(dt);
-                player.update(dt, arena, mouseWorld);
-                bool playerIsAttacking = combat.isAttacking() || combat.getCooldown() > 0.0f;
-                for (auto& e : enemies) {
-                    e.update(dt, arena, player.position, player.isStunned(), playerIsAttacking);
-                }
-                combat.update(dt, player, enemies);
+            arena.update(dt);
+            player.update(dt, arena, mouseWorld);
+            bool playerIsAttacking = combat.isAttacking() || combat.getCooldown() > 0.0f;
+            for (auto& e : enemies) {
+                e.update(dt, arena, player.position, player.isStunned(), playerIsAttacking);
+            }
+            combat.update(dt, player, enemies);
 
-                // Проверка активации настраиваемых блоков дверей (тайл 3)
-                static float doorCooldown = 0.0f;
-                if (doorCooldown > 0.0f) doorCooldown -= dt;
+            // Проверка активации настраиваемых блоков дверей (тайл 3)
+            static float doorCooldown = 0.0f;
+            if (doorCooldown > 0.0f) doorCooldown -= dt;
 
-                if (doorCooldown <= 0.0f) {
-                    auto doorTarget = arena.getOverlappingDoorTargetRoom(player.position.x, player.position.y,
-                                                                         Player::HALF_W, Player::TOP_OFFSET, Player::BOTTOM_OFFSET);
-                    if (doorTarget.has_value()) {
-                        int targetRoom = doorTarget.value();
-                        if (targetRoom != arena.getCurrentRoomIndex()) {
-                            arena.loadRoom(targetRoom);
-                            player.position = arena.getSpawnPosition();
-                            player.velocity = {0.0f, 0.0f};
+            if (doorCooldown <= 0.0f) {
+                auto doorTarget = arena.getOverlappingDoorTargetRoom(player.position.x, player.position.y,
+                                                                     Player::HALF_W, Player::TOP_OFFSET, Player::BOTTOM_OFFSET);
+                if (doorTarget.has_value()) {
+                    int targetRoom = doorTarget.value();
+                    if (targetRoom != arena.getCurrentRoomIndex()) {
+                        arena.loadRoom(targetRoom);
+                        player.position = arena.getSpawnPosition();
+                        player.velocity = {0.0f, 0.0f};
 
-                            respawnEnemies();
-                            combat.reset();
-                            doorCooldown = 0.6f; // Задержка перед следующим переходом, чтобы исключить зацикливание
-                            std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << targetRoom << " через блок двери!" << std::endl;
-                        }
-                    }
-                }
-
-                // Камера с динамической микро-тряской при ударах
-                camera.setCenter(player.position + combat.getScreenShake());
-
-                // Логика гибели персонажа: перезапуск всей игры с первой комнаты
-                static float playerDeathTimer = 2.0f;
-                if (player.isDead) {
-                    playerDeathTimer -= dt;
-                    // Клавиша Space или Enter позволяет мгновенно перезапуститься без ожидания
-                    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) ||
-                        sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Enter)) {
-                        playerDeathTimer = 0.0f;
-                    }
-
-                    if (playerDeathTimer <= 0.0f) {
-                        // Перезапуск всей игры с самого начала (Комната 1, полное HP, респавн врагов)
-                        arena.loadRoom(1);
-                        player.reset(arena.getSpawnPosition());
                         respawnEnemies();
                         combat.reset();
-                        camera.setCenter(player.position);
-                        playerDeathTimer = 2.0f;
-                        std::cout << "[GAME OVER] Персонаж погиб! Перезапуск с самого начала (Комната 1)..." << std::endl;
+                        doorCooldown = 0.6f; // Задержка перед следующим переходом, чтобы исключить зацикливание
+                        std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << targetRoom << " через блок двери!" << std::endl;
                     }
-                } else {
-                    playerDeathTimer = 2.0f;
                 }
+            }
+
+            // Камера с динамической микро-тряской при ударах
+            camera.setCenter(player.position + combat.getScreenShake());
+
+            // Логика гибели персонажа: перезапуск всей игры с первой комнаты
+            static float playerDeathTimer = 2.0f;
+            if (player.isDead) {
+                playerDeathTimer -= dt;
+                // Клавиша Space или Enter позволяет мгновенно перезапуститься без ожидания
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) ||
+                    sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Enter)) {
+                    playerDeathTimer = 0.0f;
+                }
+
+                if (playerDeathTimer <= 0.0f) {
+                    // Перезапуск всей игры с самого начала (Комната 1, полное HP, респавн врагов)
+                    arena.loadRoom(1);
+                    player.reset(arena.getSpawnPosition());
+                    respawnEnemies();
+                    combat.reset();
+                    camera.setCenter(player.position);
+                    playerDeathTimer = 2.0f;
+                    std::cout << "[GAME OVER] Персонаж погиб! Перезапуск с самого начала (Комната 1)..." << std::endl;
+                }
+            } else {
+                playerDeathTimer = 2.0f;
             }
         }
 
@@ -370,10 +334,6 @@ int main() {
             }
             combat.drawWorld(window, player);
             player.draw(window);
-
-            if (mapEditor.isActive() && !mapEditor.isPlaytesting()) {
-                mapEditor.drawWorld(window, arena, mouseWorld, combat.getFont());
-            }
         } else {
             // В главном меню (и окнах настроек/гайда) мир игры не рендерится, заливка 100% сплошная
             window.clear(sf::Color(13, 17, 26));
@@ -381,14 +341,7 @@ int main() {
 
         // 2. Отрисовка интерфейса
         window.setView(window.getDefaultView());
-        if (mapEditor.isActive()) {
-            if (mapEditor.isPlaytesting()) {
-                combat.drawUI(window, &player);
-                mapEditor.drawPlaytestUI(window, combat.getFont());
-            } else {
-                mapEditor.drawUI(window, arena, combat.getFont(), camera);
-            }
-        } else if (menuSystem.isInMenu()) {
+        if (menuSystem.isInMenu()) {
             menuSystem.draw(window, mouseScreenPos);
             window.setMouseCursorVisible(menuSystem.isInMenu());
         } else {

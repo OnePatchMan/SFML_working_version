@@ -27,7 +27,8 @@ enum class EnemyType {
     NORMAL,           // Обычный: серый цвет, малое ХП (45), легкая броня, средняя скорость, дает 1 комбо, нет контратаки
     TANK,             // Жирный: красный цвет, больше в 1.5 раза, много ХП (110), тяжелая броня, бьет дальше и больнее, медленный
     DUELIST,          // Агрессивный дуэлянт: фиолетовый цвет, ХП 65, быстрый, длинный зацеп с притягиванием, бешеный напор
-    DUELIST_PASSIVE   // Пассивный дуэлянт: голубой цвет, ХП 65, выверенный спейсинг, блок/парирование, невидимость на 1с раз в 7с, паниш станов
+    DUELIST_PASSIVE,  // Пассивный дуэлянт: голубой цвет, ХП 65, выверенный спейсинг, блок/парирование, невидимость на 1с раз в 7с, паниш станов
+    DUMMY             // Манекен: стоит на месте, чувствителен к форсе, бессмертный, трекер урона (5с) и фрейм-гэпа
 };
 
 enum class AIStarterType {
@@ -211,6 +212,22 @@ public:
     bool hasWallBounced = false; // Ограничение: максимум 1 отскок от стены за серию джаггла
     bool wasWallBounced() const { return hasWallBounced; }
 
+    // Тренировочный Манекен (Dummy)
+    float dummyAccumDamage = 0.0f;
+    float dummyResetTimer = 0.0f;       // Сброс накопленного урона через 5.0с
+    float dummyOutOfStunTimer = 0.0f;   // Таймер времени вне стана между двумя атаками
+    int dummyLastGapFrames = 0;         // Количество кадров вне стана между атаками (при 60 FPS)
+    bool dummyHadFirstHit = false;
+
+    struct DummyFloatingPopup {
+        std::string text;
+        sf::Color color;
+        float timer = 1.3f;
+        float maxTimer = 1.3f;
+        sf::Vector2f offset{0.0f, -40.0f};
+    };
+    std::vector<DummyFloatingPopup> dummyPopups;
+
     // Кешированные текстовые элементы UI врага (исключают пересоздание sf::Text каждый кадр)
     mutable std::optional<sf::Text> _cachedNameText;
     mutable std::optional<sf::Text> _cachedDodgeText;
@@ -223,6 +240,8 @@ public:
     mutable std::optional<sf::Text> _cachedParryText;
     mutable std::optional<sf::Text> _cachedWarnExText;
     mutable std::optional<sf::Text> _cachedPunishText;
+    mutable std::optional<sf::Text> _cachedDummyHudText;
+    mutable std::optional<sf::Text> _cachedDummyPopupText;
     mutable const sf::Font* _cachedFont = nullptr;
     mutable std::string _cachedLabel;
     mutable std::string _cachedComboName;

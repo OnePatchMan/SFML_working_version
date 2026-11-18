@@ -828,6 +828,23 @@ void Arena::loadTileset(const std::string& texturePath) {
         _doorTextureLoaded = true;
     }
 
+    // Загрузка текстур батута (jump_pad) и шипов (spikes)
+    std::string jpPath = resolveAssetPath("assets/sprites/jump_pad.png");
+    if (!_jumpPadTexture.loadFromFile(jpPath)) {
+        jpPath = resolveAssetPath("assets/tiles/jump_pad.png");
+        _jumpPadTextureLoaded = _jumpPadTexture.loadFromFile(jpPath);
+    } else {
+        _jumpPadTextureLoaded = true;
+    }
+
+    std::string spkPath = resolveAssetPath("assets/sprites/spikes.png");
+    if (!_spikesTexture.loadFromFile(spkPath)) {
+        spkPath = resolveAssetPath("assets/tiles/spikes.png");
+        _spikesTextureLoaded = _spikesTexture.loadFromFile(spkPath);
+    } else {
+        _spikesTextureLoaded = true;
+    }
+
     // Шрифт для отображения целевой комнаты на двери
     std::vector<std::string> fontCandidates = {
         resolveAssetPath("assets/fonts/font.ttf"),
@@ -1104,6 +1121,17 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
                 sf::Vector2f pos = {static_cast<float>(x * _tileSize), 
                                     static_cast<float>((y + 1) * _tileSize - 28.0f)};
                 _enemySpawns.push_back({pos, 3});
+            } else if (c == 'M') {
+                _map[y][x] = 0; // Манекен (Dummy)
+                sf::Vector2f pos = {static_cast<float>(x * _tileSize), 
+                                    static_cast<float>((y + 1) * _tileSize - 28.0f)};
+                _enemySpawns.push_back({pos, 4});
+            } else if (c == '^' || c == 'J') {
+                _map[y][x] = 0;
+                _triggers.push_back({x, y, 0, 1000.0f}); // JumpPad
+            } else if (c == 'S' || c == 'v') {
+                _map[y][x] = 0;
+                _triggers.push_back({x, y, 1, 20.0f}); // Spikes
             } else {
                 _map[y][x] = 0; // Воздух (., пробел и т.д.)
             }
@@ -1631,31 +1659,33 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
 }
 
 bool Arena::saveCurrentRoom() const {
-    std::string base = "assets/maps/room_" + std::to_string(_currentRoomIndex);
+    std::string base = "assets/maps/" + _currentRoomName;
     bool okTxt = saveToAsciiFile(base + ".txt");
     bool okPng = saveToImageFile(base + ".png");
     bool okKv  = saveToKVCoordinates(base + ".kv");
 
-    if (_currentRoomIndex == 1) {
+    if (_currentRoomName == "room_1") {
         saveToAsciiFile("assets/config/map.txt");
         saveToImageFile("assets/config/map.png");
     }
     return okTxt || okPng || okKv;
 }
 
-bool Arena::loadRoom(int roomIndex) {
-    if (roomIndex < 1) roomIndex = _totalRooms;
-    if (roomIndex > _totalRooms) roomIndex = 1;
-    _currentRoomIndex = roomIndex;
+bool Arena::loadRoomByName(const std::string& name) {
+    _currentRoomName = name;
+    if (name.rfind("room_", 0) == 0) {
+        try { _currentRoomIndex = std::stoi(name.substr(5)); } catch (...) {}
+    }
     _doors.clear();
+    _triggers.clear();
 
-    std::string base = "assets/maps/room_" + std::to_string(_currentRoomIndex);
+    std::string base = "assets/maps/" + name;
     
     // 1. Проверяем PNG картинку-карту
     std::string pngPath = resolveAssetPath(base + ".png");
     if (std::filesystem::exists(pngPath)) {
         if (loadFromImageFile(pngPath)) {
-            std::cout << "[ROOM] Загружена PNG-карта комнаты " << _currentRoomIndex << " / " << _totalRooms 
+            std::cout << "[ROOM] Загружена PNG-карта комнаты " << name 
                       << " (" << pngPath << ", " << _width << "x" << _height << ")" << std::endl;
             return true;
         }
@@ -1665,7 +1695,7 @@ bool Arena::loadRoom(int roomIndex) {
     std::string kvPath = resolveAssetPath(base + ".kv");
     if (std::filesystem::exists(kvPath)) {
         if (loadFromKVCoordinates(kvPath)) {
-            std::cout << "[ROOM] Загружен координатный KV-файл комнаты " << _currentRoomIndex << " / " << _totalRooms 
+            std::cout << "[ROOM] Загружен координатный KV-файл комнаты " << name 
                       << " (" << kvPath << ", " << _width << "x" << _height << ")" << std::endl;
             return true;
         }
@@ -1679,9 +1709,16 @@ bool Arena::loadRoom(int roomIndex) {
 
     _layoutFilePath = txtPath;
     bool ok = loadFromAsciiFile(txtPath);
-    std::cout << "[ROOM] Загружен текстовый файл комнаты " << _currentRoomIndex << " / " << _totalRooms 
+    std::cout << "[ROOM] Загружен текстовый файл комнаты " << name 
               << " (" << txtPath << ", " << _width << "x" << _height << ")" << std::endl;
     return ok;
+}
+
+bool Arena::loadRoom(int roomIndex) {
+    if (roomIndex < 1) roomIndex = _totalRooms;
+    if (roomIndex > _totalRooms) roomIndex = 1;
+    _currentRoomIndex = roomIndex;
+    return loadRoomByName("room_" + std::to_string(roomIndex));
 }
 
 bool Arena::nextRoom() {
@@ -2032,6 +2069,44 @@ void Arena::draw(sf::RenderWindow& window) {
                 _cachedDoorText->setPosition({dx - 4.0f, dy - 18.0f});
                 window.draw(*_cachedDoorText);
             }
+        }
+    }
+
+    // 5. Отрисовка интерактивных триггеров (батуты и шипы с текстурами)
+    for (const auto& tr : _triggers) {
+        if (tr.x < startX - 1 || tr.x > endX + 1 || tr.y < startY - 1 || tr.y > endY + 1) continue;
+        float tx = static_cast<float>(tr.x * _tileSize);
+        float ty = static_cast<float>(tr.y * _tileSize);
+
+        if (tr.type == 0 && _jumpPadTextureLoaded && _jumpPadTexture.getSize().x > 0) {
+            sf::Sprite spr(_jumpPadTexture);
+            spr.setPosition({tx, ty});
+            float sx = _tileSize / static_cast<float>(_jumpPadTexture.getSize().x);
+            float sy = _tileSize / static_cast<float>(_jumpPadTexture.getSize().y);
+            spr.setScale({sx, sy});
+            window.draw(spr);
+        } else if (tr.type == 1 && _spikesTextureLoaded && _spikesTexture.getSize().x > 0) {
+            sf::Sprite spr(_spikesTexture);
+            spr.setPosition({tx, ty});
+            float sx = _tileSize / static_cast<float>(_spikesTexture.getSize().x);
+            float sy = _tileSize / static_cast<float>(_spikesTexture.getSize().y);
+            spr.setScale({sx, sy});
+            window.draw(spr);
+        } else {
+            sf::RectangleShape tBox({_tileSize, _tileSize});
+            tBox.setPosition({tx, ty});
+            if (tr.type == 0) {
+                tBox.setFillColor(sf::Color(255, 170, 0, 160));
+                tBox.setOutlineColor(sf::Color(255, 200, 50, 240));
+            } else if (tr.type == 1) {
+                tBox.setFillColor(sf::Color(230, 40, 40, 160));
+                tBox.setOutlineColor(sf::Color(255, 80, 80, 240));
+            } else {
+                tBox.setFillColor(sf::Color(160, 60, 255, 120));
+                tBox.setOutlineColor(sf::Color(190, 100, 255, 240));
+            }
+            tBox.setOutlineThickness(1.5f);
+            window.draw(tBox);
         }
     }
 }

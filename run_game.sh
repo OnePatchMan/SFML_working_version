@@ -10,3 +10,4 @@ fi
 
 echo "[START] Запуск игры FightingComboArena..."
 ./build/FightingComboArena "$@"
+

@@ -10,3 +10,4 @@ fi
 
 echo "[START] Запуск графического редактора карт MapEditor..."
 ./build/MapEditor "$@"
+

@@ -51,7 +51,10 @@ inline std::string resolveAssetPath(const std::string& path) {
     return path;
 }
 
+#ifndef TO_SF_STRING_DEFINED
+#define TO_SF_STRING_DEFINED
 inline sf::String toSfString(std::string_view str) {
     return sf::String::fromUtf8(str.begin(), str.end());
 }
+#endif
 
