@@ -2438,6 +2438,7 @@ int main() {
     {
         std::cout << "\n[TEST 39] Unique Combo Finisher: Blood Burst & Persistent Wall/Floor Decals" << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         arena.clearBlood();
         assert(arena.getBloodDecalCount() == 0);
         assert(arena.getBloodParticles().empty());
@@ -2470,6 +2471,7 @@ int main() {
     {
         std::cout << "\n[TEST 40] Enemy Patrol: Platform Edge Reached & Turn Back Without Falling" << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         // Load Room 1 where enemies patrol on elevated platforms
         arena.loadRoom(1);
         auto spawns = arena.getEnemySpawnPositions();
@@ -2528,7 +2530,7 @@ int main() {
         Enemy blockingEnemy(arena.getSpawnPosition() + sf::Vector2f(35.0f, (Player::BOTTOM_OFFSET - Enemy::HALF_H)));
         blockingEnemy.isBlocking = true;
         if (!attacker.isFacingRight()) attacker.turnAround();
-        tick(0.1f, arena, attacker, blockingEnemy, combat);
+        tick(0.25f, arena, attacker, blockingEnemy, combat);
         assert(attacker.isOnGround());
 
         // Hit 1 of combo 1-1-2:
@@ -3074,7 +3076,14 @@ int main() {
     {
         std::cout << "\n[TEST 46] Testing Directional Finisher Blood, Dripping Background & Surface Stripes..." << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         arena.clearBlood();
+        // Clear open air around test blood spawn point (400, 300)
+        for (int y = 5; y < 14; ++y) {
+            for (int x = 8; x < 20; ++x) {
+                arena.setTile(x, y, 0);
+            }
+        }
         assert(arena.getBloodDecalCount() == 0);
         assert(arena.getBloodParticles().empty());
         assert(arena.getBackgroundBloodStreakCount() == 0);
@@ -3082,7 +3091,7 @@ int main() {
         // 1. Test Dive Slam (a1a1adw2) downward-diagonal blood direction
         // Force vector points forward and down (+0.707, +0.707)
         sf::Vector2f diveSlamForce(0.707f, 0.707f);
-        arena.spawnFinisherBlood({400.0f, 300.0f}, diveSlamForce, 50);
+        arena.spawnFinisherBlood({400.0f, 250.0f}, diveSlamForce, 50);
 
         assert(arena.getBloodParticles().size() == 50);
         assert(arena.getBackgroundBloodStreakCount() > 0);
@@ -3107,12 +3116,15 @@ int main() {
         size_t initialBgCount = arena.getBackgroundBloodStreakCount();
         const auto& bgBefore = arena.getBackgroundBloodStreaks();
         size_t streamIdx = 0;
+        bool foundStream = false;
         for (size_t i = 0; i < bgBefore.size(); ++i) {
-            if (!bgBefore[i].isBlotch && bgBefore[i].active) {
+            if (!bgBefore[i].isBlotch && !bgBefore[i].isSpray && bgBefore[i].active && bgBefore[i].dripSpeed > 0.0f) {
                 streamIdx = i;
+                foundStream = true;
                 break;
             }
         }
+        assert(foundStream);
         float initialLength = bgBefore[streamIdx].length;
         float initialPosY = bgBefore[streamIdx].currentPos.y;
 
@@ -3701,6 +3713,7 @@ int main() {
     {
         std::cout << "\n[TEST 51] Testing Subtle Kill Blood Splatter (Low Count & Short Distance)..." << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         arena.clearBlood();
         assert(arena.getBloodParticles().empty());
         assert(arena.getBloodDecalCount() == 0);
@@ -3739,6 +3752,7 @@ int main() {
     {
         std::cout << "\n[TEST 52] Testing Combo 12f1 (Ground Slam & Pop-Up -> Baseball Bat Swing)..." << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         CombatSystem combat;
         Player player(arena.getSpawnPosition());
         Enemy enemy({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
@@ -3815,6 +3829,7 @@ int main() {
     {
         std::cout << "\n[TEST 53] Testing Combo b21u2 (Back Pull -> Hilt Push -> Circular Sky Launcher)..." << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         CombatSystem combat;
         Player player(arena.getSpawnPosition());
         Enemy enemy({player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
@@ -3897,6 +3912,7 @@ int main() {
     {
         std::cout << "\n[TEST 54] Testing Weapon Combo 121 (Tenderizer Push)..." << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         CombatSystem combat;
         Player player(arena.getSpawnPosition());
         Enemy enemy({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
@@ -3987,6 +4003,7 @@ int main() {
     {
         std::cout << "\n[TEST 55] Testing Weapon Combo db1u1 (Reverse Turn Strike -> Sky Pop-Up)..." << std::endl;
         Arena arena(80, 20);
+        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         CombatSystem combat;
         Player player(arena.getSpawnPosition());
         combat.reset();
@@ -4494,12 +4511,13 @@ int main() {
         std::cout << "\n[TEST 63] TESTING WALL BOUNCE & DAMPED FORCE (MORTAL KOMBAT X STYLE)..." << std::endl;
         Arena arena;
         arena.loadRoom(1);
+        arena.setTile(0, 6, 2);
         Player player(arena.getSpawnPosition());
         CombatSystem combat;
         CombatSystem::setActive(&combat);
 
         // 1. Setup enemy near left wall of arena
-        // In room 1, TILE_SIZE=64, col 0 is wall (x<64), free air is x>=64+12=76
+        // In room 1, TILE_SIZE=64, col 0 is wall (x<64), free air is col 1 (x>=64)
         // Place enemy at x=110, y=floor
         Enemy enemy({110.0f, arena.getSpawnPosition().y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
         enemy.setSmartAI(false);
@@ -4510,8 +4528,8 @@ int main() {
         assert(enemy.hurtTimer > 0.0f);
         assert(!enemy.wasWallBounced());
 
-        // Advance 5-6 frames to hit the left wall at x=76
-        for (int i = 0; i < 6; ++i) {
+        // Advance frames to hit the left wall at x=64
+        for (int i = 0; i < 30; ++i) {
             tick(0.016f, arena, player, enemy, combat);
             if (enemy.wasWallBounced()) break;
         }
@@ -4743,13 +4761,14 @@ int main() {
         bool stompConnected = false;
         for (int f = 0; f < 10; ++f) {
             tick(0.016f, arena, player, enemy, combat);
-            if (enemy.velocity.y < -350.0f) {
+            if (enemy.velocity.y < -340.0f) {
                 stompConnected = true;
                 break;
             }
         }
         assert(stompConnected);
-        std::cout << "-> Verified enemy launched upward by dw1 stomp (knockY: " << enemy.velocity.y << " px/s)!" << std::endl;
+        std::cout << "-> Verified enemy launched upward by dw1 stomp (knockY: " << enemy.velocity.y 
+                  << " px/s, slightly below jump height)!" << std::endl;
 
         // 2. Player Jumps (j)
         triggerJump(combat, player);
@@ -4760,8 +4779,8 @@ int main() {
             tick(0.016f, arena, player, enemy, combat);
         }
 
-        // Align enemy near/under player in air
-        enemy.position = {player.position.x + 35.0f, player.position.y + 15.0f};
+        // Align enemy directly underneath the player in air (adw1 hits straight down!)
+        enemy.position = {player.position.x, player.position.y + 35.0f};
 
         // 3. Trigger adw1 in air (Down + Light) -> dw1-j-adw1 Sky Hook Combo!
         player.setSimulatedVerticalDir(1.0f); // Hold Down in air

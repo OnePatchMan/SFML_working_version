@@ -530,13 +530,13 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         stats = CombatConfig::getBaseAttack(attackType);
         if (player.hasWeapon() && (attackType == "dw1" || attackType == "ddw1")) {
             stats.damage = 3.2f;
-            stats.knockX = 50.0f;
-            stats.knockY = -440.0f;
+            stats.knockX = 15.0f;
+            stats.knockY = -370.0f; // Подброс чуть ниже высоты прыжка (~118px при прыжке 135px)
             stats.playerRecovery = 0.16f;
-            stats.enemyStun = 0.55f;
+            stats.enemyStun = 0.45f;
             stats.whiffStun = 0.22f;
             stats.activeTime = 0.14f;
-            stats.lunge = 6.0f;
+            stats.lunge = 2.0f;
             stats.displayName = "WEAPON STOMP & POP-UP!";
             stats.color = sf::Color(255, 175, 40);
         }
@@ -716,10 +716,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             hbh = 70.0f;
             hby = player.position.y - 42.0f;
         } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || _comboDisplayName.find("SKY HOOK") != std::string::npos || _currentAttackType == "adw1") {
-            // Удар под себя с зацепом в воздухе (adw1 / dw1jadw1)
-            hbw = 85.0f;
+            // Удар ровно под себя с зацепом в воздухе (adw1 / dw1jadw1)
+            hbw = 64.0f;
             hbh = 70.0f;
-            hby = player.position.y - 10.0f;
+            hby = player.position.y + 5.0f;
         } else if (player.hasWeapon() && (_currentAttackType == "dw1" || _comboDisplayName.find("STOMP") != std::string::npos)) {
             // Топот булавой по земле
             hbw = 90.0f;
@@ -753,6 +753,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             // Захват тянется от тела персонажа (-10px) далеко вперед (+115px),
             // гарантируя поимку отлетевшего от форсы врага
             hbx = (_attackDirection > 0) ? (player.position.x - 10.0f) : (player.position.x + 10.0f - hbw);
+        } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || _comboDisplayName.find("SKY HOOK") != std::string::npos || _currentAttackType == "adw1") {
+            // adw1 бьет ровно под себя (центрирован по координате X персонажа)
+            hbx = player.position.x - hbw * 0.5f;
         } else if (_currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos) {
             // b2 бьет далеко вперед и охватывает пространство вокруг персонажа (-30px позади до +110px впереди)
             hbx = (_attackDirection > 0) ? (player.position.x - 30.0f) : (player.position.x + 30.0f - hbw);
@@ -1094,7 +1097,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 // Особая логика комбо dw1jadw1 (зацеп булавой в воздухе и подброс высоко в небо):
                 if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
                     _comboDisplayName.find("SKY HOOK") != std::string::npos) {
-                    enemy.velocity.x = _attackDirection * 80.0f;
+                    enemy.velocity.x = _attackDirection * 25.0f;
                     enemy.velocity.y = -520.0f;
                     enemy.triggerStun(0.50f);
                     player.setAirSuspended(true);
@@ -1686,8 +1689,8 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
             topY = midY - 30.0f;
             botY = midY + 10.0f;
         } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || _comboDisplayName.find("SKY HOOK") != std::string::npos || _currentAttackType == "adw1") {
-            topY = midY + 20.0f;
-            botY = midY - 25.0f;
+            topY = midY - 10.0f;
+            botY = midY + 25.0f;
         } else if (player.hasWeapon() && (_currentAttackType == "dw1" || _comboDisplayName.find("STOMP") != std::string::npos)) {
             topY = midY - 12.0f;
             botY = midY + 22.0f;

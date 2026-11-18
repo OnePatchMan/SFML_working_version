@@ -1319,13 +1319,20 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
         for (int x = 0; x < _width; ++x) {
             sf::Color c = img.getPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)});
             
-            if (c.a < 50) {
+            if (c.a < 50 || (c.r == 25 && c.g == 30 && c.b == 42)) {
                 _map[y][x] = 0;
                 continue;
             }
 
+            // Синий / Лазурный / Ярко-зеленый = Спавн игрока (P)
+            if ((c.b > 180 && c.r < 100 && c.g < 150) || (c.r == 0 && c.g == 230 && c.b == 118)) {
+                _map[y][x] = 0;
+                _spawnPosition = {static_cast<float>(x * _tileSize), 
+                                  static_cast<float>((y + 1) * _tileSize - 30.0f)};
+                foundPlayerSpawn = true;
+            }
             // Черный / темно-серый = Стена (#)
-            if (c.r < 60 && c.g < 60 && c.b < 60) {
+            else if (c.r < 60 && c.g < 60 && c.b < 60) {
                 _map[y][x] = 2;
             }
             // Зеленый / травяной / коричневый = Платформа (=)
@@ -1347,13 +1354,6 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
                 _map[y][x] = 3;
                 int target = (x < _width / 2) ? (_currentRoomIndex == 1 ? _totalRooms : _currentRoomIndex - 1) : (_currentRoomIndex % _totalRooms + 1);
                 _doors.push_back({x, y, target});
-            }
-            // Синий / Лазурный = Спавн игрока (P)
-            else if ((c.b > 180 && c.r < 100 && c.g < 150) || (c.r == 0 && c.g == 230 && c.b == 118)) {
-                _map[y][x] = 0;
-                _spawnPosition = {static_cast<float>(x * _tileSize), 
-                                  static_cast<float>((y + 1) * _tileSize - 30.0f)};
-                foundPlayerSpawn = true;
             }
             // Пурпурный / Фиолетовый = Спавн дуэлянта (Duelist Aggressive)
             else if (c.r > 150 && c.g < 100 && c.b > 150) {
