@@ -283,13 +283,25 @@ int main() {
                 if (doorOpt.has_value()) {
                     const auto& door = doorOpt.value();
                     std::string targetRoomName = !door.targetRoomName.empty() ? door.targetRoomName : (door.targetRoom > 0 ? ("room_" + std::to_string(door.targetRoom)) : "");
-                    if (!targetRoomName.empty() && targetRoomName != arena.getCurrentRoomName()) {
-                        arena.loadRoomByName(targetRoomName);
+                    bool isDiffRoom = !targetRoomName.empty() && targetRoomName != arena.getCurrentRoomName();
+                    bool isSameRoom = (targetRoomName.empty() || targetRoomName == arena.getCurrentRoomName()) &&
+                                      door.targetDoorX >= 0 && door.targetDoorY >= 0 &&
+                                      (door.targetDoorX != door.x || door.targetDoorY != door.y);
+                    if (isDiffRoom || isSameRoom) {
+                        if (isDiffRoom) {
+                            arena.loadRoomByName(targetRoomName);
+                        }
                         if (door.targetDoorX >= 0 && door.targetDoorY >= 0) {
                             // Перемещение ровно к связанной двери в целевой комнате
                             float ts = arena.getTileSize();
-                            player.position = { (door.targetDoorX + 0.5f) * ts,
-                                                (door.targetDoorY + 1.0f) * ts - Player::BOTTOM_OFFSET };
+                            float spawnX = (door.targetDoorX + 0.5f) * ts;
+                            float spawnY = (door.targetDoorY + 1.0f) * ts - Player::BOTTOM_OFFSET;
+                            if (door.targetDoorX <= 2) {
+                                spawnX += 32.0f;
+                            } else if (door.targetDoorX >= arena.getWidth() - 3) {
+                                spawnX -= 32.0f;
+                            }
+                            player.position = { spawnX, spawnY };
                         } else {
                             // Если точные координаты не заданы, ищем обратную дверь или спавн
                             bool foundOpposite = false;
@@ -307,10 +319,12 @@ int main() {
                         }
                         player.velocity = {0.0f, 0.0f};
 
-                        respawnEnemies();
-                        combat.reset();
-                        doorCooldown = 0.8f; // Задержка перед следующим переходом, чтобы исключить зацикливание
-                        std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << targetRoomName << " через связанную дверь!" << std::endl;
+                        if (isDiffRoom) {
+                            respawnEnemies();
+                            combat.reset();
+                        }
+                        doorCooldown = 1.0f; // Задержка перед следующим переходом, чтобы исключить зацикливание
+                        std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << (isDiffRoom ? targetRoomName : arena.getCurrentRoomName()) << " через связанную дверь!" << std::endl;
                     }
                 }
             }

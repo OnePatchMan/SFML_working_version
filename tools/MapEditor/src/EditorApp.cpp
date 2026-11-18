@@ -632,6 +632,7 @@ void EditorApp::startSimulation(std::optional<sf::Vector2i> startTile) {
     _savedEditorViewScale = _viewScale;
 
     _simArena = std::make_unique<Arena>(_width, _height);
+    _simArena->setCurrentRoomName(_currentRoomName);
 
     std::vector<int> flatTiles(_width * _height, 0);
     for (int y = 0; y < _height; ++y) {
@@ -640,7 +641,9 @@ void EditorApp::startSimulation(std::optional<sf::Vector2i> startTile) {
         }
     }
     std::vector<DoorBlock> dBlocks;
-    for (const auto& d : _doors) dBlocks.push_back({d.x, d.y, d.targetRoom});
+    for (const auto& d : _doors) {
+        dBlocks.push_back({d.x, d.y, d.targetRoom, d.targetDoorX, d.targetDoorY, d.targetRoomName});
+    }
 
     std::vector<EnemySpawnConfig> eConfigs;
     for (const auto& es : _enemySpawns) {
@@ -3334,26 +3337,40 @@ void EditorApp::update(float dt) {
                     std::string targetRoomName = !door.targetRoomName.empty() ? door.targetRoomName : (door.targetRoom > 0 ? ("room_" + std::to_string(door.targetRoom)) : "");
                     int tdx = door.targetDoorX;
                     int tdy = door.targetDoorY;
-                    if (tdx >= 0 && tdy >= 0 && !targetRoomName.empty() && targetRoomName != _simArena->getCurrentRoomName()) {
-                        _simArena->loadRoomByName(targetRoomName);
-                        float spawnX = (tdx + 0.5f) * _simArena->getTileSize();
-                        float spawnY = (tdy + 1.0f) * _simArena->getTileSize() - Player::BOTTOM_OFFSET;
+                    bool isDiffRoom = !targetRoomName.empty() && targetRoomName != _simArena->getCurrentRoomName();
+                    bool isSameRoom = (targetRoomName.empty() || targetRoomName == _simArena->getCurrentRoomName()) &&
+                                      tdx >= 0 && tdy >= 0 && (tdx != door.x || tdy != door.y);
+
+                    if (isDiffRoom || isSameRoom) {
+                        if (isDiffRoom) {
+                            _simArena->loadRoomByName(targetRoomName);
+                        }
+                        float ts = _simArena->getTileSize();
+                        float spawnX = (tdx + 0.5f) * ts;
+                        float spawnY = (tdy + 1.0f) * ts - Player::BOTTOM_OFFSET;
+                        if (tdx <= 2) {
+                            spawnX += 32.0f;
+                        } else if (tdx >= _simArena->getWidth() - 3) {
+                            spawnX -= 32.0f;
+                        }
                         _simPlayer->position = {spawnX, spawnY};
                         _simPlayer->velocity = {0.0f, 0.0f};
-                        _simEnemies.clear();
-                        for (const auto& espawn : _simArena->getEnemySpawns()) {
-                            EnemyType et = (espawn.type == 1) ? EnemyType::TANK :
-                                           (espawn.type == 2) ? EnemyType::DUELIST :
-                                           (espawn.type == 3) ? EnemyType::DUELIST_PASSIVE :
-                                           (espawn.type == 4) ? EnemyType::DUMMY : EnemyType::NORMAL;
-                            _simEnemies.emplace_back(espawn.position, et);
-                        }
-                        for (auto& e : _simEnemies) {
-                            e.setSmartAI(true);
-                            e.reset();
+                        if (isDiffRoom) {
+                            _simEnemies.clear();
+                            for (const auto& espawn : _simArena->getEnemySpawns()) {
+                                EnemyType et = (espawn.type == 1) ? EnemyType::TANK :
+                                               (espawn.type == 2) ? EnemyType::DUELIST :
+                                               (espawn.type == 3) ? EnemyType::DUELIST_PASSIVE :
+                                               (espawn.type == 4) ? EnemyType::DUMMY : EnemyType::NORMAL;
+                                _simEnemies.emplace_back(espawn.position, et);
+                            }
+                            for (auto& e : _simEnemies) {
+                                e.setSmartAI(true);
+                                e.reset();
+                            }
                         }
                         _simDoorCooldown = 1.0f;
-                        _statusMessage = "Переход в дверь комнаты " + targetRoomName + " (" + std::to_string(tdx) + ", " + std::to_string(tdy) + ")";
+                        _statusMessage = "Переход в дверь комнаты " + (isDiffRoom ? targetRoomName : _simArena->getCurrentRoomName()) + " (" + std::to_string(tdx) + ", " + std::to_string(tdy) + ")";
                         _statusTimer = 2.5f;
                     } else if (tdx < 0 || tdy < 0) {
                         _statusMessage = "Дверь не связана! Свяжите ее на карте комнат [F1].";

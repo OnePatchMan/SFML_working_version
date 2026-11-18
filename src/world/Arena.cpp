@@ -1938,6 +1938,11 @@ void Arena::restoreFromSnapshot(int w, int h, const std::vector<int>& tiles,
         }
     }
     _doors = doors;
+    for (const auto& d : _doors) {
+        if (d.y >= 0 && d.y < _height && d.x >= 0 && d.x < _width) {
+            _map[d.y][d.x] = 3;
+        }
+    }
     _enemySpawns = enemySpawns;
     syncEnemySpawnPositions();
     _spawnPosition = playerSpawn;
@@ -1946,7 +1951,11 @@ void Arena::restoreFromSnapshot(int w, int h, const std::vector<int>& tiles,
 
 bool Arena::isDoor(int tx, int ty) const {
     if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return false;
-    return _map[ty][tx] == 3;
+    if (_map[ty][tx] == 3) return true;
+    for (const auto& d : _doors) {
+        if (d.x == tx && d.y == ty) return true;
+    }
+    return false;
 }
 
 int Arena::getDoorTargetRoom(int tx, int ty) const {
@@ -2003,11 +2012,11 @@ std::optional<DoorBlock> Arena::getOverlappingDoor(float px, float py, float hal
 
     for (int ty = minTy; ty <= maxTy; ++ty) {
         for (int tx = minTx; tx <= maxTx; ++tx) {
+            for (const auto& d : _doors) {
+                if (d.x == tx && d.y == ty) return d;
+            }
             if (isDoor(tx, ty)) {
-                for (const auto& d : _doors) {
-                    if (d.x == tx && d.y == ty) return d;
-                }
-                return DoorBlock{tx, ty, (_currentRoomIndex % _totalRooms) + 1, -1, -1};
+                return DoorBlock{tx, ty, (_currentRoomIndex % _totalRooms) + 1, -1, -1, ""};
             }
         }
     }
