@@ -29,6 +29,11 @@ enum class ToolType {
     ENEMY_DUMMY = 18           // 'M' Спавн манекена (Dummy)
 };
 
+enum class EditorScreen {
+    WORLD_LAYOUT = 0, // Обзорный экран: карта комнат, перемещение, изменение размеров, управление дверьми
+    ROOM_DETAIL = 1   // Редактор тайлов комнаты: детальный редактор одной комнаты
+};
+
 enum class PaletteTab {
     BLOCKS = 0,    // 🧱 Блоки и Геометрия
     ENTITIES = 1,  // ⚔ Сущности и Враги
@@ -74,6 +79,7 @@ struct CanvasRoom {
     int width = 80;
     int height = 20;
     sf::Vector2f offset{0.0f, 0.0f};
+    bool hasCustomLayoutPos = false;
     std::vector<std::vector<int>> map;
     std::vector<EditorDoor> doors;
     std::vector<EditorEnemySpawn> enemySpawns;
@@ -303,6 +309,36 @@ private:
     int getCanvasRoomAt(sf::Vector2f worldPos) const;
     sf::Vector2f getActiveRoomOffset() const;
     void linkDoors(const std::string& roomA, int ax, int ay, const std::string& roomB, int bx, int by);
+
+    // Режимы экранов: Редактор комнат (WORLD_LAYOUT) и Редактор тайлов комнаты (ROOM_DETAIL)
+    EditorScreen _currentScreen = EditorScreen::WORLD_LAYOUT;
+
+    // Перемещение комнат (Drag & Drop) в режиме карты мира
+    bool _isDraggingRoom = false;
+    int _draggedRoomIdx = -1;
+    sf::Vector2f _roomDragStartOffset{0.0f, 0.0f};
+    sf::Vector2f _roomDragMouseStart{0.0f, 0.0f};
+
+    // Изменение размеров комнат мышкой (Resize Corner Handle)
+    bool _isResizingRoom = false;
+    int _resizingRoomIdx = -1;
+    sf::Vector2i _resizeStartDims{0, 0};
+    sf::Vector2f _resizeMouseStart{0.0f, 0.0f};
+
+    // Двойной клик для входа в комнату и инспектор дверей
+    sf::Clock _clickClock;
+    float _lastClickTime = 0.0f;
+    int _lastClickedRoomIdx = -1;
+    int _selectedDoorIdx = -1;
+
+    void switchToScreen(EditorScreen screen);
+    void resizeCanvasRoom(int roomIdx, int newW, int newH);
+    bool saveRoomByIndex(int roomIdx);
+    bool isMouseOverResizeHandle(int roomIdx, sf::Vector2f mouseWorld) const;
+
+    void drawWorldLayout();
+    void drawWorldLayoutUI();
+    bool handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse::Button button);
 
     void drawWorld();
     void drawUI();

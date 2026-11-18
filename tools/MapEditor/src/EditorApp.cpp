@@ -848,6 +848,20 @@ void EditorApp::scanRooms() {
                         }
                     }
                 }
+                if (kline.find("layout_pos") != std::string::npos) {
+                    size_t q3 = kline.find('\"', kline.find('\"') + 1);
+                    if (q3 != std::string::npos) {
+                        size_t q4 = kline.find('\"', q3 + 1);
+                        if (q4 != std::string::npos) {
+                            std::istringstream iss(kline.substr(q3 + 1, q4 - q3 - 1));
+                            float lx = 0.0f, ly = 0.0f;
+                            if (iss >> lx >> ly) {
+                                cr.offset = sf::Vector2f(lx, ly);
+                                cr.hasCustomLayoutPos = true;
+                            }
+                        }
+                    }
+                }
                 if (kline.find("test_spawn") != std::string::npos) {
                     size_t q3 = kline.find('\"', kline.find('\"') + 1);
                     if (q3 != std::string::npos) {
@@ -962,7 +976,9 @@ void EditorApp::updateCanvasRoomLayout() {
         auto& cr = _canvasRooms[i];
         float rw = cr.width * _tileSize;
         float rh = cr.height * _tileSize;
-        cr.offset = sf::Vector2f(curX, curY);
+        if (!cr.hasCustomLayoutPos) {
+            cr.offset = sf::Vector2f(curX, curY);
+        }
         rowMaxH = std::max(rowMaxH, rh);
         inRow++;
         if (inRow >= 3) {
@@ -1335,27 +1351,29 @@ bool EditorApp::loadRoom(int index) {
     return loadRoomByName("room_" + std::to_string(index));
 }
 
-bool EditorApp::saveToGame() {
+bool EditorApp::saveRoomByIndex(int roomIdx) {
+    if (roomIdx < 0 || roomIdx >= static_cast<int>(_canvasRooms.size())) return false;
+    const auto& cr = _canvasRooms[roomIdx];
     std::string mapsDir = getGameMapsDir();
     std::filesystem::create_directories(mapsDir);
-    std::string base = mapsDir + "/" + _currentRoomName;
+    std::string base = mapsDir + "/" + cr.name;
 
     std::ofstream txt(base + ".txt");
     if (!txt.is_open()) return false;
 
-    for (int y = 0; y < _height; ++y) {
+    for (int y = 0; y < cr.height; ++y) {
         std::string row = "";
-        for (int x = 0; x < _width; ++x) {
-            if (_hasPlayerSpawn && _globalPlayerSpawnRoom == _currentRoomName && _playerSpawn.x == x && _playerSpawn.y == y) {
+        for (int x = 0; x < cr.width; ++x) {
+            if (cr.hasPlayerSpawn && _globalPlayerSpawnRoom == cr.name && cr.playerSpawn.x == x && cr.playerSpawn.y == y) {
                 row += 'P';
                 continue;
             }
-            if (_testSpawn && _testSpawn->x == x && _testSpawn->y == y) {
+            if (cr.testSpawn && cr.testSpawn->x == x && cr.testSpawn->y == y) {
                 row += '>';
                 continue;
             }
             bool isEnemy = false;
-            for (const auto& es : _enemySpawns) {
+            for (const auto& es : cr.enemySpawns) {
                 if (es.x == x && es.y == y) {
                     if (es.type == 1) row += 'T';
                     else if (es.type == 2) row += 'U';
@@ -1369,7 +1387,7 @@ bool EditorApp::saveToGame() {
             if (isEnemy) continue;
 
             bool isTrigger = false;
-            for (const auto& tr : _triggers) {
+            for (const auto& tr : cr.triggers) {
                 if (tr.x == x && tr.y == y) {
                     row += (tr.type == 0) ? '^' : (tr.type == 1) ? 'S' : '!';
                     isTrigger = true;
@@ -1378,7 +1396,7 @@ bool EditorApp::saveToGame() {
             }
             if (isTrigger) continue;
 
-            int tile = _map[y][x];
+            int tile = (y < static_cast<int>(cr.map.size()) && x < static_cast<int>(cr.map[y].size())) ? cr.map[y][x] : 0;
             if (tile == 1) row += '=';
             else if (tile == 2) row += '#';
             else if (tile == 3) row += 'D';
@@ -1391,40 +1409,43 @@ bool EditorApp::saveToGame() {
     std::ofstream kv(base + ".kv");
     if (kv.is_open()) {
         kv << "\"Room\"\n{\n";
-        kv << "    \"name\"    \"" << _currentRoomName << "\"\n";
-        kv << "    \"width\"   \"" << _width << "\"\n";
-        kv << "    \"height\"  \"" << _height << "\"\n";
-        if (_hasPlayerSpawn && _globalPlayerSpawnRoom == _currentRoomName) {
-            kv << "    \"player_spawn\"  \"" << _playerSpawn.x << " " << _playerSpawn.y << "\"\n";
+        kv << "    \"name\"    \"" << cr.name << "\"\n";
+        kv << "    \"width\"   \"" << cr.width << "\"\n";
+        kv << "    \"height\"  \"" << cr.height << "\"\n";
+        if (cr.hasCustomLayoutPos) {
+            kv << "    \"layout_pos\"  \"" << cr.offset.x << " " << cr.offset.y << "\"\n";
         }
-        if (_testSpawn) {
-            kv << "    \"test_spawn\"    \"" << _testSpawn->x << " " << _testSpawn->y << "\"\n";
+        if (cr.hasPlayerSpawn && _globalPlayerSpawnRoom == cr.name) {
+            kv << "    \"player_spawn\"  \"" << cr.playerSpawn.x << " " << cr.playerSpawn.y << "\"\n";
+        }
+        if (cr.testSpawn) {
+            kv << "    \"test_spawn\"    \"" << cr.testSpawn->x << " " << cr.testSpawn->y << "\"\n";
         }
 
-        if (!_doors.empty()) {
+        if (!cr.doors.empty()) {
             kv << "\n    \"Doors\"\n    {\n";
-            for (size_t i = 0; i < _doors.size(); ++i) {
-                if (_doors[i].targetDoorX >= 0 && _doors[i].targetDoorY >= 0) {
-                    kv << "        \"door_" << i << "\"  \"" << _doors[i].x << " " << _doors[i].y << " " << _doors[i].targetRoom << " " << _doors[i].targetDoorX << " " << _doors[i].targetDoorY << "\"\n";
+            for (size_t i = 0; i < cr.doors.size(); ++i) {
+                if (cr.doors[i].targetDoorX >= 0 && cr.doors[i].targetDoorY >= 0) {
+                    kv << "        \"door_" << i << "\"  \"" << cr.doors[i].x << " " << cr.doors[i].y << " " << cr.doors[i].targetRoom << " " << cr.doors[i].targetDoorX << " " << cr.doors[i].targetDoorY << "\"\n";
                 } else {
-                    kv << "        \"door_" << i << "\"  \"" << _doors[i].x << " " << _doors[i].y << " " << _doors[i].targetRoom << "\"\n";
+                    kv << "        \"door_" << i << "\"  \"" << cr.doors[i].x << " " << cr.doors[i].y << " " << cr.doors[i].targetRoom << "\"\n";
                 }
             }
             kv << "    }\n";
         }
 
-        if (!_enemySpawns.empty()) {
+        if (!cr.enemySpawns.empty()) {
             kv << "\n    \"Enemies\"\n    {\n";
-            for (size_t i = 0; i < _enemySpawns.size(); ++i) {
-                kv << "        \"enemy_" << i << "\"  \"" << _enemySpawns[i].x << " " << _enemySpawns[i].y << " " << _enemySpawns[i].type << "\"\n";
+            for (size_t i = 0; i < cr.enemySpawns.size(); ++i) {
+                kv << "        \"enemy_" << i << "\"  \"" << cr.enemySpawns[i].x << " " << cr.enemySpawns[i].y << " " << cr.enemySpawns[i].type << "\"\n";
             }
             kv << "    }\n";
         }
 
-        if (!_triggers.empty()) {
+        if (!cr.triggers.empty()) {
             kv << "\n    \"Triggers\"\n    {\n";
-            for (size_t i = 0; i < _triggers.size(); ++i) {
-                kv << "        \"trigger_" << i << "\"  \"" << _triggers[i].x << " " << _triggers[i].y << " " << _triggers[i].type << " " << _triggers[i].power << "\"\n";
+            for (size_t i = 0; i < cr.triggers.size(); ++i) {
+                kv << "        \"trigger_" << i << "\"  \"" << cr.triggers[i].x << " " << cr.triggers[i].y << " " << cr.triggers[i].type << " " << cr.triggers[i].power << "\"\n";
             }
             kv << "    }\n";
         }
@@ -1434,23 +1455,23 @@ bool EditorApp::saveToGame() {
     }
 
     // Сохранение цветного PNG-превью для браузера комнат
-    sf::Image img({static_cast<unsigned int>(_width), static_cast<unsigned int>(_height)}, sf::Color(25, 30, 42));
-    for (int y = 0; y < _height; ++y) {
-        for (int x = 0; x < _width; ++x) {
-            int t = _map[y][x];
-            if (t == 1) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(76, 175, 80)); // Platform
-            else if (t == 2) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(120, 135, 160)); // Wall
-            else if (t == 3) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(0, 220, 255)); // Door
+    sf::Image img({static_cast<unsigned int>(cr.width), static_cast<unsigned int>(cr.height)}, sf::Color(25, 30, 42));
+    for (int y = 0; y < cr.height; ++y) {
+        for (int x = 0; x < cr.width; ++x) {
+            int t = (y < static_cast<int>(cr.map.size()) && x < static_cast<int>(cr.map[y].size())) ? cr.map[y][x] : 0;
+            if (t == 1) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(76, 175, 80));
+            else if (t == 2) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(120, 135, 160));
+            else if (t == 3) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(0, 220, 255));
         }
     }
-    for (const auto& tr : _triggers) {
-        if (tr.x >= 0 && tr.x < _width && tr.y >= 0 && tr.y < _height) {
+    for (const auto& tr : cr.triggers) {
+        if (tr.x >= 0 && tr.x < cr.width && tr.y >= 0 && tr.y < cr.height) {
             sf::Color tc = (tr.type == 0) ? sf::Color(255, 170, 0) : sf::Color(230, 40, 40);
             img.setPixel({static_cast<unsigned int>(tr.x), static_cast<unsigned int>(tr.y)}, tc);
         }
     }
-    for (const auto& es : _enemySpawns) {
-        if (es.x >= 0 && es.x < _width && es.y >= 0 && es.y < _height) {
+    for (const auto& es : cr.enemySpawns) {
+        if (es.x >= 0 && es.x < cr.width && es.y >= 0 && es.y < cr.height) {
             sf::Color ec = (es.type == 1) ? sf::Color(255, 40, 40) :
                            (es.type == 2) ? sf::Color(180, 50, 240) :
                            (es.type == 3) ? sf::Color(50, 190, 255) :
@@ -1458,40 +1479,157 @@ bool EditorApp::saveToGame() {
             img.setPixel({static_cast<unsigned int>(es.x), static_cast<unsigned int>(es.y)}, ec);
         }
     }
-    if (_hasPlayerSpawn && _globalPlayerSpawnRoom == _currentRoomName &&
-        _playerSpawn.x >= 0 && _playerSpawn.x < _width && _playerSpawn.y >= 0 && _playerSpawn.y < _height) {
-        img.setPixel({static_cast<unsigned int>(_playerSpawn.x), static_cast<unsigned int>(_playerSpawn.y)}, sf::Color(0, 230, 118));
+    if (cr.hasPlayerSpawn && _globalPlayerSpawnRoom == cr.name &&
+        cr.playerSpawn.x >= 0 && cr.playerSpawn.x < cr.width && cr.playerSpawn.y >= 0 && cr.playerSpawn.y < cr.height) {
+        img.setPixel({static_cast<unsigned int>(cr.playerSpawn.x), static_cast<unsigned int>(cr.playerSpawn.y)}, sf::Color(0, 230, 118));
     }
     img.saveToFile(base + ".png");
 
-    if (_currentRoomName == "room_1") {
-        txt.open(getGameConfigDir() + "/map.txt");
-        if (txt.is_open()) {
-            for (int y = 0; y < _height; ++y) {
+    if (cr.name == "room_1") {
+        std::ofstream mainTxt(getGameConfigDir() + "/map.txt");
+        if (mainTxt.is_open()) {
+            for (int y = 0; y < cr.height; ++y) {
                 std::string row = "";
-                for (int x = 0; x < _width; ++x) {
-                    if (_hasPlayerSpawn && _globalPlayerSpawnRoom == _currentRoomName && _playerSpawn.x == x && _playerSpawn.y == y) {
+                for (int x = 0; x < cr.width; ++x) {
+                    if (cr.hasPlayerSpawn && _globalPlayerSpawnRoom == cr.name && cr.playerSpawn.x == x && cr.playerSpawn.y == y) {
                         row += 'P';
                         continue;
                     }
-                    int t = _map[y][x];
+                    int t = (y < static_cast<int>(cr.map.size()) && x < static_cast<int>(cr.map[y].size())) ? cr.map[y][x] : 0;
                     if (t == 1) row += '=';
                     else if (t == 2) row += '#';
                     else if (t == 3) row += 'D';
                     else row += '.';
                 }
-                txt << row << "\n";
+                mainTxt << row << "\n";
             }
-            txt.close();
+            mainTxt.close();
         }
         img.saveToFile(getGameConfigDir() + "/map.png");
     }
 
-    syncCurrentRoomToCanvas();
-
-    _statusMessage = "Комната [" + _currentRoomName + "] успешно сохранена (.txt/.kv/.png)!";
-    _statusTimer = 3.5f;
+    _statusMessage = "Комната [" + cr.name + "] сохранена!";
+    _statusTimer = 2.0f;
     return true;
+}
+
+bool EditorApp::saveToGame() {
+    syncCurrentRoomToCanvas();
+    int rIdx = -1;
+    for (size_t i = 0; i < _canvasRooms.size(); ++i) {
+        if (_canvasRooms[i].name == _currentRoomName) {
+            rIdx = static_cast<int>(i);
+            break;
+        }
+    }
+    if (rIdx >= 0) {
+        return saveRoomByIndex(rIdx);
+    }
+    return false;
+}
+
+void EditorApp::switchToScreen(EditorScreen screen) {
+    if (_currentScreen == screen) return;
+
+    if (_currentScreen == EditorScreen::ROOM_DETAIL) {
+        syncCurrentRoomToCanvas();
+        saveToGame();
+    }
+
+    _currentScreen = screen;
+    _isDraggingRoom = false;
+    _isResizingRoom = false;
+    _draggedRoomIdx = -1;
+    _resizingRoomIdx = -1;
+
+    if (_currentScreen == EditorScreen::WORLD_LAYOUT) {
+        _viewScale = std::max(_viewScale, 1.8f);
+        _camera.setSize({ _baseCameraSize.x * _viewScale, _baseCameraSize.y * _viewScale });
+        _statusMessage = "РЕЖИМ КАРТЫ КОМНАТ: Двигайте комнаты (ЛКМ+Drag), меняйте размер (◢ угол), связывайте двери.";
+        _statusTimer = 4.0f;
+    } else {
+        _viewScale = 1.0f;
+        _camera.setSize({ _baseCameraSize.x * _viewScale, _baseCameraSize.y * _viewScale });
+        sf::Vector2f off = getActiveRoomOffset();
+        _cameraPos = off + sf::Vector2f((_width * _tileSize) / 2.0f, (_height * _tileSize) / 2.0f);
+        _camera.setCenter(_cameraPos);
+        _statusMessage = "РЕЖИМ РЕДАКТОРА КОМНАТЫ [" + _currentRoomName + "]. Нажмите F1 или Esc для возврата на карту.";
+        _statusTimer = 4.0f;
+    }
+}
+
+void EditorApp::resizeCanvasRoom(int roomIdx, int newW, int newH) {
+    if (roomIdx < 0 || roomIdx >= static_cast<int>(_canvasRooms.size())) return;
+    newW = std::clamp(newW, 10, 200);
+    newH = std::clamp(newH, 8, 100);
+
+    auto& cr = _canvasRooms[roomIdx];
+    if (cr.width == newW && cr.height == newH) return;
+
+    std::vector<std::vector<int>> newMap(newH, std::vector<int>(newW, 0));
+    int copyH = std::min(cr.height, newH);
+    int copyW = std::min(cr.width, newW);
+    for (int y = 0; y < copyH; ++y) {
+        for (int x = 0; x < copyW; ++x) {
+            newMap[y][x] = cr.map[y][x];
+        }
+    }
+    cr.map = std::move(newMap);
+    cr.width = newW;
+    cr.height = newH;
+
+    // Filter and clamp doors
+    std::vector<EditorDoor> validDoors;
+    for (auto d : cr.doors) {
+        if (d.x < newW && d.y < newH) validDoors.push_back(d);
+    }
+    cr.doors = validDoors;
+
+    // Filter and clamp enemy spawns
+    std::vector<EditorEnemySpawn> validEnemies;
+    for (auto e : cr.enemySpawns) {
+        if (e.x < newW && e.y < newH) validEnemies.push_back(e);
+    }
+    cr.enemySpawns = validEnemies;
+
+    // Filter and clamp triggers
+    std::vector<EditorTrigger> validTriggers;
+    for (auto t : cr.triggers) {
+        if (t.x < newW && t.y < newH) validTriggers.push_back(t);
+    }
+    cr.triggers = validTriggers;
+
+    if (cr.hasPlayerSpawn) {
+        cr.playerSpawn.x = std::clamp(cr.playerSpawn.x, 0, newW - 1);
+        cr.playerSpawn.y = std::clamp(cr.playerSpawn.y, 0, newH - 1);
+    }
+    if (cr.testSpawn) {
+        cr.testSpawn->x = std::clamp(cr.testSpawn->x, 0, newW - 1);
+        cr.testSpawn->y = std::clamp(cr.testSpawn->y, 0, newH - 1);
+    }
+
+    if (cr.name == _currentRoomName) {
+        _width = newW;
+        _height = newH;
+        _map = cr.map;
+        _doors = cr.doors;
+        _enemySpawns = cr.enemySpawns;
+        _triggers = cr.triggers;
+        _playerSpawn = cr.playerSpawn;
+        _testSpawn = cr.testSpawn;
+    }
+
+    saveRoomByIndex(roomIdx);
+    _statusMessage = "Размер комнаты [" + cr.name + "] изменен: " + std::to_string(newW) + "x" + std::to_string(newH);
+    _statusTimer = 2.0f;
+}
+
+bool EditorApp::isMouseOverResizeHandle(int roomIdx, sf::Vector2f mouseWorld) const {
+    if (roomIdx < 0 || roomIdx >= static_cast<int>(_canvasRooms.size())) return false;
+    const auto& cr = _canvasRooms[roomIdx];
+    sf::Vector2f br = cr.offset + sf::Vector2f(cr.width * _tileSize, cr.height * _tileSize);
+    sf::FloatRect handleRect({br.x - 30.0f, br.y - 30.0f}, {30.0f, 30.0f});
+    return handleRect.contains(mouseWorld);
 }
 
 void EditorApp::createNewRoom() {
@@ -1766,6 +1904,14 @@ bool EditorApp::isMouseOverUI(const sf::Vector2i& mousePixel) const {
     // Вне окна
     if (mx < 0.0f || mx > winW || my < 0.0f || my > winH) {
         return true;
+    }
+
+    if (_currentScreen == EditorScreen::WORLD_LAYOUT) {
+        // В режиме карты комнат: верхняя панель (92px) и нижний инспектор комнат (145px)
+        if (my <= 92.0f || my >= winH - 145.0f) {
+            return true;
+        }
+        return false;
     }
 
     // 1. Верхняя панель управления и подсказок (высота 120px)
@@ -2438,7 +2584,24 @@ void EditorApp::handleEvents() {
                     _statusTimer = 1.5f;
                     continue;
                 }
+                if (_currentScreen == EditorScreen::ROOM_DETAIL) {
+                    switchToScreen(EditorScreen::WORLD_LAYOUT);
+                    continue;
+                }
                 _window.close();
+            }
+
+            if (kp->code == sf::Keyboard::Key::F1) {
+                switchToScreen(EditorScreen::WORLD_LAYOUT);
+                continue;
+            }
+            if (kp->code == sf::Keyboard::Key::F2) {
+                switchToScreen(EditorScreen::ROOM_DETAIL);
+                continue;
+            }
+            if (_currentScreen == EditorScreen::WORLD_LAYOUT && kp->code == sf::Keyboard::Key::Enter) {
+                switchToScreen(EditorScreen::ROOM_DETAIL);
+                continue;
             }
 
             if (kp->code == sf::Keyboard::Key::F11) {
@@ -2560,6 +2723,50 @@ void EditorApp::handleEvents() {
             }
         }
 
+        if (_currentScreen == EditorScreen::WORLD_LAYOUT) {
+            if (const auto* mbP = event->getIf<sf::Event::MouseButtonPressed>()) {
+                sf::Vector2i mousePixel = sf::Mouse::getPosition(_window);
+                bool spaceHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space);
+                if (mbP->button == sf::Mouse::Button::Middle || (mbP->button == sf::Mouse::Button::Left && spaceHeld)) {
+                    _isPanning = true;
+                    _lastMousePixel = mousePixel;
+                    continue;
+                }
+                handleWorldLayoutClick(mousePixel, mbP->button);
+                continue;
+            }
+            if (const auto* mbR = event->getIf<sf::Event::MouseButtonReleased>()) {
+                if (mbR->button == sf::Mouse::Button::Middle || mbR->button == sf::Mouse::Button::Left) {
+                    _isPanning = false;
+                }
+                if (_isDraggingRoom && _draggedRoomIdx >= 0 && _draggedRoomIdx < static_cast<int>(_canvasRooms.size())) {
+                    _isDraggingRoom = false;
+                    _canvasRooms[_draggedRoomIdx].offset.x = std::round(_canvasRooms[_draggedRoomIdx].offset.x / 10.0f) * 10.0f;
+                    _canvasRooms[_draggedRoomIdx].offset.y = std::round(_canvasRooms[_draggedRoomIdx].offset.y / 10.0f) * 10.0f;
+                    saveRoomByIndex(_draggedRoomIdx);
+                    _statusMessage = "Комната [" + _canvasRooms[_draggedRoomIdx].name + "] перемещена!";
+                    _statusTimer = 2.0f;
+                    _draggedRoomIdx = -1;
+                }
+                if (_isResizingRoom && _resizingRoomIdx >= 0 && _resizingRoomIdx < static_cast<int>(_canvasRooms.size())) {
+                    sf::Vector2f mouseWorld = _window.mapPixelToCoords(sf::Mouse::getPosition(_window), _camera);
+                    int dw = static_cast<int>(std::round((mouseWorld.x - _resizeMouseStart.x) / _tileSize));
+                    int dh = static_cast<int>(std::round((mouseWorld.y - _resizeMouseStart.y) / _tileSize));
+                    int targetW = std::clamp(_resizeStartDims.x + dw, 10, 200);
+                    int targetH = std::clamp(_resizeStartDims.y + dh, 8, 100);
+                    resizeCanvasRoom(_resizingRoomIdx, targetW, targetH);
+                    _isResizingRoom = false;
+                    _resizingRoomIdx = -1;
+                }
+                continue;
+            }
+            if (const auto* wheel = event->getIf<sf::Event::MouseWheelScrolled>()) {
+                if (wheel->delta > 0) zoomIn();
+                else if (wheel->delta < 0) zoomOut();
+                continue;
+            }
+        }
+
         if (const auto* wheel = event->getIf<sf::Event::MouseWheelScrolled>()) {
             bool ctrlHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
                             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
@@ -2576,6 +2783,17 @@ void EditorApp::handleEvents() {
             if (isMouseOverUI(mousePixel)) {
                 _isMouseCapturedByUI = true;
                 if (mbP->button == sf::Mouse::Button::Left) {
+                    float winW = static_cast<float>(_window.getSize().x);
+                    float backBtnW = 280.0f;
+                    float backBtnH = 34.0f;
+                    float backBtnX = winW - backBtnW - 20.0f;
+                    float backBtnY = 12.0f;
+                    if (mousePixel.x >= backBtnX && mousePixel.x <= backBtnX + backBtnW &&
+                        mousePixel.y >= backBtnY && mousePixel.y <= backBtnY + backBtnH) {
+                        switchToScreen(EditorScreen::WORLD_LAYOUT);
+                        continue;
+                    }
+
                     if (_activeTab == PaletteTab::ROOMS) {
                         if (handleRoomBrowserClick(mousePixel)) continue;
                     }
@@ -2898,6 +3116,16 @@ void EditorApp::update(float dt) {
         }
     }
 
+    if (_currentScreen == EditorScreen::WORLD_LAYOUT) {
+        if (_isDraggingRoom && _draggedRoomIdx >= 0 && _draggedRoomIdx < static_cast<int>(_canvasRooms.size())) {
+            sf::Vector2f mouseWorld = _window.mapPixelToCoords(sf::Mouse::getPosition(_window), _camera);
+            sf::Vector2f delta = mouseWorld - _roomDragMouseStart;
+            _canvasRooms[_draggedRoomIdx].offset = _roomDragStartOffset + delta;
+            _canvasRooms[_draggedRoomIdx].hasCustomLayoutPos = true;
+        }
+        return;
+    }
+
     sf::Vector2i mousePixel = sf::Mouse::getPosition(_window);
     if (_isMouseCapturedByUI || isMouseOverUI(mousePixel)) {
         _lastHoverTile = {-1, -1};
@@ -2925,6 +3153,718 @@ void EditorApp::update(float dt) {
             }
         }
     }
+}
+
+void EditorApp::drawWorldLayout() {
+    sf::Vector2f mouseWorld = _window.mapPixelToCoords(sf::Mouse::getPosition(_window), _camera);
+
+    // 1. Отрисовка фона мира (тонкая сетка)
+    sf::View view = _window.getView();
+    sf::Vector2f center = view.getCenter();
+    sf::Vector2f size = view.getSize();
+    sf::FloatRect viewBounds(center - size / 2.0f, size);
+
+    sf::VertexArray worldGrid(sf::PrimitiveType::Lines);
+    float gridStep = 400.0f;
+    float startX = std::floor(viewBounds.position.x / gridStep) * gridStep;
+    float endX = viewBounds.position.x + viewBounds.size.x;
+    float startY = std::floor(viewBounds.position.y / gridStep) * gridStep;
+    float endY = viewBounds.position.y + viewBounds.size.y;
+    for (float x = startX; x <= endX; x += gridStep) {
+        worldGrid.append(sf::Vertex({sf::Vector2f(x, viewBounds.position.y), sf::Color(35, 45, 60, 40)}));
+        worldGrid.append(sf::Vertex({sf::Vector2f(x, endY), sf::Color(35, 45, 60, 40)}));
+    }
+    for (float y = startY; y <= endY; y += gridStep) {
+        worldGrid.append(sf::Vertex({sf::Vector2f(viewBounds.position.x, y), sf::Color(35, 45, 60, 40)}));
+        worldGrid.append(sf::Vertex({sf::Vector2f(endX, y), sf::Color(35, 45, 60, 40)}));
+    }
+    _window.draw(worldGrid);
+
+    // 2. Линии связей между дверьми
+    for (const auto& cr : _canvasRooms) {
+        for (const auto& d : cr.doors) {
+            if (d.targetRoom > 0) {
+                std::string targetRoomName = "room_" + std::to_string(d.targetRoom);
+                const CanvasRoom* tgtRoom = nullptr;
+                for (const auto& r : _canvasRooms) {
+                    if (r.name == targetRoomName) {
+                        tgtRoom = &r;
+                        break;
+                    }
+                }
+                if (tgtRoom) {
+                    sf::Vector2f p1 = cr.offset + sf::Vector2f((d.x + 0.5f) * _tileSize, (d.y + 0.5f) * _tileSize);
+                    sf::Vector2f p2;
+                    if (d.targetDoorX >= 0 && d.targetDoorY >= 0) {
+                        p2 = tgtRoom->offset + sf::Vector2f((d.targetDoorX + 0.5f) * _tileSize, (d.targetDoorY + 0.5f) * _tileSize);
+                    } else {
+                        p2 = tgtRoom->offset + sf::Vector2f((tgtRoom->width * _tileSize) / 2.0f, (tgtRoom->height * _tileSize) / 2.0f);
+                    }
+
+                    sf::VertexArray line(sf::PrimitiveType::Lines);
+                    line.append(sf::Vertex({p1, sf::Color(0, 240, 255, 200)}));
+                    line.append(sf::Vertex({p2, sf::Color(0, 240, 255, 200)}));
+                    _window.draw(line);
+
+                    sf::CircleShape dot1(7.0f);
+                    dot1.setOrigin({7.0f, 7.0f});
+                    dot1.setPosition(p1);
+                    dot1.setFillColor(sf::Color(0, 255, 255));
+                    _window.draw(dot1);
+
+                    sf::CircleShape dot2(7.0f);
+                    dot2.setOrigin({7.0f, 7.0f});
+                    dot2.setPosition(p2);
+                    dot2.setFillColor(sf::Color(0, 255, 180));
+                    _window.draw(dot2);
+                }
+            }
+        }
+    }
+
+    // 3. Динамическая линия линковки при связывании дверей
+    if (_isLinkingDoor) {
+        sf::Vector2f pSrc{0.0f, 0.0f};
+        for (const auto& cr : _canvasRooms) {
+            if (cr.name == _linkingSourceRoom) {
+                pSrc = cr.offset + sf::Vector2f((_linkingSourceDoorX + 0.5f) * _tileSize, (_linkingSourceDoorY + 0.5f) * _tileSize);
+                break;
+            }
+        }
+        sf::VertexArray line(sf::PrimitiveType::Lines);
+        line.append(sf::Vertex({pSrc, sf::Color(255, 180, 0, 240)}));
+        line.append(sf::Vertex({mouseWorld, sf::Color(255, 230, 80, 240)}));
+        _window.draw(line);
+
+        sf::CircleShape c(8.0f);
+        c.setOrigin({8.0f, 8.0f});
+        c.setPosition(mouseWorld);
+        c.setFillColor(sf::Color(255, 200, 0, 180));
+        _window.draw(c);
+    }
+
+    // 4. Отрисовка комнат
+    for (size_t i = 0; i < _canvasRooms.size(); ++i) {
+        auto& cr = _canvasRooms[i];
+        bool isSelected = (cr.name == _currentRoomName);
+        float rw = cr.width * _tileSize;
+        float rh = cr.height * _tileSize;
+
+        // Превью ресайза
+        if (_isResizingRoom && _resizingRoomIdx == static_cast<int>(i)) {
+            int dw = static_cast<int>(std::round((mouseWorld.x - _resizeMouseStart.x) / _tileSize));
+            int dh = static_cast<int>(std::round((mouseWorld.y - _resizeMouseStart.y) / _tileSize));
+            int tw = std::clamp(_resizeStartDims.x + dw, 10, 200);
+            int th = std::clamp(_resizeStartDims.y + dh, 8, 100);
+            float prw = tw * _tileSize;
+            float prh = th * _tileSize;
+
+            sf::RectangleShape previewRect({prw, prh});
+            previewRect.setPosition(cr.offset);
+            previewRect.setFillColor(sf::Color(0, 180, 255, 30));
+            previewRect.setOutlineColor(sf::Color(0, 220, 255, 220));
+            previewRect.setOutlineThickness(2.5f);
+            _window.draw(previewRect);
+        }
+
+        // Тело комнаты
+        sf::RectangleShape rBg({rw, rh});
+        rBg.setPosition(cr.offset);
+        rBg.setFillColor(sf::Color(22, 26, 36));
+        _window.draw(rBg);
+
+        // Тайлы внутри комнаты
+        const auto& curMap = isSelected ? _map : cr.map;
+        for (int y = 0; y < cr.height && y < static_cast<int>(curMap.size()); ++y) {
+            for (int x = 0; x < cr.width && x < static_cast<int>(curMap[y].size()); ++x) {
+                int tile = curMap[y][x];
+                if (tile == 0) continue;
+                sf::RectangleShape tr({_tileSize, _tileSize});
+                tr.setPosition({cr.offset.x + x * _tileSize, cr.offset.y + y * _tileSize});
+                if (tile == 1) { // Platform
+                    tr.setFillColor(sf::Color(76, 175, 80));
+                    _window.draw(tr);
+                } else if (tile == 2) { // Wall
+                    tr.setFillColor(sf::Color(80, 95, 120));
+                    _window.draw(tr);
+                } else if (tile == 3) { // Door
+                    tr.setFillColor(sf::Color(0, 210, 255));
+                    tr.setOutlineColor(sf::Color::White);
+                    tr.setOutlineThickness(-1.5f);
+                    _window.draw(tr);
+                }
+            }
+        }
+
+        // Враги и триггеры
+        const auto& curEnemies = isSelected ? _enemySpawns : cr.enemySpawns;
+        for (const auto& es : curEnemies) {
+            sf::CircleShape ec(16.0f);
+            ec.setPosition({cr.offset.x + es.x * _tileSize + _tileSize / 2.0f - 16.0f,
+                            cr.offset.y + es.y * _tileSize + _tileSize / 2.0f - 16.0f});
+            ec.setFillColor(es.type == 4 ? sf::Color(255, 180, 50) : sf::Color(230, 60, 60));
+            _window.draw(ec);
+        }
+
+        // Спавн игрока
+        if (cr.hasPlayerSpawn && _globalPlayerSpawnRoom == cr.name) {
+            sf::CircleShape pc(18.0f);
+            pc.setPosition({cr.offset.x + cr.playerSpawn.x * _tileSize + _tileSize / 2.0f - 18.0f,
+                            cr.offset.y + cr.playerSpawn.y * _tileSize + _tileSize / 2.0f - 18.0f});
+            pc.setFillColor(sf::Color(0, 255, 128));
+            pc.setOutlineColor(sf::Color::White);
+            pc.setOutlineThickness(2.0f);
+            _window.draw(pc);
+        }
+
+        // Двери и подписи
+        const auto& curDoors = isSelected ? _doors : cr.doors;
+        for (size_t di = 0; di < curDoors.size(); ++di) {
+            const auto& d = curDoors[di];
+            float dx = cr.offset.x + d.x * _tileSize;
+            float dy = cr.offset.y + d.y * _tileSize;
+            bool isDoorSel = (isSelected && _selectedDoorIdx == static_cast<int>(di));
+
+            sf::RectangleShape dFrame({_tileSize, _tileSize});
+            dFrame.setPosition({dx, dy});
+            dFrame.setFillColor(sf::Color(0, 210, 255, 140));
+            dFrame.setOutlineColor(isDoorSel ? sf::Color(255, 215, 0) : sf::Color(0, 255, 255));
+            dFrame.setOutlineThickness(isDoorSel ? 3.0f : 1.5f);
+            _window.draw(dFrame);
+
+            if (_fontLoaded) {
+                sf::Text dTxt(_font, toSfString("D" + std::to_string(d.targetRoom)), 11);
+                dTxt.setFillColor(sf::Color::White);
+                dTxt.setPosition({dx + 4.0f, dy + 6.0f});
+                _window.draw(dTxt);
+            }
+        }
+
+        // Рамка комнаты
+        sf::RectangleShape rBorder({rw, rh});
+        rBorder.setPosition(cr.offset);
+        rBorder.setFillColor(sf::Color::Transparent);
+        rBorder.setOutlineColor(isSelected ? sf::Color(255, 215, 0, 250) : sf::Color(70, 90, 125, 180));
+        rBorder.setOutlineThickness(isSelected ? 3.5f : 1.5f);
+        _window.draw(rBorder);
+
+        // Шапка комнаты (для перетаскивания и информации)
+        float headH = 34.0f;
+        sf::RectangleShape rHeader({rw, headH});
+        rHeader.setPosition({cr.offset.x, cr.offset.y - headH - 2.0f});
+        rHeader.setFillColor(isSelected ? sf::Color(35, 55, 85, 245) : sf::Color(18, 24, 34, 210));
+        rHeader.setOutlineColor(isSelected ? sf::Color(255, 215, 0, 230) : sf::Color(65, 85, 115, 160));
+        rHeader.setOutlineThickness(1.5f);
+        _window.draw(rHeader);
+
+        if (_fontLoaded) {
+            std::string titleStr = (isSelected ? "* " : "  ") + cr.name + " [" + std::to_string(cr.width) + "x" + std::to_string(cr.height) + "]";
+            sf::Text tTxt(_font, toSfString(titleStr), 13);
+            tTxt.setFillColor(isSelected ? sf::Color(255, 225, 90) : sf::Color(170, 195, 225));
+            tTxt.setPosition({cr.offset.x + 10.0f, cr.offset.y - headH + 4.0f});
+            _window.draw(tTxt);
+        }
+
+        // Интерактивный маркер изменения размера (Resize handle) в правом нижнем углу
+        sf::Vector2f br = cr.offset + sf::Vector2f(rw, rh);
+        float handleSize = 30.0f;
+        sf::RectangleShape handleBox({handleSize, handleSize});
+        handleBox.setPosition({br.x - handleSize, br.y - handleSize});
+        bool handleHover = isMouseOverResizeHandle(static_cast<int>(i), mouseWorld);
+        handleBox.setFillColor(handleHover ? sf::Color(255, 220, 0, 230) : isSelected ? sf::Color(0, 210, 255, 200) : sf::Color(90, 115, 145, 160));
+        handleBox.setOutlineColor(sf::Color::White);
+        handleBox.setOutlineThickness(1.5f);
+        _window.draw(handleBox);
+
+        // Стилизованный уголок внутри маркера
+        sf::VertexArray cornerLines(sf::PrimitiveType::Lines);
+        cornerLines.append(sf::Vertex({sf::Vector2f(br.x - 22.0f, br.y - 6.0f), sf::Color(20, 25, 35)}));
+        cornerLines.append(sf::Vertex({sf::Vector2f(br.x - 6.0f, br.y - 22.0f), sf::Color(20, 25, 35)}));
+        cornerLines.append(sf::Vertex({sf::Vector2f(br.x - 14.0f, br.y - 6.0f), sf::Color(20, 25, 35)}));
+        cornerLines.append(sf::Vertex({sf::Vector2f(br.x - 6.0f, br.y - 14.0f), sf::Color(20, 25, 35)}));
+        _window.draw(cornerLines);
+    }
+}
+
+void EditorApp::drawWorldLayoutUI() {
+    float winW = static_cast<float>(_window.getSize().x);
+    float winH = static_cast<float>(_window.getSize().y);
+
+    // 1. Верхняя панель (высота 90px)
+    sf::RectangleShape topBar({winW, 90.0f});
+    topBar.setPosition({0.0f, 0.0f});
+    topBar.setFillColor(sf::Color(16, 20, 28, 245));
+    topBar.setOutlineColor(sf::Color(65, 80, 105, 200));
+    topBar.setOutlineThickness(1.0f);
+    _window.draw(topBar);
+
+    if (_fontLoaded) {
+        // Таб 1: Редактор комнат (активен)
+        sf::RectangleShape tabWorld({240.0f, 38.0f});
+        tabWorld.setPosition({20.0f, 10.0f});
+        tabWorld.setFillColor(sf::Color(35, 75, 115, 240));
+        tabWorld.setOutlineColor(sf::Color(255, 215, 0));
+        tabWorld.setOutlineThickness(2.0f);
+        _window.draw(tabWorld);
+
+        sf::Text tabWText(_font, toSfString("🌍 РЕДАКТОР КОМНАТ (F1)"), 13);
+        tabWText.setFillColor(sf::Color(255, 225, 90));
+        tabWText.setPosition({32.0f, 20.0f});
+        _window.draw(tabWText);
+
+        // Таб 2: Редактор комнаты (клик переключает)
+        sf::RectangleShape tabRoom({260.0f, 38.0f});
+        tabRoom.setPosition({270.0f, 10.0f});
+        tabRoom.setFillColor(sf::Color(25, 32, 45, 210));
+        tabRoom.setOutlineColor(sf::Color(70, 90, 120));
+        tabRoom.setOutlineThickness(1.5f);
+        _window.draw(tabRoom);
+
+        sf::Text tabRText(_font, toSfString("✏ РЕДАКТОР КОМНАТЫ (F2)"), 13);
+        tabRText.setFillColor(sf::Color(180, 210, 240));
+        tabRText.setPosition({282.0f, 20.0f});
+        _window.draw(tabRText);
+
+        // Кнопка: + Новая комната
+        sf::RectangleShape btnNew({170.0f, 38.0f});
+        btnNew.setPosition({540.0f, 10.0f});
+        btnNew.setFillColor(sf::Color(40, 60, 50, 220));
+        btnNew.setOutlineColor(sf::Color(80, 200, 120));
+        btnNew.setOutlineThickness(1.5f);
+        _window.draw(btnNew);
+
+        sf::Text btnNewText(_font, toSfString("+ Новая комната"), 13);
+        btnNewText.setFillColor(sf::Color(100, 255, 150));
+        btnNewText.setPosition({558.0f, 20.0f});
+        _window.draw(btnNewText);
+
+        // Правые кнопки: Зум [-] [%] [+] [Сброс] [F11]
+        float rX = winW - 380.0f;
+        sf::Text zoomLabel(_font, toSfString("Зум: " + std::to_string(static_cast<int>(100.0f / _viewScale)) + "%"), 13);
+        zoomLabel.setFillColor(sf::Color(160, 190, 225));
+        zoomLabel.setPosition({rX, 20.0f});
+        _window.draw(zoomLabel);
+
+        // Кнопка Zoom In [+]
+        sf::RectangleShape btnZIn({32.0f, 32.0f});
+        btnZIn.setPosition({rX + 110.0f, 13.0f});
+        btnZIn.setFillColor(sf::Color(30, 42, 60));
+        btnZIn.setOutlineColor(sf::Color(80, 110, 150));
+        btnZIn.setOutlineThickness(1.0f);
+        _window.draw(btnZIn);
+        sf::Text zInT(_font, toSfString("+"), 15);
+        zInT.setFillColor(sf::Color::White);
+        zInT.setPosition({rX + 120.0f, 17.0f});
+        _window.draw(zInT);
+
+        // Кнопка Zoom Out [-]
+        sf::RectangleShape btnZOut({32.0f, 32.0f});
+        btnZOut.setPosition({rX + 150.0f, 13.0f});
+        btnZOut.setFillColor(sf::Color(30, 42, 60));
+        btnZOut.setOutlineColor(sf::Color(80, 110, 150));
+        btnZOut.setOutlineThickness(1.0f);
+        _window.draw(btnZOut);
+        sf::Text zOutT(_font, toSfString("-"), 15);
+        zOutT.setFillColor(sf::Color::White);
+        zOutT.setPosition({rX + 162.0f, 17.0f});
+        _window.draw(zOutT);
+
+        // Кнопка Сброс зума
+        sf::RectangleShape btnZReset({75.0f, 32.0f});
+        btnZReset.setPosition({rX + 190.0f, 13.0f});
+        btnZReset.setFillColor(sf::Color(30, 42, 60));
+        btnZReset.setOutlineColor(sf::Color(80, 110, 150));
+        btnZReset.setOutlineThickness(1.0f);
+        _window.draw(btnZReset);
+        sf::Text zResT(_font, toSfString("100%"), 12);
+        zResT.setFillColor(sf::Color::White);
+        zResT.setPosition({rX + 208.0f, 20.0f});
+        _window.draw(zResT);
+
+        // Кнопка Экран F11
+        sf::RectangleShape btnF11({85.0f, 32.0f});
+        btnF11.setPosition({rX + 275.0f, 13.0f});
+        btnF11.setFillColor(sf::Color(30, 42, 60));
+        btnF11.setOutlineColor(sf::Color(80, 110, 150));
+        btnF11.setOutlineThickness(1.0f);
+        _window.draw(btnF11);
+        sf::Text f11T(_font, toSfString("F11 Экран"), 12);
+        f11T.setFillColor(sf::Color::White);
+        f11T.setPosition({rX + 285.0f, 20.0f});
+        _window.draw(f11T);
+
+        // Подсказка в шапке
+        sf::Text hintT(_font, toSfString("💡 ЛКМ+Drag по комнате: Подвигать | Тянуть за ◢ угол: Изменить размер | Enter / 2x Клик: Редактировать комнату | Space+Drag: Панорама"), 12);
+        hintT.setFillColor(sf::Color(140, 170, 205));
+        hintT.setPosition({22.0f, 58.0f});
+        _window.draw(hintT);
+    }
+
+    // Всплывающее сообщение
+    if (!_statusMessage.empty() && _statusTimer > 0.0f && _fontLoaded) {
+        sf::Text statusText(_font, toSfString(_statusMessage), 14);
+        statusText.setFillColor(sf::Color(100, 255, 130));
+        sf::FloatRect bounds = statusText.getLocalBounds();
+
+        float bgW = bounds.size.x + 36.0f;
+        float bgH = bounds.size.y + 16.0f;
+        float bgX = (winW - bgW) / 2.0f;
+        float bgY = 96.0f;
+
+        sf::RectangleShape msgBg({bgW, bgH});
+        msgBg.setPosition({bgX, bgY});
+        msgBg.setFillColor(sf::Color(15, 20, 28, 240));
+        msgBg.setOutlineColor(sf::Color(100, 255, 130, 220));
+        msgBg.setOutlineThickness(1.5f);
+
+        statusText.setPosition({bgX + 18.0f, bgY + 6.0f});
+        _window.draw(msgBg);
+        _window.draw(statusText);
+    }
+
+    // 2. Нижняя панель инспектора выбранной комнаты (высота 140px)
+    float insH = 140.0f;
+    float insY = winH - insH;
+    sf::RectangleShape insBar({winW, insH});
+    insBar.setPosition({0.0f, insY});
+    insBar.setFillColor(sf::Color(16, 20, 28, 250));
+    insBar.setOutlineColor(sf::Color(65, 85, 120, 220));
+    insBar.setOutlineThickness(1.5f);
+    _window.draw(insBar);
+
+    if (_fontLoaded) {
+        const CanvasRoom* curCR = nullptr;
+        for (const auto& r : _canvasRooms) {
+            if (r.name == _currentRoomName) { curCR = &r; break; }
+        }
+
+        int curW = curCR ? curCR->width : _width;
+        int curH = curCR ? curCR->height : _height;
+        size_t doorCount = curCR ? curCR->doors.size() : _doors.size();
+
+        // Секция 1: Инфо о комнате и кнопка перехода в редактор
+        sf::Text rTitle(_font, toSfString("КОМНАТА: " + _currentRoomName + "  (Размер: " + std::to_string(curW) + "x" + std::to_string(curH) + ")"), 14);
+        rTitle.setFillColor(sf::Color(255, 215, 0));
+        rTitle.setPosition({25.0f, insY + 12.0f});
+        _window.draw(rTitle);
+
+        // Большая кнопка: [ ✏ РЕДАКТИРОВАТЬ КОМНАТУ (Enter / 2x Клик) ]
+        sf::RectangleShape btnEditRoom({330.0f, 42.0f});
+        btnEditRoom.setPosition({25.0f, insY + 42.0f});
+        btnEditRoom.setFillColor(sf::Color(30, 80, 50, 240));
+        btnEditRoom.setOutlineColor(sf::Color(0, 230, 120));
+        btnEditRoom.setOutlineThickness(2.0f);
+        _window.draw(btnEditRoom);
+
+        sf::Text btnEditTxt(_font, toSfString("✏ РЕДАКТИРОВАТЬ КОМНАТУ (Enter)"), 13);
+        btnEditTxt.setFillColor(sf::Color(255, 255, 255));
+        btnEditTxt.setPosition({38.0f, insY + 54.0f});
+        _window.draw(btnEditTxt);
+
+        sf::Text posTxt(_font, toSfString("Координаты на карте: X=" + std::to_string(static_cast<int>(curCR ? curCR->offset.x : 0)) + 
+                                          "  Y=" + std::to_string(static_cast<int>(curCR ? curCR->offset.y : 0))), 11);
+        posTxt.setFillColor(sf::Color(140, 165, 195));
+        posTxt.setPosition({25.0f, insY + 95.0f});
+        _window.draw(posTxt);
+
+        // Разделительная черта
+        sf::RectangleShape sep1({1.5f, 110.0f});
+        sep1.setPosition({380.0f, insY + 15.0f});
+        sep1.setFillColor(sf::Color(55, 75, 105));
+        _window.draw(sep1);
+
+        // Секция 2: Изменение размера комнаты кнопками
+        sf::Text szTitle(_font, toSfString("ИЗМЕНЕНИЕ РАЗМЕРА КОМНАТЫ:"), 13);
+        szTitle.setFillColor(sf::Color(100, 220, 255));
+        szTitle.setPosition({405.0f, insY + 12.0f});
+        _window.draw(szTitle);
+
+        auto drawBtn = [&](float bx, float by, float bw, float bh, const std::string& text, sf::Color fill, sf::Color textCol) {
+            sf::RectangleShape b({bw, bh});
+            b.setPosition({bx, by});
+            b.setFillColor(fill);
+            b.setOutlineColor(sf::Color(80, 110, 150));
+            b.setOutlineThickness(1.0f);
+            _window.draw(b);
+            sf::Text t(_font, toSfString(text), 12);
+            t.setFillColor(textCol);
+            t.setPosition({bx + (bw - t.getLocalBounds().size.x) / 2.0f, by + (bh - t.getLocalBounds().size.y) / 2.0f - 2.0f});
+            _window.draw(t);
+        };
+
+        // Ширина W: [-10] [-1] [ W ] [+1] [+10]
+        float wRowY = insY + 38.0f;
+        sf::Text wLbl(_font, toSfString("Ширина W:"), 12);
+        wLbl.setFillColor(sf::Color(180, 200, 225));
+        wLbl.setPosition({405.0f, wRowY + 4.0f});
+        _window.draw(wLbl);
+
+        drawBtn(490.0f, wRowY, 44.0f, 28.0f, "-10", sf::Color(35, 45, 65), sf::Color::White);
+        drawBtn(540.0f, wRowY, 36.0f, 28.0f, "-1", sf::Color(35, 45, 65), sf::Color::White);
+        drawBtn(582.0f, wRowY, 50.0f, 28.0f, std::to_string(curW), sf::Color(20, 30, 45), sf::Color(255, 215, 0));
+        drawBtn(638.0f, wRowY, 36.0f, 28.0f, "+1", sf::Color(35, 45, 65), sf::Color::White);
+        drawBtn(680.0f, wRowY, 44.0f, 28.0f, "+10", sf::Color(35, 45, 65), sf::Color::White);
+
+        // Высота H: [-5] [-1] [ H ] [+1] [+5]
+        float hRowY = insY + 74.0f;
+        sf::Text hLbl(_font, toSfString("Высота H:"), 12);
+        hLbl.setFillColor(sf::Color(180, 200, 225));
+        hLbl.setPosition({405.0f, hRowY + 4.0f});
+        _window.draw(hLbl);
+
+        drawBtn(490.0f, hRowY, 44.0f, 28.0f, "-5", sf::Color(35, 45, 65), sf::Color::White);
+        drawBtn(540.0f, hRowY, 36.0f, 28.0f, "-1", sf::Color(35, 45, 65), sf::Color::White);
+        drawBtn(582.0f, hRowY, 50.0f, 28.0f, std::to_string(curH), sf::Color(20, 30, 45), sf::Color(255, 215, 0));
+        drawBtn(638.0f, hRowY, 36.0f, 28.0f, "+1", sf::Color(35, 45, 65), sf::Color::White);
+        drawBtn(680.0f, hRowY, 44.0f, 28.0f, "+5", sf::Color(35, 45, 65), sf::Color::White);
+
+        // Разделительная черта
+        sf::RectangleShape sep2({1.5f, 110.0f});
+        sep2.setPosition({750.0f, insY + 15.0f});
+        sep2.setFillColor(sf::Color(55, 75, 105));
+        _window.draw(sep2);
+
+        // Секция 3: Управление дверьми
+        sf::Text dTitle(_font, toSfString("ДВЕРИ В КОМНАТЕ (Всего: " + std::to_string(doorCount) + "):"), 13);
+        dTitle.setFillColor(sf::Color(0, 220, 255));
+        dTitle.setPosition({775.0f, insY + 12.0f});
+        _window.draw(dTitle);
+
+        float dBtnY1 = insY + 40.0f;
+        drawBtn(775.0f, dBtnY1, 150.0f, 32.0f, "+ Добавить дверь", sf::Color(25, 60, 50), sf::Color(120, 255, 170));
+        drawBtn(935.0f, dBtnY1, 160.0f, 32.0f, "🔗 Связать дверь", sf::Color(35, 55, 80), sf::Color(100, 220, 255));
+
+        float dBtnY2 = insY + 80.0f;
+        drawBtn(775.0f, dBtnY2, 150.0f, 32.0f, "✕ Разорвать связь", sf::Color(50, 40, 45), sf::Color(255, 180, 160));
+        drawBtn(935.0f, dBtnY2, 160.0f, 32.0f, "🗑 Удалить дверь", sf::Color(65, 30, 30), sf::Color(255, 120, 120));
+    }
+}
+
+bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse::Button button) {
+    float winW = static_cast<float>(_window.getSize().x);
+    float winH = static_cast<float>(_window.getSize().y);
+    float mx = static_cast<float>(mousePixel.x);
+    float my = static_cast<float>(mousePixel.y);
+
+    int curRIdx = -1;
+    for (size_t i = 0; i < _canvasRooms.size(); ++i) {
+        if (_canvasRooms[i].name == _currentRoomName) {
+            curRIdx = static_cast<int>(i);
+            break;
+        }
+    }
+
+    // 1. Клики по верхней панели (my <= 90.0f)
+    if (my <= 90.0f) {
+        if (mx >= 270.0f && mx <= 530.0f && my >= 10.0f && my <= 48.0f) {
+            switchToScreen(EditorScreen::ROOM_DETAIL);
+            return true;
+        }
+        if (mx >= 540.0f && mx <= 710.0f && my >= 10.0f && my <= 48.0f) {
+            _isNamingRoom = true;
+            _newRoomNameInput = "";
+            return true;
+        }
+        float rX = winW - 380.0f;
+        if (mx >= rX + 110.0f && mx <= rX + 142.0f && my >= 13.0f && my <= 45.0f) {
+            zoomIn();
+            return true;
+        }
+        if (mx >= rX + 150.0f && mx <= rX + 182.0f && my >= 13.0f && my <= 45.0f) {
+            zoomOut();
+            return true;
+        }
+        if (mx >= rX + 190.0f && mx <= rX + 265.0f && my >= 13.0f && my <= 45.0f) {
+            resetZoom();
+            return true;
+        }
+        if (mx >= rX + 275.0f && mx <= rX + 360.0f && my >= 13.0f && my <= 45.0f) {
+            toggleFullscreen();
+            return true;
+        }
+        return true;
+    }
+
+    // 2. Клики по нижней панели инспектора (my >= winH - 140.0f)
+    float insY = winH - 140.0f;
+    if (my >= insY) {
+        if (mx >= 25.0f && mx <= 355.0f && my >= insY + 42.0f && my <= insY + 84.0f) {
+            switchToScreen(EditorScreen::ROOM_DETAIL);
+            return true;
+        }
+
+        if (curRIdx >= 0) {
+            auto& cr = _canvasRooms[curRIdx];
+            float wRowY = insY + 38.0f;
+            float hRowY = insY + 74.0f;
+
+            // Кнопки ширины W:
+            if (my >= wRowY && my <= wRowY + 28.0f) {
+                if (mx >= 490.0f && mx <= 534.0f) { resizeCanvasRoom(curRIdx, cr.width - 10, cr.height); return true; }
+                if (mx >= 540.0f && mx <= 576.0f) { resizeCanvasRoom(curRIdx, cr.width - 1, cr.height); return true; }
+                if (mx >= 638.0f && mx <= 674.0f) { resizeCanvasRoom(curRIdx, cr.width + 1, cr.height); return true; }
+                if (mx >= 680.0f && mx <= 724.0f) { resizeCanvasRoom(curRIdx, cr.width + 10, cr.height); return true; }
+            }
+
+            // Кнопки высоты H:
+            if (my >= hRowY && my <= hRowY + 28.0f) {
+                if (mx >= 490.0f && mx <= 534.0f) { resizeCanvasRoom(curRIdx, cr.width, cr.height - 5); return true; }
+                if (mx >= 540.0f && mx <= 576.0f) { resizeCanvasRoom(curRIdx, cr.width, cr.height - 1); return true; }
+                if (mx >= 638.0f && mx <= 674.0f) { resizeCanvasRoom(curRIdx, cr.width, cr.height + 1); return true; }
+                if (mx >= 680.0f && mx <= 724.0f) { resizeCanvasRoom(curRIdx, cr.width + 5, cr.height + 5); return true; }
+            }
+
+            // Кнопки дверей:
+            float dBtnY1 = insY + 40.0f;
+            float dBtnY2 = insY + 80.0f;
+
+            // [+ Добавить дверь]
+            if (mx >= 775.0f && mx <= 925.0f && my >= dBtnY1 && my <= dBtnY1 + 32.0f) {
+                int dx = cr.width - 1;
+                int dy = std::max(0, cr.height - 3);
+                bool occupied = false;
+                for (const auto& d : cr.doors) { if (d.x == dx && d.y == dy) { occupied = true; break; } }
+                if (occupied) dy = std::max(0, dy - 1);
+                int tgtR = (cr.index % 10) + 1;
+                cr.doors.push_back({dx, dy, tgtR, -1, -1});
+                if (dy < static_cast<int>(cr.map.size()) && dx < static_cast<int>(cr.map[dy].size())) {
+                    cr.map[dy][dx] = 3;
+                }
+                saveRoomByIndex(curRIdx);
+                _statusMessage = "Дверь добавлена в [" + cr.name + "] на (" + std::to_string(dx) + ", " + std::to_string(dy) + ")";
+                _statusTimer = 2.5f;
+                return true;
+            }
+
+            // [🔗 Связать дверь]
+            if (mx >= 935.0f && mx <= 1095.0f && my >= dBtnY1 && my <= dBtnY1 + 32.0f) {
+                if (!cr.doors.empty()) {
+                    int dIdx = (_selectedDoorIdx >= 0 && _selectedDoorIdx < static_cast<int>(cr.doors.size())) ? _selectedDoorIdx : 0;
+                    _isLinkingDoor = true;
+                    _linkingSourceRoom = cr.name;
+                    _linkingSourceDoorX = cr.doors[dIdx].x;
+                    _linkingSourceDoorY = cr.doors[dIdx].y;
+                    _statusMessage = "Кликните на целевую дверь в другой комнате для связывания (или Esc для отмены)";
+                    _statusTimer = 5.0f;
+                } else {
+                    _statusMessage = "В этой комнате нет дверей! Сначала добавьте дверь [+ Добавить дверь].";
+                    _statusTimer = 3.0f;
+                }
+                return true;
+            }
+
+            // [✕ Разорвать связь]
+            if (mx >= 775.0f && mx <= 925.0f && my >= dBtnY2 && my <= dBtnY2 + 32.0f) {
+                if (!cr.doors.empty()) {
+                    int dIdx = (_selectedDoorIdx >= 0 && _selectedDoorIdx < static_cast<int>(cr.doors.size())) ? _selectedDoorIdx : 0;
+                    cr.doors[dIdx].targetDoorX = -1;
+                    cr.doors[dIdx].targetDoorY = -1;
+                    saveRoomByIndex(curRIdx);
+                    _statusMessage = "Связь двери разорвана.";
+                    _statusTimer = 2.0f;
+                }
+                return true;
+            }
+
+            // [🗑 Удалить дверь]
+            if (mx >= 935.0f && mx <= 1095.0f && my >= dBtnY2 && my <= dBtnY2 + 32.0f) {
+                if (!cr.doors.empty()) {
+                    int dIdx = (_selectedDoorIdx >= 0 && _selectedDoorIdx < static_cast<int>(cr.doors.size())) ? _selectedDoorIdx : static_cast<int>(cr.doors.size()) - 1;
+                    int dx = cr.doors[dIdx].x;
+                    int dy = cr.doors[dIdx].y;
+                    cr.doors.erase(cr.doors.begin() + dIdx);
+                    if (dy < static_cast<int>(cr.map.size()) && dx < static_cast<int>(cr.map[dy].size())) {
+                        cr.map[dy][dx] = 0;
+                    }
+                    saveRoomByIndex(curRIdx);
+                    _selectedDoorIdx = -1;
+                    _statusMessage = "Дверь удалена.";
+                    _statusTimer = 2.0f;
+                }
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // 3. Клики по игровому миру комнат
+    sf::Vector2f mouseWorld = _window.mapPixelToCoords(mousePixel, _camera);
+
+    // Связывание дверей
+    if (_isLinkingDoor && button == sf::Mouse::Button::Left) {
+        int rIdx = getCanvasRoomAt(mouseWorld);
+        if (rIdx >= 0) {
+            const auto& cr = _canvasRooms[rIdx];
+            int tx = static_cast<int>(std::floor((mouseWorld.x - cr.offset.x) / _tileSize));
+            int ty = static_cast<int>(std::floor((mouseWorld.y - cr.offset.y) / _tileSize));
+            bool foundDoor = false;
+            for (const auto& d : cr.doors) {
+                if (d.x == tx && d.y == ty) { foundDoor = true; break; }
+            }
+            if (foundDoor) {
+                linkDoors(_linkingSourceRoom, _linkingSourceDoorX, _linkingSourceDoorY, cr.name, tx, ty);
+                _isLinkingDoor = false;
+                _statusMessage = "Двери успешно связаны: [" + _linkingSourceRoom + "] <-> [" + cr.name + "]!";
+                _statusTimer = 4.0f;
+                return true;
+            }
+        }
+    }
+
+    // Проверка клика по угловому маркеру ресайза (Resize handle)
+    for (size_t i = 0; i < _canvasRooms.size(); ++i) {
+        if (isMouseOverResizeHandle(static_cast<int>(i), mouseWorld)) {
+            _isResizingRoom = true;
+            _resizingRoomIdx = static_cast<int>(i);
+            _resizeStartDims = {_canvasRooms[i].width, _canvasRooms[i].height};
+            _resizeMouseStart = mouseWorld;
+            syncCanvasToCurrentRoom(_canvasRooms[i].name);
+            return true;
+        }
+    }
+
+    // Проверка клика по комнате
+    int clickedRoom = getCanvasRoomAt(mouseWorld);
+    if (clickedRoom >= 0) {
+        const auto& cr = _canvasRooms[clickedRoom];
+        int tx = static_cast<int>(std::floor((mouseWorld.x - cr.offset.x) / _tileSize));
+        int ty = static_cast<int>(std::floor((mouseWorld.y - cr.offset.y) / _tileSize));
+
+        // Проверка клика по двери внутри комнаты
+        for (size_t di = 0; di < cr.doors.size(); ++di) {
+            if (cr.doors[di].x == tx && cr.doors[di].y == ty) {
+                _selectedDoorIdx = static_cast<int>(di);
+                syncCanvasToCurrentRoom(cr.name);
+                _statusMessage = "Выбрана дверь D" + std::to_string(cr.doors[di].targetRoom) + " в комнате [" + cr.name + "]";
+                _statusTimer = 2.0f;
+                return true;
+            }
+        }
+
+        // Двойной клик по комнате для перехода в редактор комнаты
+        float now = _clickClock.getElapsedTime().asSeconds();
+        if (now - _lastClickTime < 0.35f && clickedRoom == _lastClickedRoomIdx) {
+            syncCanvasToCurrentRoom(cr.name);
+            switchToScreen(EditorScreen::ROOM_DETAIL);
+            return true;
+        }
+        _lastClickTime = now;
+        _lastClickedRoomIdx = clickedRoom;
+
+        // Выбор комнаты
+        syncCanvasToCurrentRoom(cr.name);
+
+        // Старт перемещения комнаты
+        if (button == sf::Mouse::Button::Left) {
+            _isDraggingRoom = true;
+            _draggedRoomIdx = clickedRoom;
+            _roomDragStartOffset = cr.offset;
+            _roomDragMouseStart = mouseWorld;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void EditorApp::drawWorld() {
@@ -3966,7 +4906,24 @@ void EditorApp::drawUI() {
     _window.draw(bar);
 
     if (_fontLoaded) {
-        sf::Text title(_font, toSfString("[ STANDALONE РЕДАКТОР КАРТ ]  (Tab: Запуск симуляции | ПКМ: Настройки объекта | Space+Drag: Перемещение)"), 15);
+        // Кнопка быстрого возврата на карту комнат
+        float backBtnW = 280.0f;
+        float backBtnH = 36.0f;
+        float backBtnX = winW - backBtnW - 20.0f;
+        float backBtnY = 10.0f;
+        sf::RectangleShape backBtn({backBtnW, backBtnH});
+        backBtn.setPosition({backBtnX, backBtnY});
+        backBtn.setFillColor(sf::Color(35, 75, 115, 235));
+        backBtn.setOutlineColor(sf::Color(0, 220, 255));
+        backBtn.setOutlineThickness(2.0f);
+        _window.draw(backBtn);
+
+        sf::Text backTxt(_font, toSfString("← 🌍 В РЕДАКТОР КОМНАТ (F1/Esc)"), 13);
+        backTxt.setFillColor(sf::Color(255, 255, 255));
+        backTxt.setPosition({backBtnX + 14.0f, backBtnY + 8.0f});
+        _window.draw(backTxt);
+
+        sf::Text title(_font, toSfString("[ РЕДАКТОР КОМНАТЫ ]  (Tab: Симуляция | ПКМ: Настройки | Esc: Карта комнат)"), 15);
         title.setFillColor(sf::Color(255, 215, 0));
         title.setPosition({20.0f, 6.0f});
         _window.draw(title);
@@ -4380,13 +5337,19 @@ void EditorApp::render() {
         drawSimulationHUD();
     } else {
         _window.clear(sf::Color(18, 22, 30));
-        // Отрисовка мира редактора
-        _window.setView(_camera);
-        drawWorld();
+        if (_currentScreen == EditorScreen::WORLD_LAYOUT) {
+            _window.setView(_camera);
+            drawWorldLayout();
 
-        // Отрисовка интерфейса редактора
-        _window.setView(_window.getDefaultView());
-        drawUI();
+            _window.setView(_window.getDefaultView());
+            drawWorldLayoutUI();
+        } else {
+            _window.setView(_camera);
+            drawWorld();
+
+            _window.setView(_window.getDefaultView());
+            drawUI();
+        }
     }
 
     _window.display();
