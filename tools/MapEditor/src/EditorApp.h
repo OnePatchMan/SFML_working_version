@@ -299,6 +299,8 @@ private:
     std::string _globalPlayerSpawnRoom = "room_1";
     bool _hasPlayerSpawn = true;
     bool _isLinkingDoor = false;
+    bool _isDraggingDoorLink = false;
+    sf::Vector2f _doorLinkMouseStart{0.0f, 0.0f};
     std::string _linkingSourceRoom = "";
     int _linkingSourceDoorX = -1;
     int _linkingSourceDoorY = -1;
@@ -309,6 +311,7 @@ private:
     int getCanvasRoomAt(sf::Vector2f worldPos) const;
     sf::Vector2f getActiveRoomOffset() const;
     void linkDoors(const std::string& roomA, int ax, int ay, const std::string& roomB, int bx, int by);
+    void unlinkDoor(const std::string& roomName, int dx, int dy);
 
     // Режимы экранов: Редактор комнат (WORLD_LAYOUT) и Редактор тайлов комнаты (ROOM_DETAIL)
     EditorScreen _currentScreen = EditorScreen::WORLD_LAYOUT;

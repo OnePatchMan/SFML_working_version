@@ -1057,17 +1057,102 @@ void EditorApp::syncCanvasToCurrentRoom(const std::string& roomName) {
     }
 }
 
-void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::string& roomB, int bx, int by) {
+void EditorApp::unlinkDoor(const std::string& roomName, int dx, int dy) {
     syncCurrentRoomToCanvas();
 
     CanvasRoom* crA = nullptr;
+    int idxA = -1;
+    for (size_t i = 0; i < _canvasRooms.size(); ++i) {
+        if (_canvasRooms[i].name == roomName) {
+            crA = &_canvasRooms[i];
+            idxA = static_cast<int>(i);
+            break;
+        }
+    }
+    if (!crA) return;
+
+    int tgtRoomIdx = -1;
+    int tgtDx = -1, tgtDy = -1;
+    for (auto& d : crA->doors) {
+        if (d.x == dx && d.y == dy) {
+            tgtRoomIdx = d.targetRoom;
+            tgtDx = d.targetDoorX;
+            tgtDy = d.targetDoorY;
+            d.targetRoom = -1;
+            d.targetDoorX = -1;
+            d.targetDoorY = -1;
+            break;
+        }
+    }
+
+    // Also unbind partner door in the target room
+    if (tgtRoomIdx > 0 && tgtDx >= 0 && tgtDy >= 0) {
+        std::string tgtRoomName = "room_" + std::to_string(tgtRoomIdx);
+        for (size_t i = 0; i < _canvasRooms.size(); ++i) {
+            if (_canvasRooms[i].index == tgtRoomIdx || _canvasRooms[i].name == tgtRoomName) {
+                for (auto& d2 : _canvasRooms[i].doors) {
+                    if (d2.x == tgtDx && d2.y == tgtDy) {
+                        d2.targetRoom = -1;
+                        d2.targetDoorX = -1;
+                        d2.targetDoorY = -1;
+                        break;
+                    }
+                }
+                if (_currentRoomName == _canvasRooms[i].name) {
+                    for (auto& d2 : _doors) {
+                        if (d2.x == tgtDx && d2.y == tgtDy) {
+                            d2.targetRoom = -1;
+                            d2.targetDoorX = -1;
+                            d2.targetDoorY = -1;
+                            break;
+                        }
+                    }
+                }
+                saveRoomByIndex(static_cast<int>(i));
+                break;
+            }
+        }
+    }
+
+    if (_currentRoomName == roomName) {
+        for (auto& d : _doors) {
+            if (d.x == dx && d.y == dy) {
+                d.targetRoom = -1;
+                d.targetDoorX = -1;
+                d.targetDoorY = -1;
+                break;
+            }
+        }
+    }
+
+    if (idxA >= 0) {
+        saveRoomByIndex(idxA);
+    }
+}
+
+void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::string& roomB, int bx, int by) {
+    if (roomA == roomB && ax == bx && ay == by) {
+        _statusMessage = "Нельзя связать дверь саму с собой!";
+        _statusTimer = 2.0f;
+        return;
+    }
+
+    syncCurrentRoomToCanvas();
+
+    // 1. Сначала отвязываем старые связи у обеих дверей
+    unlinkDoor(roomA, ax, ay);
+    unlinkDoor(roomB, bx, by);
+
+    CanvasRoom* crA = nullptr;
     CanvasRoom* crB = nullptr;
-    for (auto& r : _canvasRooms) {
-        if (r.name == roomA) crA = &r;
-        if (r.name == roomB) crB = &r;
+    int idxA = -1, idxB = -1;
+    for (size_t i = 0; i < _canvasRooms.size(); ++i) {
+        if (_canvasRooms[i].name == roomA) { crA = &_canvasRooms[i]; idxA = static_cast<int>(i); }
+        if (_canvasRooms[i].name == roomB) { crB = &_canvasRooms[i]; idxB = static_cast<int>(i); }
     }
     if (!crA || !crB) return;
 
+    // Дверь A -> Дверь B
     for (auto& d : crA->doors) {
         if (d.x == ax && d.y == ay) {
             d.targetRoom = crB->index;
@@ -1077,6 +1162,7 @@ void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::s
         }
     }
 
+    // Дверь B -> Дверь A
     for (auto& d : crB->doors) {
         if (d.x == bx && d.y == by) {
             d.targetRoom = crA->index;
@@ -1107,13 +1193,12 @@ void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::s
         }
     }
 
-    saveToGame();
-    if (roomA != roomB) {
-        std::string savedCurrent = _currentRoomName;
-        syncCanvasToCurrentRoom(roomB);
-        saveToGame();
-        syncCanvasToCurrentRoom(savedCurrent);
-    }
+    saveRoomByIndex(idxA);
+    saveRoomByIndex(idxB);
+
+    _statusMessage = "Двери связаны: [" + roomA + " (" + std::to_string(ax) + "," + std::to_string(ay) + ")] <---> [" +
+                     roomB + " (" + std::to_string(bx) + "," + std::to_string(by) + ")]!";
+    _statusTimer = 4.0f;
 }
 
 void EditorApp::createNamedRoom(const std::string& name) {
@@ -1747,9 +1832,9 @@ void EditorApp::applyToolAt(int tx, int ty) {
         return;
     }
     if (_currentTool == ToolType::DOOR) {
-        setDoor(tx, ty, _doorTargetRoom);
-        _statusMessage = "Дверь (D) -> Цель: Комната " + std::to_string(_doorTargetRoom);
-        _statusTimer = 2.0f;
+        setDoor(tx, ty, -1, -1, -1);
+        _statusMessage = "Дверь добавлена (не связана). Свяжите двери на карте комнат (F1) или ПКМ.";
+        _statusTimer = 2.5f;
         return;
     }
     if (_currentTool == ToolType::JUMP_PAD || _currentTool == ToolType::SPIKES || _currentTool == ToolType::TRIGGER_ZONE) {
@@ -1836,6 +1921,7 @@ void EditorApp::setDoor(int tx, int ty, int targetRoom, int targetDoorX, int tar
 }
 
 void EditorApp::removeDoor(int tx, int ty) {
+    unlinkDoor(_currentRoomName, tx, ty);
     _doors.erase(std::remove_if(_doors.begin(), _doors.end(),
         [tx, ty](const EditorDoor& d) { return d.x == tx && d.y == ty; }), _doors.end());
     if (tx >= 0 && tx < _width && ty >= 0 && ty < _height && _map[ty][tx] == 3) {
@@ -2030,50 +2116,44 @@ bool EditorApp::handleModalClick(const sf::Vector2i& mousePixel) {
     // 1. НАСТРОЙКИ ДВЕРИ
     if (_modal.type == SettingsModal::TargetType::DOOR) {
         if (_modal.targetIndex >= 0 && _modal.targetIndex < static_cast<int>(_doors.size())) {
-            // Кнопки комнат 1..10
-            for (int r = 1; r <= 10; ++r) {
-                int col = (r - 1) % 5;
-                int row = (r - 1) / 5;
-                float bx = mx + 16.0f + col * 48.0f;
-                float by = my + 50.0f + row * 28.0f;
-                sf::FloatRect rBtn({bx, by}, {42.0f, 24.0f});
-                if (rBtn.contains(mPos)) {
-                    pushUndo();
-                    _doors[_modal.targetIndex].targetRoom = r;
-                    _doorTargetRoom = r;
-                    _statusMessage = "Дверь: целевая комната установлена на " + std::to_string(r);
-                    _statusTimer = 2.0f;
-                    closeSettingsModal();
-                    return true;
-                }
-            }
-            // Кнопка: [🔗 Связать с дверью на холсте]
-            sf::FloatRect linkBtnRect({mx + 16.0f, my + 132.0f}, {mw - 32.0f, 26.0f});
+            int dx = _doors[_modal.targetIndex].x;
+            int dy = _doors[_modal.targetIndex].y;
+
+            // Кнопка: [🔗 Провести связь на карте (F1)]
+            sf::FloatRect linkBtnRect({mx + 16.0f, my + 105.0f}, {mw - 32.0f, 32.0f});
             if (linkBtnRect.contains(mPos)) {
-                _isLinkingDoor = true;
-                _linkingSourceRoom = _currentRoomName;
-                _linkingSourceDoorX = _doors[_modal.targetIndex].x;
-                _linkingSourceDoorY = _doors[_modal.targetIndex].y;
+                std::string rName = _currentRoomName;
                 closeSettingsModal();
-                _statusMessage = "Кликните ЛКМ по любой другой двери для связывания (Esc для отмены)";
-                _statusTimer = 6.0f;
+                switchToScreen(EditorScreen::WORLD_LAYOUT);
+                _isLinkingDoor = true;
+                _isDraggingDoorLink = true;
+                _linkingSourceRoom = rName;
+                _linkingSourceDoorX = dx;
+                _linkingSourceDoorY = dy;
+                _statusMessage = "Проведите связь к целевой двери и отпустите ЛКМ (или кликните по ней)";
+                _statusTimer = 5.0f;
                 return true;
             }
-            // Кнопка: [Разорвать связь] / [Удалить дверь]
-            sf::FloatRect dBtnRect({mx + 16.0f, my + 166.0f}, {mw - 32.0f, 26.0f});
-            if (dBtnRect.contains(mPos)) {
+
+            // Кнопка: [✕ Разорвать связь]
+            sf::FloatRect unbindBtnRect({mx + 16.0f, my + 143.0f}, {mw - 32.0f, 28.0f});
+            if (unbindBtnRect.contains(mPos)) {
                 pushUndo();
-                if (_doors[_modal.targetIndex].targetDoorX >= 0) {
-                    _doors[_modal.targetIndex].targetDoorX = -1;
-                    _doors[_modal.targetIndex].targetDoorY = -1;
-                    _statusMessage = "Связь двери разорвана.";
-                    _statusTimer = 2.0f;
-                } else {
-                    removeDoor(_modal.tile.x, _modal.tile.y);
-                    _statusMessage = "Дверь удалена.";
-                    _statusTimer = 2.0f;
-                }
+                unlinkDoor(_currentRoomName, dx, dy);
                 closeSettingsModal();
+                _statusMessage = "Связь двери разорвана.";
+                _statusTimer = 2.0f;
+                return true;
+            }
+
+            // Кнопка: [🗑 Удалить дверь]
+            sf::FloatRect delBtnRect({mx + 16.0f, my + 177.0f}, {mw - 32.0f, 28.0f});
+            if (delBtnRect.contains(mPos)) {
+                pushUndo();
+                removeDoor(_modal.tile.x, _modal.tile.y);
+                closeSettingsModal();
+                _statusMessage = "Дверь удалена.";
+                _statusTimer = 2.0f;
                 return true;
             }
         }
@@ -2568,6 +2648,7 @@ void EditorApp::handleEvents() {
             if (kp->code == sf::Keyboard::Key::Escape) {
                 if (_isLinkingDoor) {
                     _isLinkingDoor = false;
+                    _isDraggingDoorLink = false;
                     _statusMessage = "Связывание отменено.";
                     _statusTimer = 1.5f;
                     continue;
@@ -2739,6 +2820,37 @@ void EditorApp::handleEvents() {
                 if (mbR->button == sf::Mouse::Button::Middle || mbR->button == sf::Mouse::Button::Left) {
                     _isPanning = false;
                 }
+                if (_isDraggingDoorLink && _isLinkingDoor && mbR->button == sf::Mouse::Button::Left) {
+                    sf::Vector2f mWorld = _window.mapPixelToCoords(sf::Mouse::getPosition(_window), _camera);
+                    bool linked = false;
+                    for (size_t ri = 0; ri < _canvasRooms.size(); ++ri) {
+                        const auto& cr = _canvasRooms[ri];
+                        int tx = static_cast<int>(std::floor((mWorld.x - cr.offset.x) / _tileSize));
+                        int ty = static_cast<int>(std::floor((mWorld.y - cr.offset.y) / _tileSize));
+                        for (const auto& d : cr.doors) {
+                            if (d.x == tx && d.y == ty) {
+                                if (_linkingSourceRoom != cr.name || _linkingSourceDoorX != tx || _linkingSourceDoorY != ty) {
+                                    linkDoors(_linkingSourceRoom, _linkingSourceDoorX, _linkingSourceDoorY, cr.name, tx, ty);
+                                    linked = true;
+                                }
+                                break;
+                            }
+                        }
+                        if (linked) break;
+                    }
+                    _isDraggingDoorLink = false;
+                    if (linked) {
+                        _isLinkingDoor = false;
+                    } else {
+                        // Если отпустили не над дверью: проверяем сдвиг мыши
+                        sf::Vector2f mDist = mWorld - _doorLinkMouseStart;
+                        if (std::hypot(mDist.x, mDist.y) > 25.0f) {
+                            _isLinkingDoor = false;
+                            _statusMessage = "Связывание отменено (отпущено мимо двери).";
+                            _statusTimer = 2.0f;
+                        }
+                    }
+                }
                 if (_isDraggingRoom && _draggedRoomIdx >= 0 && _draggedRoomIdx < static_cast<int>(_canvasRooms.size())) {
                     _isDraggingRoom = false;
                     _canvasRooms[_draggedRoomIdx].offset.x = std::round(_canvasRooms[_draggedRoomIdx].offset.x / 10.0f) * 10.0f;
@@ -2816,6 +2928,7 @@ void EditorApp::handleEvents() {
             if (_isLinkingDoor) {
                 if (mbP->button == sf::Mouse::Button::Right) {
                     _isLinkingDoor = false;
+                    _isDraggingDoorLink = false;
                     _statusMessage = "Связывание отменено.";
                     _statusTimer = 2.0f;
                     continue;
@@ -2836,18 +2949,25 @@ void EditorApp::handleEvents() {
                             }
                         }
                         if (foundDoor) {
-                            linkDoors(_linkingSourceRoom, _linkingSourceDoorX, _linkingSourceDoorY, cr.name, tx, ty);
+                            if (_linkingSourceRoom != cr.name || _linkingSourceDoorX != tx || _linkingSourceDoorY != ty) {
+                                linkDoors(_linkingSourceRoom, _linkingSourceDoorX, _linkingSourceDoorY, cr.name, tx, ty);
+                                _statusMessage = "Двери успешно связаны: [" + _linkingSourceRoom + "] <-> [" + cr.name + "]!";
+                                _statusTimer = 4.0f;
+                            }
                             _isLinkingDoor = false;
-                            _statusMessage = "Двери успешно связаны: [" + _linkingSourceRoom + "] <-> [" + cr.name + "]!";
-                            _statusTimer = 4.0f;
+                            _isDraggingDoorLink = false;
                             continue;
                         } else {
-                            _statusMessage = "Кликните по ДВЕРИ (блок D) или нажмите Esc для отмены.";
+                            _isLinkingDoor = false;
+                            _isDraggingDoorLink = false;
+                            _statusMessage = "Связывание отменено (клик мимо двери).";
                             _statusTimer = 2.0f;
                             continue;
                         }
                     } else {
-                        _statusMessage = "Клик вне комнат. Нажмите Esc для отмены.";
+                        _isLinkingDoor = false;
+                        _isDraggingDoorLink = false;
+                        _statusMessage = "Связывание отменено.";
                         _statusTimer = 2.0f;
                         continue;
                     }
@@ -3051,32 +3171,31 @@ void EditorApp::update(float dt) {
                     int targetRoom = door.targetRoom;
                     int tdx = door.targetDoorX;
                     int tdy = door.targetDoorY;
-                    _simArena->loadRoom(targetRoom);
-                    float spawnX = 0.0f, spawnY = 0.0f;
-                    if (tdx >= 0 && tdy >= 0) {
-                        spawnX = (tdx + 0.5f) * _simArena->getTileSize();
-                        spawnY = (tdy + 1.0f) * _simArena->getTileSize() - Player::BOTTOM_OFFSET;
-                    } else {
-                        spawnX = _simArena->getSpawnPosition().x;
-                        spawnY = _simArena->getSpawnPosition().y;
+                    if (tdx >= 0 && tdy >= 0 && targetRoom > 0 && targetRoom != _simArena->getCurrentRoomIndex()) {
+                        _simArena->loadRoom(targetRoom);
+                        float spawnX = (tdx + 0.5f) * _simArena->getTileSize();
+                        float spawnY = (tdy + 1.0f) * _simArena->getTileSize() - Player::BOTTOM_OFFSET;
+                        _simPlayer->position = {spawnX, spawnY};
+                        _simPlayer->velocity = {0.0f, 0.0f};
+                        _simEnemies.clear();
+                        for (const auto& espawn : _simArena->getEnemySpawns()) {
+                            EnemyType et = (espawn.type == 1) ? EnemyType::TANK :
+                                           (espawn.type == 2) ? EnemyType::DUELIST :
+                                           (espawn.type == 3) ? EnemyType::DUELIST_PASSIVE :
+                                           (espawn.type == 4) ? EnemyType::DUMMY : EnemyType::NORMAL;
+                            _simEnemies.emplace_back(espawn.position, et);
+                        }
+                        for (auto& e : _simEnemies) {
+                            e.setSmartAI(true);
+                            e.reset();
+                        }
+                        _simDoorCooldown = 1.0f;
+                        _statusMessage = "Переход в дверь комнаты room_" + std::to_string(targetRoom) + " (" + std::to_string(tdx) + ", " + std::to_string(tdy) + ")";
+                        _statusTimer = 2.5f;
+                    } else if (tdx < 0 || tdy < 0) {
+                        _statusMessage = "Дверь не связана! Свяжите ее на карте комнат [F1].";
+                        _statusTimer = 2.0f;
                     }
-                    _simPlayer->position = {spawnX, spawnY};
-                    _simPlayer->velocity = {0.0f, 0.0f};
-                    _simEnemies.clear();
-                    for (const auto& espawn : _simArena->getEnemySpawns()) {
-                        EnemyType et = (espawn.type == 1) ? EnemyType::TANK :
-                                       (espawn.type == 2) ? EnemyType::DUELIST :
-                                       (espawn.type == 3) ? EnemyType::DUELIST_PASSIVE :
-                                       (espawn.type == 4) ? EnemyType::DUMMY : EnemyType::NORMAL;
-                        _simEnemies.emplace_back(espawn.position, et);
-                    }
-                    for (auto& e : _simEnemies) {
-                        e.setSmartAI(true);
-                        e.reset();
-                    }
-                    _simDoorCooldown = 1.0f;
-                    _statusMessage = "Симуляция: Переход в комнату " + std::to_string(targetRoom);
-                    _statusTimer = 2.0f;
                 }
             }
         }
@@ -3180,43 +3299,65 @@ void EditorApp::drawWorldLayout() {
     }
     _window.draw(worldGrid);
 
-    // 2. Линии связей между дверьми
+    // 2. Линии связей между дверьми (ТОЛЬКО door-to-door связи)
     for (const auto& cr : _canvasRooms) {
         for (const auto& d : cr.doors) {
-            if (d.targetRoom > 0) {
+            if (d.targetRoom > 0 && d.targetDoorX >= 0 && d.targetDoorY >= 0) {
                 std::string targetRoomName = "room_" + std::to_string(d.targetRoom);
+                // Чтобы не рисовать одну и ту же линию дважды
+                if (cr.name > targetRoomName || (cr.name == targetRoomName && (d.x > d.targetDoorX || (d.x == d.targetDoorX && d.y > d.targetDoorY)))) {
+                    continue;
+                }
                 const CanvasRoom* tgtRoom = nullptr;
                 for (const auto& r : _canvasRooms) {
-                    if (r.name == targetRoomName) {
+                    if (r.name == targetRoomName || r.index == d.targetRoom) {
                         tgtRoom = &r;
                         break;
                     }
                 }
                 if (tgtRoom) {
                     sf::Vector2f p1 = cr.offset + sf::Vector2f((d.x + 0.5f) * _tileSize, (d.y + 0.5f) * _tileSize);
-                    sf::Vector2f p2;
-                    if (d.targetDoorX >= 0 && d.targetDoorY >= 0) {
-                        p2 = tgtRoom->offset + sf::Vector2f((d.targetDoorX + 0.5f) * _tileSize, (d.targetDoorY + 0.5f) * _tileSize);
-                    } else {
-                        p2 = tgtRoom->offset + sf::Vector2f((tgtRoom->width * _tileSize) / 2.0f, (tgtRoom->height * _tileSize) / 2.0f);
-                    }
+                    sf::Vector2f p2 = tgtRoom->offset + sf::Vector2f((d.targetDoorX + 0.5f) * _tileSize, (d.targetDoorY + 0.5f) * _tileSize);
 
                     sf::VertexArray line(sf::PrimitiveType::Lines);
-                    line.append(sf::Vertex({p1, sf::Color(0, 240, 255, 200)}));
-                    line.append(sf::Vertex({p2, sf::Color(0, 240, 255, 200)}));
+                    line.append(sf::Vertex({p1, sf::Color(0, 240, 255, 220)}));
+                    line.append(sf::Vertex({p2, sf::Color(0, 240, 255, 220)}));
                     _window.draw(line);
 
-                    sf::CircleShape dot1(7.0f);
-                    dot1.setOrigin({7.0f, 7.0f});
+                    // Узловые точки на связанных дверях
+                    sf::CircleShape dot1(8.0f);
+                    dot1.setOrigin({8.0f, 8.0f});
                     dot1.setPosition(p1);
                     dot1.setFillColor(sf::Color(0, 255, 255));
+                    dot1.setOutlineColor(sf::Color::White);
+                    dot1.setOutlineThickness(1.5f);
                     _window.draw(dot1);
 
-                    sf::CircleShape dot2(7.0f);
-                    dot2.setOrigin({7.0f, 7.0f});
+                    sf::CircleShape dot2(8.0f);
+                    dot2.setOrigin({8.0f, 8.0f});
                     dot2.setPosition(p2);
                     dot2.setFillColor(sf::Color(0, 255, 180));
+                    dot2.setOutlineColor(sf::Color::White);
+                    dot2.setOutlineThickness(1.5f);
                     _window.draw(dot2);
+
+                    // Значок двухсторонней связи по центру линии
+                    if (_fontLoaded) {
+                        sf::Vector2f mid = (p1 + p2) * 0.5f;
+                        sf::RectangleShape badge({52.0f, 22.0f});
+                        badge.setOrigin({26.0f, 11.0f});
+                        badge.setPosition(mid);
+                        badge.setFillColor(sf::Color(15, 25, 38, 235));
+                        badge.setOutlineColor(sf::Color(0, 240, 255, 220));
+                        badge.setOutlineThickness(1.5f);
+                        _window.draw(badge);
+
+                        sf::Text bTxt(_font, toSfString("⇄"), 13);
+                        bTxt.setFillColor(sf::Color(0, 255, 255));
+                        bTxt.setOrigin({bTxt.getLocalBounds().size.x * 0.5f, bTxt.getLocalBounds().size.y * 0.5f});
+                        bTxt.setPosition({mid.x, mid.y - 2.0f});
+                        _window.draw(bTxt);
+                    }
                 }
             }
         }
@@ -3236,11 +3377,48 @@ void EditorApp::drawWorldLayout() {
         line.append(sf::Vertex({mouseWorld, sf::Color(255, 230, 80, 240)}));
         _window.draw(line);
 
-        sf::CircleShape c(8.0f);
-        c.setOrigin({8.0f, 8.0f});
+        sf::CircleShape c(9.0f);
+        c.setOrigin({9.0f, 9.0f});
         c.setPosition(mouseWorld);
-        c.setFillColor(sf::Color(255, 200, 0, 180));
+        c.setFillColor(sf::Color(255, 220, 0, 220));
+        c.setOutlineColor(sf::Color::White);
+        c.setOutlineThickness(1.5f);
         _window.draw(c);
+
+        if (_fontLoaded) {
+            // Проверяем, наведена ли мышь на другую дверь
+            std::string hoverDoorInfo = "";
+            for (const auto& cr : _canvasRooms) {
+                int tx = static_cast<int>(std::floor((mouseWorld.x - cr.offset.x) / _tileSize));
+                int ty = static_cast<int>(std::floor((mouseWorld.y - cr.offset.y) / _tileSize));
+                for (const auto& d : cr.doors) {
+                    if (d.x == tx && d.y == ty) {
+                        if (cr.name != _linkingSourceRoom || tx != _linkingSourceDoorX || ty != _linkingSourceDoorY) {
+                            hoverDoorInfo = "Дверь в [" + cr.name + " (" + std::to_string(tx) + ", " + std::to_string(ty) + ")]";
+                        }
+                        break;
+                    }
+                }
+                if (!hoverDoorInfo.empty()) break;
+            }
+
+            std::string tipStr = hoverDoorInfo.empty() ? 
+                "Тяните к целевой двери и отпустите (или Esc - отмена)" : 
+                "Отпустите ЛКМ для связи: " + hoverDoorInfo;
+
+            sf::Text tipText(_font, toSfString(tipStr), 13);
+            tipText.setFillColor(hoverDoorInfo.empty() ? sf::Color(255, 220, 100) : sf::Color(50, 255, 140));
+            sf::FloatRect tb = tipText.getLocalBounds();
+            sf::RectangleShape tipBg({tb.size.x + 18.0f, tb.size.y + 12.0f});
+            tipBg.setPosition({mouseWorld.x + 14.0f, mouseWorld.y + 14.0f});
+            tipBg.setFillColor(sf::Color(15, 20, 28, 240));
+            tipBg.setOutlineColor(hoverDoorInfo.empty() ? sf::Color(255, 200, 0) : sf::Color(50, 255, 140));
+            tipBg.setOutlineThickness(1.5f);
+
+            tipText.setPosition({mouseWorld.x + 23.0f, mouseWorld.y + 18.0f});
+            _window.draw(tipBg);
+            _window.draw(tipText);
+        }
     }
 
     // 4. Отрисовка комнат
@@ -3324,18 +3502,47 @@ void EditorApp::drawWorldLayout() {
             float dx = cr.offset.x + d.x * _tileSize;
             float dy = cr.offset.y + d.y * _tileSize;
             bool isDoorSel = (isSelected && _selectedDoorIdx == static_cast<int>(di));
+            bool isDoorHover = (mouseWorld.x >= dx && mouseWorld.x < dx + _tileSize &&
+                                mouseWorld.y >= dy && mouseWorld.y < dy + _tileSize);
+            bool isSourceLinking = (_isLinkingDoor && _linkingSourceRoom == cr.name &&
+                                    _linkingSourceDoorX == d.x && _linkingSourceDoorY == d.y);
+            bool isLinked = (d.targetRoom > 0 && d.targetDoorX >= 0 && d.targetDoorY >= 0);
 
             sf::RectangleShape dFrame({_tileSize, _tileSize});
             dFrame.setPosition({dx, dy});
-            dFrame.setFillColor(sf::Color(0, 210, 255, 140));
-            dFrame.setOutlineColor(isDoorSel ? sf::Color(255, 215, 0) : sf::Color(0, 255, 255));
-            dFrame.setOutlineThickness(isDoorSel ? 3.0f : 1.5f);
+
+            if (isSourceLinking) {
+                dFrame.setFillColor(sf::Color(255, 220, 0, 180));
+                dFrame.setOutlineColor(sf::Color(255, 255, 100));
+                dFrame.setOutlineThickness(3.5f);
+            } else if (_isLinkingDoor && isDoorHover) {
+                dFrame.setFillColor(sf::Color(0, 255, 128, 190));
+                dFrame.setOutlineColor(sf::Color(100, 255, 180));
+                dFrame.setOutlineThickness(4.0f);
+            } else if (isLinked) {
+                dFrame.setFillColor(sf::Color(0, 180, 240, 140));
+                dFrame.setOutlineColor(isDoorSel ? sf::Color(255, 215, 0) : sf::Color(0, 230, 255));
+                dFrame.setOutlineThickness(isDoorSel ? 3.0f : 1.5f);
+            } else {
+                dFrame.setFillColor(sf::Color(220, 110, 20, 140));
+                dFrame.setOutlineColor(isDoorSel ? sf::Color(255, 215, 0) : sf::Color(255, 150, 40));
+                dFrame.setOutlineThickness(isDoorSel ? 3.0f : 1.5f);
+            }
             _window.draw(dFrame);
 
+            // Соединительный кружок-коннектор по центру двери
+            sf::CircleShape connDot(5.0f);
+            connDot.setPosition({dx + _tileSize / 2.0f - 5.0f, dy + _tileSize / 2.0f - 5.0f});
+            connDot.setFillColor(isLinked ? sf::Color(0, 255, 230) : sf::Color(255, 180, 40));
+            connDot.setOutlineColor(sf::Color::White);
+            connDot.setOutlineThickness(1.0f);
+            _window.draw(connDot);
+
             if (_fontLoaded) {
-                sf::Text dTxt(_font, toSfString("D" + std::to_string(d.targetRoom)), 11);
+                std::string label = isLinked ? ("R" + std::to_string(d.targetRoom)) : "?";
+                sf::Text dTxt(_font, toSfString(label), 11);
                 dTxt.setFillColor(sf::Color::White);
-                dTxt.setPosition({dx + 4.0f, dy + 6.0f});
+                dTxt.setPosition({dx + 4.0f, dy + 2.0f});
                 _window.draw(dTxt);
             }
         }
@@ -3625,8 +3832,21 @@ void EditorApp::drawWorldLayoutUI() {
         _window.draw(sep2);
 
         // Секция 3: Управление дверьми
-        sf::Text dTitle(_font, toSfString("ДВЕРИ В КОМНАТЕ (Всего: " + std::to_string(doorCount) + "):"), 13);
-        dTitle.setFillColor(sf::Color(0, 220, 255));
+        const auto& curDoors = curCR ? curCR->doors : _doors;
+        int activeDoorIdx = (_selectedDoorIdx >= 0 && _selectedDoorIdx < static_cast<int>(curDoors.size())) ? _selectedDoorIdx : (curDoors.empty() ? -1 : 0);
+
+        std::string doorTitleStr = "ДВЕРИ (Всего: " + std::to_string(doorCount) + ")";
+        if (activeDoorIdx >= 0 && activeDoorIdx < static_cast<int>(curDoors.size())) {
+            const auto& sd = curDoors[activeDoorIdx];
+            doorTitleStr += " | Дверь #" + std::to_string(activeDoorIdx + 1) + " (" + std::to_string(sd.x) + "," + std::to_string(sd.y) + ")";
+            if (sd.targetRoom > 0 && sd.targetDoorX >= 0 && sd.targetDoorY >= 0) {
+                doorTitleStr += " ⇄ room_" + std::to_string(sd.targetRoom) + " (" + std::to_string(sd.targetDoorX) + "," + std::to_string(sd.targetDoorY) + ")";
+            } else {
+                doorTitleStr += " ⚠ НЕ СВЯЗАНА";
+            }
+        }
+        sf::Text dTitle(_font, toSfString(doorTitleStr), 12);
+        dTitle.setFillColor(activeDoorIdx >= 0 && curDoors[activeDoorIdx].targetRoom > 0 && curDoors[activeDoorIdx].targetDoorX >= 0 ? sf::Color(100, 240, 255) : sf::Color(255, 180, 50));
         dTitle.setPosition({775.0f, insY + 12.0f});
         _window.draw(dTitle);
 
@@ -3725,14 +3945,18 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
                 bool occupied = false;
                 for (const auto& d : cr.doors) { if (d.x == dx && d.y == dy) { occupied = true; break; } }
                 if (occupied) dy = std::max(0, dy - 1);
-                int tgtR = (cr.index % 10) + 1;
-                cr.doors.push_back({dx, dy, tgtR, -1, -1});
+                cr.doors.push_back({dx, dy, -1, -1, -1});
                 if (dy < static_cast<int>(cr.map.size()) && dx < static_cast<int>(cr.map[dy].size())) {
                     cr.map[dy][dx] = 3;
                 }
                 saveRoomByIndex(curRIdx);
-                _statusMessage = "Дверь добавлена в [" + cr.name + "] на (" + std::to_string(dx) + ", " + std::to_string(dy) + ")";
-                _statusTimer = 2.5f;
+                if (_currentRoomName == cr.name) {
+                    _doors = cr.doors;
+                    _map = cr.map;
+                }
+                _selectedDoorIdx = static_cast<int>(cr.doors.size()) - 1;
+                _statusMessage = "Дверь добавлена в [" + cr.name + "] на (" + std::to_string(dx) + ", " + std::to_string(dy) + "). Проведите связь к другой двери.";
+                _statusTimer = 3.0f;
                 return true;
             }
 
@@ -3741,10 +3965,12 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
                 if (!cr.doors.empty()) {
                     int dIdx = (_selectedDoorIdx >= 0 && _selectedDoorIdx < static_cast<int>(cr.doors.size())) ? _selectedDoorIdx : 0;
                     _isLinkingDoor = true;
+                    _isDraggingDoorLink = false;
                     _linkingSourceRoom = cr.name;
                     _linkingSourceDoorX = cr.doors[dIdx].x;
                     _linkingSourceDoorY = cr.doors[dIdx].y;
-                    _statusMessage = "Кликните на целевую дверь в другой комнате для связывания (или Esc для отмены)";
+                    _doorLinkMouseStart = _window.mapPixelToCoords(mousePixel, _camera);
+                    _statusMessage = "Кликните на целевую дверь в другой комнате для связывания (или Esc/ПКМ для отмены)";
                     _statusTimer = 5.0f;
                 } else {
                     _statusMessage = "В этой комнате нет дверей! Сначала добавьте дверь [+ Добавить дверь].";
@@ -3757,9 +3983,7 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
             if (mx >= 775.0f && mx <= 925.0f && my >= dBtnY2 && my <= dBtnY2 + 32.0f) {
                 if (!cr.doors.empty()) {
                     int dIdx = (_selectedDoorIdx >= 0 && _selectedDoorIdx < static_cast<int>(cr.doors.size())) ? _selectedDoorIdx : 0;
-                    cr.doors[dIdx].targetDoorX = -1;
-                    cr.doors[dIdx].targetDoorY = -1;
-                    saveRoomByIndex(curRIdx);
+                    unlinkDoor(cr.name, cr.doors[dIdx].x, cr.doors[dIdx].y);
                     _statusMessage = "Связь двери разорвана.";
                     _statusTimer = 2.0f;
                 }
@@ -3772,11 +3996,16 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
                     int dIdx = (_selectedDoorIdx >= 0 && _selectedDoorIdx < static_cast<int>(cr.doors.size())) ? _selectedDoorIdx : static_cast<int>(cr.doors.size()) - 1;
                     int dx = cr.doors[dIdx].x;
                     int dy = cr.doors[dIdx].y;
+                    unlinkDoor(cr.name, dx, dy);
                     cr.doors.erase(cr.doors.begin() + dIdx);
                     if (dy < static_cast<int>(cr.map.size()) && dx < static_cast<int>(cr.map[dy].size())) {
                         cr.map[dy][dx] = 0;
                     }
                     saveRoomByIndex(curRIdx);
+                    if (_currentRoomName == cr.name) {
+                        _doors = cr.doors;
+                        _map = cr.map;
+                    }
                     _selectedDoorIdx = -1;
                     _statusMessage = "Дверь удалена.";
                     _statusTimer = 2.0f;
@@ -3790,7 +4019,16 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
     // 3. Клики по игровому миру комнат
     sf::Vector2f mouseWorld = _window.mapPixelToCoords(mousePixel, _camera);
 
-    // Связывание дверей
+    // Отмена связывания по ПКМ
+    if (button == sf::Mouse::Button::Right && _isLinkingDoor) {
+        _isLinkingDoor = false;
+        _isDraggingDoorLink = false;
+        _statusMessage = "Связывание дверей отменено.";
+        _statusTimer = 2.0f;
+        return true;
+    }
+
+    // Связывание дверей при активном режиме
     if (_isLinkingDoor && button == sf::Mouse::Button::Left) {
         int rIdx = getCanvasRoomAt(mouseWorld);
         if (rIdx >= 0) {
@@ -3802,13 +4040,22 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
                 if (d.x == tx && d.y == ty) { foundDoor = true; break; }
             }
             if (foundDoor) {
-                linkDoors(_linkingSourceRoom, _linkingSourceDoorX, _linkingSourceDoorY, cr.name, tx, ty);
+                if (_linkingSourceRoom != cr.name || _linkingSourceDoorX != tx || _linkingSourceDoorY != ty) {
+                    linkDoors(_linkingSourceRoom, _linkingSourceDoorX, _linkingSourceDoorY, cr.name, tx, ty);
+                    _statusMessage = "Двери успешно связаны: [" + _linkingSourceRoom + "] <-> [" + cr.name + "]!";
+                    _statusTimer = 4.0f;
+                }
                 _isLinkingDoor = false;
-                _statusMessage = "Двери успешно связаны: [" + _linkingSourceRoom + "] <-> [" + cr.name + "]!";
-                _statusTimer = 4.0f;
+                _isDraggingDoorLink = false;
                 return true;
             }
         }
+        // Клик мимо двери отменяет связывание
+        _isLinkingDoor = false;
+        _isDraggingDoorLink = false;
+        _statusMessage = "Связывание отменено (клик мимо двери).";
+        _statusTimer = 2.0f;
+        return true;
     }
 
     // Проверка клика по угловому маркеру ресайза (Resize handle)
@@ -3835,8 +4082,16 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
             if (cr.doors[di].x == tx && cr.doors[di].y == ty) {
                 _selectedDoorIdx = static_cast<int>(di);
                 syncCanvasToCurrentRoom(cr.name);
-                _statusMessage = "Выбрана дверь D" + std::to_string(cr.doors[di].targetRoom) + " в комнате [" + cr.name + "]";
-                _statusTimer = 2.0f;
+                if (button == sf::Mouse::Button::Left) {
+                    _isLinkingDoor = true;
+                    _isDraggingDoorLink = true;
+                    _linkingSourceRoom = cr.name;
+                    _linkingSourceDoorX = tx;
+                    _linkingSourceDoorY = ty;
+                    _doorLinkMouseStart = mouseWorld;
+                    _statusMessage = "Проведите связь к целевой двери и отпустите мышь (или кликните по ней)";
+                    _statusTimer = 4.0f;
+                }
                 return true;
             }
         }
@@ -4414,73 +4669,85 @@ void EditorApp::drawModal() {
 
         // 1. ДВЕРЬ
         if (_modal.type == SettingsModal::TargetType::DOOR) {
-            int curTgt = (_modal.targetIndex >= 0 && _modal.targetIndex < static_cast<int>(_doors.size())) ? _doors[_modal.targetIndex].targetRoom : 1;
+            int curTgt = (_modal.targetIndex >= 0 && _modal.targetIndex < static_cast<int>(_doors.size())) ? _doors[_modal.targetIndex].targetRoom : -1;
             int curTdx = (_modal.targetIndex >= 0 && _modal.targetIndex < static_cast<int>(_doors.size())) ? _doors[_modal.targetIndex].targetDoorX : -1;
             int curTdy = (_modal.targetIndex >= 0 && _modal.targetIndex < static_cast<int>(_doors.size())) ? _doors[_modal.targetIndex].targetDoorY : -1;
+            bool isLinked = (curTgt > 0 && curTdx >= 0 && curTdy >= 0);
 
-            sf::Text sub(_font, toSfString("Целевая комната: R" + std::to_string(curTgt)), 11);
-            sub.setFillColor(sf::Color(160, 210, 255));
+            sf::Text sub(_font, toSfString("Позиция двери: (" + std::to_string(_modal.tile.x) + ", " + std::to_string(_modal.tile.y) + ")"), 11);
+            sub.setFillColor(sf::Color(160, 200, 230));
             sub.setPosition({mx + 16.0f, my + 34.0f});
             _window.draw(sub);
 
-            for (int r = 1; r <= 10; ++r) {
-                int col = (r - 1) % 5;
-                int row = (r - 1) / 5;
-                float bx = mx + 16.0f + col * 48.0f;
-                float by = my + 50.0f + row * 28.0f;
-                bool isCur = (curTgt == r);
+            // Инфо-блок связи двери
+            sf::RectangleShape infoBg({mw - 32.0f, 48.0f});
+            infoBg.setPosition({mx + 16.0f, my + 52.0f});
+            infoBg.setFillColor(isLinked ? sf::Color(18, 45, 60, 220) : sf::Color(45, 30, 20, 220));
+            infoBg.setOutlineColor(isLinked ? sf::Color(0, 230, 255) : sf::Color(255, 170, 0));
+            infoBg.setOutlineThickness(1.0f);
+            _window.draw(infoBg);
 
-                sf::RectangleShape rBox({42.0f, 24.0f});
-                rBox.setPosition({bx, by});
-                rBox.setFillColor(isCur ? sf::Color(0, 200, 255) : sf::Color(25, 36, 50));
-                rBox.setOutlineColor(isCur ? sf::Color::White : sf::Color(60, 80, 110));
-                rBox.setOutlineThickness(1.0f);
-                _window.draw(rBox);
+            if (isLinked) {
+                sf::Text st1(_font, toSfString("⇄ ВЕДЕТ В ДВЕРЬ:"), 11);
+                st1.setFillColor(sf::Color(120, 255, 200));
+                st1.setPosition({mx + 24.0f, my + 56.0f});
+                _window.draw(st1);
 
-                sf::Text rT(_font, "R" + std::to_string(r), 11);
-                rT.setFillColor(isCur ? sf::Color(10, 15, 25) : sf::Color(180, 210, 230));
-                rT.setPosition({bx + 8.0f, by + 4.0f});
-                _window.draw(rT);
-            }
-
-            // Статус привязки к двери
-            std::string linkStatus;
-            if (curTdx >= 0 && curTdy >= 0) {
-                linkStatus = "Связана с дверью (" + std::to_string(curTdx) + ", " + std::to_string(curTdy) + ")";
+                std::string linkInfo = "room_" + std::to_string(curTgt) + " (" + std::to_string(curTdx) + ", " + std::to_string(curTdy) + ")";
+                sf::Text st2(_font, toSfString(linkInfo), 12);
+                st2.setFillColor(sf::Color(255, 255, 255));
+                st2.setPosition({mx + 24.0f, my + 74.0f});
+                _window.draw(st2);
             } else {
-                linkStatus = "Не привязана к двери";
-            }
-            sf::Text linkTxt(_font, toSfString(linkStatus), 11);
-            linkTxt.setFillColor(curTdx >= 0 ? sf::Color(0, 255, 200) : sf::Color(170, 180, 190));
-            linkTxt.setPosition({mx + 16.0f, my + 112.0f});
-            _window.draw(linkTxt);
+                sf::Text st1(_font, toSfString("⚠ ДВЕРЬ НЕ СВЯЗАНА!"), 11);
+                st1.setFillColor(sf::Color(255, 190, 50));
+                st1.setPosition({mx + 24.0f, my + 56.0f});
+                _window.draw(st1);
 
-            // Кнопка [Связать с дверью на холсте]
-            sf::RectangleShape linkBtn({mw - 32.0f, 26.0f});
-            linkBtn.setPosition({mx + 16.0f, my + 132.0f});
-            linkBtn.setFillColor(sf::Color(15, 80, 140));
-            linkBtn.setOutlineColor(sf::Color(0, 220, 255));
-            linkBtn.setOutlineThickness(1.0f);
+                sf::Text st2(_font, toSfString("Переход не работает без связи"), 10);
+                st2.setFillColor(sf::Color(220, 180, 140));
+                st2.setPosition({mx + 24.0f, my + 76.0f});
+                _window.draw(st2);
+            }
+
+            // Кнопка [🔗 Провести связь на карте (F1)]
+            sf::RectangleShape linkBtn({mw - 32.0f, 32.0f});
+            linkBtn.setPosition({mx + 16.0f, my + 105.0f});
+            linkBtn.setFillColor(sf::Color(25, 75, 120));
+            linkBtn.setOutlineColor(sf::Color(0, 230, 255));
+            linkBtn.setOutlineThickness(1.5f);
             _window.draw(linkBtn);
 
-            sf::Text linkBtnTxt(_font, toSfString("🔗 Связать с дверью на холсте"), 11);
+            sf::Text linkBtnTxt(_font, toSfString("🔗 Провести связь на карте (F1)"), 11);
             linkBtnTxt.setFillColor(sf::Color::White);
-            linkBtnTxt.setPosition({mx + 22.0f, my + 137.0f});
+            linkBtnTxt.setPosition({mx + 28.0f, my + 113.0f});
             _window.draw(linkBtnTxt);
 
-            // Кнопка [Разорвать связь] или [Удалить дверь]
-            sf::RectangleShape dBtn({mw - 32.0f, 26.0f});
-            dBtn.setPosition({mx + 16.0f, my + 166.0f});
-            dBtn.setFillColor(sf::Color(80, 25, 25));
-            dBtn.setOutlineColor(sf::Color(255, 80, 80));
-            dBtn.setOutlineThickness(1.0f);
-            _window.draw(dBtn);
+            // Кнопка [✕ Разорвать связь]
+            sf::RectangleShape unbindBtn({mw - 32.0f, 28.0f});
+            unbindBtn.setPosition({mx + 16.0f, my + 143.0f});
+            unbindBtn.setFillColor(isLinked ? sf::Color(65, 45, 30) : sf::Color(35, 35, 40));
+            unbindBtn.setOutlineColor(isLinked ? sf::Color(255, 160, 50) : sf::Color(70, 70, 80));
+            unbindBtn.setOutlineThickness(1.0f);
+            _window.draw(unbindBtn);
 
-            std::string dLabel = (curTdx >= 0) ? "Разорвать связь" : "Удалить дверь";
-            sf::Text dTxt(_font, toSfString(dLabel), 11);
-            dTxt.setFillColor(sf::Color(255, 120, 120));
-            dTxt.setPosition({mx + (curTdx >= 0 ? 80.0f : 88.0f), my + 171.0f});
-            _window.draw(dTxt);
+            sf::Text unbindTxt(_font, toSfString("✕ Разорвать связь с дверью"), 11);
+            unbindTxt.setFillColor(isLinked ? sf::Color(255, 200, 150) : sf::Color(130, 130, 140));
+            unbindTxt.setPosition({mx + 38.0f, my + 149.0f});
+            _window.draw(unbindTxt);
+
+            // Кнопка [🗑 Удалить дверь]
+            sf::RectangleShape delBtn({mw - 32.0f, 28.0f});
+            delBtn.setPosition({mx + 16.0f, my + 177.0f});
+            delBtn.setFillColor(sf::Color(80, 25, 25));
+            delBtn.setOutlineColor(sf::Color(255, 80, 80));
+            delBtn.setOutlineThickness(1.0f);
+            _window.draw(delBtn);
+
+            sf::Text delTxt(_font, toSfString("🗑 Удалить эту дверь"), 11);
+            delTxt.setFillColor(sf::Color(255, 140, 140));
+            delTxt.setPosition({mx + 68.0f, my + 183.0f});
+            _window.draw(delTxt);
         }
 
         // 2. ТЕСТОВЫЙ ЧЕКПОИНТ
