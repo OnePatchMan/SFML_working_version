@@ -8,9 +8,10 @@
 struct DoorBlock {
     int x = 0;
     int y = 0;
-    int targetRoom = 1;
+    int targetRoom = -1;
     int targetDoorX = -1; // X координата связанной двери в целевой комнате (-1 если не задано)
     int targetDoorY = -1; // Y координата связанной двери в целевой комнате (-1 если не задано)
+    std::string targetRoomName = ""; // Имя целевой комнаты (например "room_1", "Test")
 };
 
 struct ArenaTrigger {
@@ -191,7 +192,7 @@ private:
     std::vector<sf::Vector2f> _enemySpawnPositions;
 
     int _currentRoomIndex = 1;
-    int _totalRooms = 10;
+    int _totalRooms = 1;
     std::string _currentRoomName = "room_1";
     std::vector<DoorBlock> _doors;
     std::vector<ArenaTrigger> _triggers;
@@ -218,6 +219,7 @@ private:
     void buildDefaultMap();
     bool parseKVConfig(const std::string& filepath);
     bool applyAsciiGrid(const std::vector<std::string>& rows);
+    void loadKVOverlays(const std::string& kvPath);
     void saveDefaultFilesIfMissing();
 };
 

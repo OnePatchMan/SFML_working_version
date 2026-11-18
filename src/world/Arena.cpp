@@ -1094,8 +1094,7 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
                 if (y > lowestFloorRow) lowestFloorRow = y;
             } else if (c == 'D' || c == '3') {
                 _map[y][x] = 3; // Тайл 3 = Дверь / портал перехода между комнатами
-                int target = (x < _width / 2) ? (_currentRoomIndex == 1 ? _totalRooms : _currentRoomIndex - 1) : (_currentRoomIndex % _totalRooms + 1);
-                _doors.push_back({x, y, target});
+                _doors.push_back({x, y, -1, -1, -1, ""});
             } else if (c == 'P') {
                 _map[y][x] = 0; // Воздух
                 _spawnPosition = {static_cast<float>(x * _tileSize), 
@@ -1331,8 +1330,9 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
                                   static_cast<float>((y + 1) * _tileSize - 30.0f)};
                 foundPlayerSpawn = true;
             }
-            // Черный / темно-серый = Стена (#)
-            else if (c.r < 60 && c.g < 60 && c.b < 60) {
+            // Черный / темно-серый / серо-синий (MapEditor Wall 120, 135, 160) = Стена (#)
+            else if ((c.r < 60 && c.g < 60 && c.b < 60) ||
+                     (c.r >= 100 && c.r <= 140 && c.g >= 120 && c.g <= 150 && c.b >= 140 && c.b <= 180)) {
                 _map[y][x] = 2;
             }
             // Зеленый / травяной / коричневый = Платформа (=)
@@ -1352,8 +1352,9 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
             // Бирюзовый / Cyan = Дверь (D) (sf::Color(0, 229, 255))
             else if (c.g > 180 && c.b > 180 && c.r < 25) {
                 _map[y][x] = 3;
-                int target = (x < _width / 2) ? (_currentRoomIndex == 1 ? _totalRooms : _currentRoomIndex - 1) : (_currentRoomIndex % _totalRooms + 1);
-                _doors.push_back({x, y, target});
+                bool dfound = false;
+                for (const auto& d : _doors) { if (d.x == x && d.y == y) { dfound = true; break; } }
+                if (!dfound) _doors.push_back({x, y, -1, -1, -1, ""});
             }
             // Пурпурный / Фиолетовый = Спавн дуэлянта (Duelist Aggressive)
             else if (c.r > 150 && c.g < 100 && c.b > 150) {
@@ -1442,7 +1443,13 @@ bool Arena::saveToKVCoordinates(const std::string& kvPath) const {
         ss << "\n    // Список дверей и целевых комнат: [x  y  целевая_комната  целевая_дверь_x  целевая_дверь_y]\n";
         ss << "    \"Doors\"\n    {\n";
         for (size_t i = 0; i < _doors.size(); ++i) {
-            ss << "        \"door_" << i << "\"  \"" << _doors[i].x << " " << _doors[i].y << " " << _doors[i].targetRoom;
+            std::string tgtStr = "-1";
+            if (!_doors[i].targetRoomName.empty()) {
+                tgtStr = _doors[i].targetRoomName;
+            } else if (_doors[i].targetRoom > 0) {
+                tgtStr = "room_" + std::to_string(_doors[i].targetRoom);
+            }
+            ss << "        \"door_" << i << "\"  \"" << _doors[i].x << " " << _doors[i].y << " " << tgtStr;
             if (_doors[i].targetDoorX >= 0 && _doors[i].targetDoorY >= 0) {
                 ss << " " << _doors[i].targetDoorX << " " << _doors[i].targetDoorY;
             }
@@ -1560,21 +1567,29 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
                 std::istringstream iss(val);
                 iss >> eX >> eY;
                 hasE = true;
-            } else if (key == "door") {
+            } else if (key == "door" || currentSection == "doors") {
                 std::istringstream iss(val);
-                int dx = 0, dy = 0, dtgt = 1, tdx = -1, tdy = -1;
+                int dx = 0, dy = 0;
+                std::string tgtStr = "-1";
+                int tdx = -1, tdy = -1;
                 if (iss >> dx >> dy) {
-                    if (!(iss >> dtgt)) dtgt = (_currentRoomIndex % _totalRooms) + 1;
-                    if (iss >> tdx >> tdy) {}
-                    doors.push_back({dx, dy, dtgt, tdx, tdy});
-                }
-            } else if (currentSection == "doors") {
-                std::istringstream iss(val);
-                int dx = 0, dy = 0, dtgt = 1, tdx = -1, tdy = -1;
-                if (iss >> dx >> dy) {
-                    if (!(iss >> dtgt)) dtgt = (_currentRoomIndex % _totalRooms) + 1;
-                    if (iss >> tdx >> tdy) {}
-                    doors.push_back({dx, dy, dtgt, tdx, tdy});
+                    if (iss >> tgtStr) {
+                        iss >> tdx >> tdy;
+                    }
+                    int dtgt = -1;
+                    std::string tgtName = "";
+                    if (tgtStr != "-1" && !tgtStr.empty()) {
+                        tgtName = tgtStr;
+                        try {
+                            dtgt = std::stoi(tgtStr);
+                            if (dtgt > 0) tgtName = "room_" + std::to_string(dtgt);
+                        } catch (...) {
+                            if (tgtName.rfind("room_", 0) == 0) {
+                                try { dtgt = std::stoi(tgtName.substr(5)); } catch (...) {}
+                            }
+                        }
+                    }
+                    doors.push_back({dx, dy, dtgt, tdx, tdy, tgtName});
                 }
             } else if (currentSection == "enemies") {
                 std::istringstream iss(val);
@@ -1681,6 +1696,123 @@ bool Arena::saveCurrentRoom() const {
     return okTxt || okPng || okKv;
 }
 
+void Arena::loadKVOverlays(const std::string& kvPath) {
+    std::string resolved = resolveAssetPath(kvPath);
+    std::ifstream file(resolved);
+    if (!file.is_open()) return;
+
+    std::string line;
+    std::string currentSection = "";
+    std::vector<DoorBlock> kvDoors;
+    std::vector<EnemySpawnConfig> kvEnemies;
+    std::vector<ArenaTrigger> kvTriggers;
+    bool hasPlayerSpawn = false;
+    sf::Vector2f playerSpawnPos = _spawnPosition;
+
+    while (std::getline(file, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        auto tokens = tokenizeKVLine(line);
+        if (tokens.empty()) continue;
+
+        if (tokens[0] == "Doors" || tokens[0] == "doors") { currentSection = "doors"; continue; }
+        if (tokens[0] == "Enemies" || tokens[0] == "enemies") { currentSection = "enemies"; continue; }
+        if (tokens[0] == "Triggers" || tokens[0] == "triggers") { currentSection = "triggers"; continue; }
+        if (tokens[0] == "Platforms" || tokens[0] == "platforms") { currentSection = "platforms"; continue; }
+        if (tokens[0] == "Walls" || tokens[0] == "walls") { currentSection = "walls"; continue; }
+        if (tokens[0] == "{" || tokens[0] == "}") { if (tokens[0] == "}") currentSection = ""; continue; }
+
+        if (tokens.size() >= 2) {
+            std::string key = tokens[0];
+            std::string val = tokens[1];
+            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+
+            if (key == "player_spawn") {
+                std::istringstream iss(val);
+                int px = 0, py = 0;
+                if (iss >> px >> py) {
+                    playerSpawnPos = { static_cast<float>(px * _tileSize), static_cast<float>((py + 1) * _tileSize - 30.0f) };
+                    hasPlayerSpawn = true;
+                }
+            } else if (key == "door" || currentSection == "doors") {
+                std::istringstream iss(val);
+                int dx = 0, dy = 0;
+                std::string tgtStr = "-1";
+                int tdx = -1, tdy = -1;
+                if (iss >> dx >> dy) {
+                    if (iss >> tgtStr) {
+                        iss >> tdx >> tdy;
+                    }
+                    int dtgt = -1;
+                    std::string tgtName = "";
+                    if (tgtStr != "-1" && !tgtStr.empty()) {
+                        tgtName = tgtStr;
+                        try {
+                            dtgt = std::stoi(tgtStr);
+                            if (dtgt > 0) tgtName = "room_" + std::to_string(dtgt);
+                        } catch (...) {
+                            if (tgtName.rfind("room_", 0) == 0) {
+                                try { dtgt = std::stoi(tgtName.substr(5)); } catch (...) {}
+                            }
+                        }
+                    }
+                    kvDoors.push_back({dx, dy, dtgt, tdx, tdy, tgtName});
+                }
+            } else if (key.rfind("enemy", 0) == 0 || currentSection == "enemies") {
+                std::istringstream iss(val);
+                int ex = 0, ey = 0, etype = 0;
+                if (iss >> ex >> ey) {
+                    if (iss >> etype) {}
+                    kvEnemies.push_back({{ static_cast<float>(ex * _tileSize),
+                                           static_cast<float>((ey + 1) * _tileSize - 28.0f) }, etype});
+                }
+            } else if (key.rfind("trigger", 0) == 0 || currentSection == "triggers") {
+                std::istringstream iss(val);
+                int tx = 0, ty = 0, ttype = 0;
+                float tpow = 1000.0f;
+                if (iss >> tx >> ty >> ttype) {
+                    if (iss >> tpow) {}
+                    kvTriggers.push_back({tx, ty, ttype, tpow});
+                }
+            } else if (currentSection == "platforms") {
+                std::istringstream iss(val);
+                int px = 0, py = 0, plen = 0;
+                if (iss >> px >> py >> plen) {
+                    for (int i = 0; i < plen; ++i) {
+                        int cx = px + i;
+                        int cy = py;
+                        if (cx >= 0 && cx < _width && cy >= 0 && cy < _height) {
+                            _map[cy][cx] = 1;
+                        }
+                    }
+                    _tilemapDirty = true;
+                }
+            }
+        }
+    }
+
+    if (hasPlayerSpawn) {
+        _spawnPosition = playerSpawnPos;
+    }
+
+    if (!kvDoors.empty()) {
+        _doors = kvDoors;
+        for (const auto& d : _doors) {
+            if (d.y >= 0 && d.y < _height && d.x >= 0 && d.x < _width) {
+                _map[d.y][d.x] = 3;
+            }
+        }
+    }
+
+    if (!kvEnemies.empty()) {
+        _enemySpawns = kvEnemies;
+        syncEnemySpawnPositions();
+    }
+
+    if (!kvTriggers.empty()) {
+        _triggers = kvTriggers;
+    }
+}
+
 bool Arena::loadRoomByName(const std::string& name) {
     _currentRoomName = name;
     if (name.rfind("room_", 0) == 0) {
@@ -1690,38 +1822,47 @@ bool Arena::loadRoomByName(const std::string& name) {
     _triggers.clear();
 
     std::string base = "assets/maps/" + name;
-    
+    bool loadedBase = false;
+
     // 1. Проверяем PNG картинку-карту
     std::string pngPath = resolveAssetPath(base + ".png");
     if (std::filesystem::exists(pngPath)) {
         if (loadFromImageFile(pngPath)) {
             std::cout << "[ROOM] Загружена PNG-карта комнаты " << name 
                       << " (" << pngPath << ", " << _width << "x" << _height << ")" << std::endl;
-            return true;
+            loadedBase = true;
         }
     }
 
     // 2. Проверяем блочный координатный KV файл
     std::string kvPath = resolveAssetPath(base + ".kv");
-    if (std::filesystem::exists(kvPath)) {
+    if (!loadedBase && std::filesystem::exists(kvPath)) {
         if (loadFromKVCoordinates(kvPath)) {
             std::cout << "[ROOM] Загружен координатный KV-файл комнаты " << name 
                       << " (" << kvPath << ", " << _width << "x" << _height << ")" << std::endl;
-            return true;
+            loadedBase = true;
         }
     }
 
     // 3. Fallback: текстовый ASCII-файл
-    std::string txtPath = resolveAssetPath(base + ".txt");
-    if (!std::filesystem::exists(txtPath)) {
-        txtPath = resolveAssetPath("assets/config/map.txt");
+    if (!loadedBase) {
+        std::string txtPath = resolveAssetPath(base + ".txt");
+        if (!std::filesystem::exists(txtPath)) {
+            txtPath = resolveAssetPath("assets/config/map.txt");
+        }
+
+        _layoutFilePath = txtPath;
+        loadedBase = loadFromAsciiFile(txtPath);
+        std::cout << "[ROOM] Загружен текстовый файл комнаты " << name 
+                  << " (" << txtPath << ", " << _width << "x" << _height << ")" << std::endl;
     }
 
-    _layoutFilePath = txtPath;
-    bool ok = loadFromAsciiFile(txtPath);
-    std::cout << "[ROOM] Загружен текстовый файл комнаты " << name 
-              << " (" << txtPath << ", " << _width << "x" << _height << ")" << std::endl;
-    return ok;
+    // Накладываем KV оверлеи (двери, связи комнат, спавны врагов, триггеры)
+    if (std::filesystem::exists(kvPath)) {
+        loadKVOverlays(kvPath);
+    }
+
+    return loadedBase;
 }
 
 bool Arena::loadRoom(int roomIndex) {
@@ -1818,15 +1959,17 @@ int Arena::getDoorTargetRoom(int tx, int ty) const {
 void Arena::setDoor(int tx, int ty, int targetRoom, int targetDoorX, int targetDoorY) {
     if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return;
     _map[ty][tx] = 3;
+    std::string tgtName = (targetRoom > 0) ? ("room_" + std::to_string(targetRoom)) : "";
     for (auto& d : _doors) {
         if (d.x == tx && d.y == ty) {
             d.targetRoom = targetRoom;
+            d.targetRoomName = tgtName;
             d.targetDoorX = targetDoorX;
             d.targetDoorY = targetDoorY;
             return;
         }
     }
-    _doors.push_back({tx, ty, targetRoom, targetDoorX, targetDoorY});
+    _doors.push_back({tx, ty, targetRoom, targetDoorX, targetDoorY, tgtName});
 }
 
 void Arena::removeDoor(int tx, int ty) {
@@ -1972,8 +2115,7 @@ void Arena::setTile(int tx, int ty, int tile) {
                 if (d.x == tx && d.y == ty) { found = true; break; }
             }
             if (!found) {
-                int defaultTarget = (_currentRoomIndex % _totalRooms) + 1;
-                _doors.push_back({tx, ty, defaultTarget});
+                _doors.push_back({tx, ty, -1, -1, -1, ""});
             }
         } else {
             removeDoor(tx, ty);
@@ -2116,7 +2258,8 @@ void Arena::draw(sf::RenderWindow& window) {
 
             // Неоновое свечение и маркер целевой комнаты над дверью
             if (_doorFontLoaded && _cachedDoorText.has_value()) {
-                _cachedDoorText->setString("-> Rm " + std::to_string(d.targetRoom));
+                std::string targetDisplay = !d.targetRoomName.empty() ? d.targetRoomName : (d.targetRoom > 0 ? ("Rm " + std::to_string(d.targetRoom)) : "?");
+                _cachedDoorText->setString("-> " + targetDisplay);
                 _cachedDoorText->setPosition({dx - 4.0f, dy - 18.0f});
                 window.draw(*_cachedDoorText);
             }

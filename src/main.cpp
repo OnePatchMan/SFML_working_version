@@ -282,9 +282,9 @@ int main() {
                                                         Player::HALF_W, Player::TOP_OFFSET, Player::BOTTOM_OFFSET);
                 if (doorOpt.has_value()) {
                     const auto& door = doorOpt.value();
-                    int targetRoom = door.targetRoom;
-                    if (targetRoom != arena.getCurrentRoomIndex()) {
-                        arena.loadRoom(targetRoom);
+                    std::string targetRoomName = !door.targetRoomName.empty() ? door.targetRoomName : (door.targetRoom > 0 ? ("room_" + std::to_string(door.targetRoom)) : "");
+                    if (!targetRoomName.empty() && targetRoomName != arena.getCurrentRoomName()) {
+                        arena.loadRoomByName(targetRoomName);
                         if (door.targetDoorX >= 0 && door.targetDoorY >= 0) {
                             // Перемещение ровно к связанной двери в целевой комнате
                             float ts = arena.getTileSize();
@@ -294,7 +294,7 @@ int main() {
                             // Если точные координаты не заданы, ищем обратную дверь или спавн
                             bool foundOpposite = false;
                             for (const auto& d : arena.getDoors()) {
-                                if (d.targetRoom == arena.getCurrentRoomIndex() || d.targetRoom == door.targetRoom) {
+                                if (d.targetRoomName == arena.getCurrentRoomName() || (!d.targetRoomName.empty() && d.targetRoomName == targetRoomName) || d.targetRoom == arena.getCurrentRoomIndex()) {
                                     float ts = arena.getTileSize();
                                     player.position = { (d.x + 0.5f) * ts, (d.y + 1.0f) * ts - Player::BOTTOM_OFFSET };
                                     foundOpposite = true;
@@ -310,7 +310,7 @@ int main() {
                         respawnEnemies();
                         combat.reset();
                         doorCooldown = 0.8f; // Задержка перед следующим переходом, чтобы исключить зацикливание
-                        std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << targetRoom << " через связанную дверь!" << std::endl;
+                        std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << targetRoomName << " через связанную дверь!" << std::endl;
                     }
                 }
             }

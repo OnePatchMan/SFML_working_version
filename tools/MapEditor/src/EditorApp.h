@@ -53,9 +53,10 @@ struct RoomMeta {
 struct EditorDoor {
     int x = 0;
     int y = 0;
-    int targetRoom = 1;
+    int targetRoom = -1;
     int targetDoorX = -1; // X координата связанной двери в целевой комнате (-1 если не задано)
     int targetDoorY = -1; // Y координата связанной двери в целевой комнате (-1 если не задано)
+    std::string targetRoomName = ""; // Имя целевой комнаты (например "room_1", "Test")
 };
 
 struct EditorEnemySpawn {
@@ -312,6 +313,7 @@ private:
     sf::Vector2f getActiveRoomOffset() const;
     void linkDoors(const std::string& roomA, int ax, int ay, const std::string& roomB, int bx, int by);
     void unlinkDoor(const std::string& roomName, int dx, int dy);
+    const CanvasRoom* getTargetCanvasRoom(const EditorDoor& d) const;
 
     // Режимы экранов: Редактор комнат (WORLD_LAYOUT) и Редактор тайлов комнаты (ROOM_DETAIL)
     EditorScreen _currentScreen = EditorScreen::WORLD_LAYOUT;

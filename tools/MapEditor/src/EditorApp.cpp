@@ -759,6 +759,16 @@ void EditorApp::scanRooms() {
         return a < b;
     });
 
+    int maxIndex = 1;
+    for (const auto& rName : sortedNames) {
+        if (rName.rfind("room_", 0) == 0) {
+            try {
+                int n = std::stoi(rName.substr(5));
+                if (n > maxIndex) maxIndex = n;
+            } catch (...) {}
+        }
+    }
+
     bool foundGlobalSpawn = false;
 
     for (const auto& rName : sortedNames) {
@@ -769,6 +779,8 @@ void EditorApp::scanRooms() {
         if (rName.rfind("room_", 0) == 0) {
             meta.title = "Комната " + rName.substr(5) + " (" + rName + ")";
             try { rIndex = std::stoi(rName.substr(5)); } catch (...) {}
+        } else {
+            rIndex = ++maxIndex;
         }
         meta.path = mapsDir + "/" + rName;
 
@@ -882,11 +894,27 @@ void EditorApp::scanRooms() {
                         size_t q4 = kline.find('\"', q3 + 1);
                         if (q4 != std::string::npos) {
                             std::istringstream iss(kline.substr(q3 + 1, q4 - q3 - 1));
-                            int dx = 0, dy = 0, dtgt = 1, tdx = -1, tdy = -1;
+                            int dx = 0, dy = 0;
+                            std::string tgtStr = "-1";
+                            int tdx = -1, tdy = -1;
                             if (iss >> dx >> dy) {
-                                iss >> dtgt;
-                                iss >> tdx >> tdy;
-                                cr.doors.push_back({dx, dy, dtgt, tdx, tdy});
+                                if (iss >> tgtStr) {
+                                    iss >> tdx >> tdy;
+                                }
+                                int dtgt = -1;
+                                std::string tgtName = "";
+                                if (tgtStr != "-1" && !tgtStr.empty()) {
+                                    tgtName = tgtStr;
+                                    try {
+                                        dtgt = std::stoi(tgtStr);
+                                        if (dtgt > 0) tgtName = "room_" + std::to_string(dtgt);
+                                    } catch (...) {
+                                        if (tgtName.rfind("room_", 0) == 0) {
+                                            try { dtgt = std::stoi(tgtName.substr(5)); } catch (...) {}
+                                        }
+                                    }
+                                }
+                                cr.doors.push_back({dx, dy, dtgt, tdx, tdy, tgtName});
                             }
                         }
                     }
@@ -929,7 +957,7 @@ void EditorApp::scanRooms() {
                     cr.map[y][x] = 3;
                     bool dfound = false;
                     for (const auto& d : cr.doors) { if (d.x == x && d.y == y) { dfound = true; break; } }
-                    if (!dfound) cr.doors.push_back({x, y, 1, -1, -1});
+                    if (!dfound) cr.doors.push_back({x, y, -1, -1, -1, ""});
                 }
                 else if (c == 'P') {
                     if (!foundGlobalSpawn) {
@@ -1057,6 +1085,21 @@ void EditorApp::syncCanvasToCurrentRoom(const std::string& roomName) {
     }
 }
 
+const CanvasRoom* EditorApp::getTargetCanvasRoom(const EditorDoor& d) const {
+    if (!d.targetRoomName.empty()) {
+        for (const auto& cr : _canvasRooms) {
+            if (cr.name == d.targetRoomName) return &cr;
+        }
+    }
+    if (d.targetRoom > 0) {
+        std::string candidateName = "room_" + std::to_string(d.targetRoom);
+        for (const auto& cr : _canvasRooms) {
+            if (cr.name == candidateName || cr.index == d.targetRoom) return &cr;
+        }
+    }
+    return nullptr;
+}
+
 void EditorApp::unlinkDoor(const std::string& roomName, int dx, int dy) {
     syncCurrentRoomToCanvas();
 
@@ -1071,14 +1114,17 @@ void EditorApp::unlinkDoor(const std::string& roomName, int dx, int dy) {
     }
     if (!crA) return;
 
+    std::string tgtRoomName = "";
     int tgtRoomIdx = -1;
     int tgtDx = -1, tgtDy = -1;
     for (auto& d : crA->doors) {
         if (d.x == dx && d.y == dy) {
+            tgtRoomName = d.targetRoomName;
             tgtRoomIdx = d.targetRoom;
             tgtDx = d.targetDoorX;
             tgtDy = d.targetDoorY;
             d.targetRoom = -1;
+            d.targetRoomName = "";
             d.targetDoorX = -1;
             d.targetDoorY = -1;
             break;
@@ -1086,13 +1132,16 @@ void EditorApp::unlinkDoor(const std::string& roomName, int dx, int dy) {
     }
 
     // Also unbind partner door in the target room
-    if (tgtRoomIdx > 0 && tgtDx >= 0 && tgtDy >= 0) {
-        std::string tgtRoomName = "room_" + std::to_string(tgtRoomIdx);
+    if (tgtDx >= 0 && tgtDy >= 0 && (!tgtRoomName.empty() || tgtRoomIdx > 0)) {
         for (size_t i = 0; i < _canvasRooms.size(); ++i) {
-            if (_canvasRooms[i].index == tgtRoomIdx || _canvasRooms[i].name == tgtRoomName) {
+            bool matches = false;
+            if (!tgtRoomName.empty() && _canvasRooms[i].name == tgtRoomName) matches = true;
+            else if (tgtRoomIdx > 0 && (_canvasRooms[i].index == tgtRoomIdx || _canvasRooms[i].name == ("room_" + std::to_string(tgtRoomIdx)))) matches = true;
+            if (matches) {
                 for (auto& d2 : _canvasRooms[i].doors) {
                     if (d2.x == tgtDx && d2.y == tgtDy) {
                         d2.targetRoom = -1;
+                        d2.targetRoomName = "";
                         d2.targetDoorX = -1;
                         d2.targetDoorY = -1;
                         break;
@@ -1102,6 +1151,7 @@ void EditorApp::unlinkDoor(const std::string& roomName, int dx, int dy) {
                     for (auto& d2 : _doors) {
                         if (d2.x == tgtDx && d2.y == tgtDy) {
                             d2.targetRoom = -1;
+                            d2.targetRoomName = "";
                             d2.targetDoorX = -1;
                             d2.targetDoorY = -1;
                             break;
@@ -1118,6 +1168,7 @@ void EditorApp::unlinkDoor(const std::string& roomName, int dx, int dy) {
         for (auto& d : _doors) {
             if (d.x == dx && d.y == dy) {
                 d.targetRoom = -1;
+                d.targetRoomName = "";
                 d.targetDoorX = -1;
                 d.targetDoorY = -1;
                 break;
@@ -1156,6 +1207,7 @@ void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::s
     for (auto& d : crA->doors) {
         if (d.x == ax && d.y == ay) {
             d.targetRoom = crB->index;
+            d.targetRoomName = roomB;
             d.targetDoorX = bx;
             d.targetDoorY = by;
             break;
@@ -1166,6 +1218,7 @@ void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::s
     for (auto& d : crB->doors) {
         if (d.x == bx && d.y == by) {
             d.targetRoom = crA->index;
+            d.targetRoomName = roomA;
             d.targetDoorX = ax;
             d.targetDoorY = ay;
             break;
@@ -1176,6 +1229,7 @@ void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::s
         for (auto& d : _doors) {
             if (d.x == ax && d.y == ay) {
                 d.targetRoom = crB->index;
+                d.targetRoomName = roomB;
                 d.targetDoorX = bx;
                 d.targetDoorY = by;
                 break;
@@ -1186,6 +1240,7 @@ void EditorApp::linkDoors(const std::string& roomA, int ax, int ay, const std::s
         for (auto& d : _doors) {
             if (d.x == bx && d.y == by) {
                 d.targetRoom = crA->index;
+                d.targetRoomName = roomA;
                 d.targetDoorX = ax;
                 d.targetDoorY = ay;
                 break;
@@ -1572,10 +1627,16 @@ bool EditorApp::saveRoomByIndex(int roomIdx) {
         if (!cr.doors.empty()) {
             kv << "\n    \"Doors\"\n    {\n";
             for (size_t i = 0; i < cr.doors.size(); ++i) {
+                std::string tgtStr = "-1";
+                if (!cr.doors[i].targetRoomName.empty()) {
+                    tgtStr = cr.doors[i].targetRoomName;
+                } else if (cr.doors[i].targetRoom > 0) {
+                    tgtStr = "room_" + std::to_string(cr.doors[i].targetRoom);
+                }
                 if (cr.doors[i].targetDoorX >= 0 && cr.doors[i].targetDoorY >= 0) {
-                    kv << "        \"door_" << i << "\"  \"" << cr.doors[i].x << " " << cr.doors[i].y << " " << cr.doors[i].targetRoom << " " << cr.doors[i].targetDoorX << " " << cr.doors[i].targetDoorY << "\"\n";
+                    kv << "        \"door_" << i << "\"  \"" << cr.doors[i].x << " " << cr.doors[i].y << " " << tgtStr << " " << cr.doors[i].targetDoorX << " " << cr.doors[i].targetDoorY << "\"\n";
                 } else {
-                    kv << "        \"door_" << i << "\"  \"" << cr.doors[i].x << " " << cr.doors[i].y << " " << cr.doors[i].targetRoom << "\"\n";
+                    kv << "        \"door_" << i << "\"  \"" << cr.doors[i].x << " " << cr.doors[i].y << " " << tgtStr << "\"\n";
                 }
             }
             kv << "    }\n";
@@ -1971,15 +2032,17 @@ void EditorApp::removeEnemySpawn(int tx, int ty) {
 void EditorApp::setDoor(int tx, int ty, int targetRoom, int targetDoorX, int targetDoorY) {
     if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return;
     _map[ty][tx] = 3;
+    std::string tgtName = (targetRoom > 0) ? ("room_" + std::to_string(targetRoom)) : "";
     for (auto& d : _doors) {
         if (d.x == tx && d.y == ty) {
             d.targetRoom = targetRoom;
+            d.targetRoomName = tgtName;
             d.targetDoorX = targetDoorX;
             d.targetDoorY = targetDoorY;
             return;
         }
     }
-    _doors.push_back({tx, ty, targetRoom, targetDoorX, targetDoorY});
+    _doors.push_back({tx, ty, targetRoom, targetDoorX, targetDoorY, tgtName});
 }
 
 void EditorApp::removeDoor(int tx, int ty) {
@@ -3268,11 +3331,11 @@ void EditorApp::update(float dt) {
                                                              Player::HALF_W, Player::TOP_OFFSET, Player::BOTTOM_OFFSET);
                 if (doorOpt.has_value()) {
                     const auto& door = doorOpt.value();
-                    int targetRoom = door.targetRoom;
+                    std::string targetRoomName = !door.targetRoomName.empty() ? door.targetRoomName : (door.targetRoom > 0 ? ("room_" + std::to_string(door.targetRoom)) : "");
                     int tdx = door.targetDoorX;
                     int tdy = door.targetDoorY;
-                    if (tdx >= 0 && tdy >= 0 && targetRoom > 0 && targetRoom != _simArena->getCurrentRoomIndex()) {
-                        _simArena->loadRoom(targetRoom);
+                    if (tdx >= 0 && tdy >= 0 && !targetRoomName.empty() && targetRoomName != _simArena->getCurrentRoomName()) {
+                        _simArena->loadRoomByName(targetRoomName);
                         float spawnX = (tdx + 0.5f) * _simArena->getTileSize();
                         float spawnY = (tdy + 1.0f) * _simArena->getTileSize() - Player::BOTTOM_OFFSET;
                         _simPlayer->position = {spawnX, spawnY};
@@ -3290,7 +3353,7 @@ void EditorApp::update(float dt) {
                             e.reset();
                         }
                         _simDoorCooldown = 1.0f;
-                        _statusMessage = "Переход в дверь комнаты room_" + std::to_string(targetRoom) + " (" + std::to_string(tdx) + ", " + std::to_string(tdy) + ")";
+                        _statusMessage = "Переход в дверь комнаты " + targetRoomName + " (" + std::to_string(tdx) + ", " + std::to_string(tdy) + ")";
                         _statusTimer = 2.5f;
                     } else if (tdx < 0 || tdy < 0) {
                         _statusMessage = "Дверь не связана! Свяжите ее на карте комнат [F1].";
@@ -3402,18 +3465,12 @@ void EditorApp::drawWorldLayout() {
     // 2. Линии связей между дверьми (ТОЛЬКО door-to-door связи)
     for (const auto& cr : _canvasRooms) {
         for (const auto& d : cr.doors) {
-            if (d.targetRoom > 0 && d.targetDoorX >= 0 && d.targetDoorY >= 0) {
-                std::string targetRoomName = "room_" + std::to_string(d.targetRoom);
+            const CanvasRoom* tgtRoom = getTargetCanvasRoom(d);
+            if (tgtRoom && d.targetDoorX >= 0 && d.targetDoorY >= 0) {
+                std::string targetRoomName = tgtRoom->name;
                 // Чтобы не рисовать одну и ту же линию дважды
                 if (cr.name > targetRoomName || (cr.name == targetRoomName && (d.x > d.targetDoorX || (d.x == d.targetDoorX && d.y > d.targetDoorY)))) {
                     continue;
-                }
-                const CanvasRoom* tgtRoom = nullptr;
-                for (const auto& r : _canvasRooms) {
-                    if (r.name == targetRoomName || r.index == d.targetRoom) {
-                        tgtRoom = &r;
-                        break;
-                    }
                 }
                 if (tgtRoom) {
                     sf::Vector2f p1 = cr.offset + sf::Vector2f((d.x + 0.5f) * _tileSize, (d.y + 0.5f) * _tileSize);
@@ -3606,7 +3663,7 @@ void EditorApp::drawWorldLayout() {
                                 mouseWorld.y >= dy && mouseWorld.y < dy + _tileSize);
             bool isSourceLinking = (_isLinkingDoor && _linkingSourceRoom == cr.name &&
                                     _linkingSourceDoorX == d.x && _linkingSourceDoorY == d.y);
-            bool isLinked = (d.targetRoom > 0 && d.targetDoorX >= 0 && d.targetDoorY >= 0);
+            bool isLinked = (!d.targetRoomName.empty() || d.targetRoom > 0) && d.targetDoorX >= 0 && d.targetDoorY >= 0;
 
             sf::RectangleShape dFrame({_tileSize, _tileSize});
             dFrame.setPosition({dx, dy});
@@ -3639,7 +3696,15 @@ void EditorApp::drawWorldLayout() {
             _window.draw(connDot);
 
             if (_fontLoaded) {
-                std::string label = isLinked ? ("R" + std::to_string(d.targetRoom)) : "?";
+                std::string label = "?";
+                if (isLinked) {
+                    if (!d.targetRoomName.empty()) {
+                        label = (d.targetRoomName.rfind("room_", 0) == 0) ? ("R" + d.targetRoomName.substr(5)) : d.targetRoomName;
+                        if (label.size() > 5) label = label.substr(0, 4) + ".";
+                    } else if (d.targetRoom > 0) {
+                        label = "R" + std::to_string(d.targetRoom);
+                    }
+                }
                 sf::Text dTxt(_font, toSfString(label), 11);
                 dTxt.setFillColor(sf::Color::White);
                 dTxt.setPosition({dx + 4.0f, dy + 2.0f});
@@ -3939,14 +4004,16 @@ void EditorApp::drawWorldLayoutUI() {
         if (activeDoorIdx >= 0 && activeDoorIdx < static_cast<int>(curDoors.size())) {
             const auto& sd = curDoors[activeDoorIdx];
             doorTitleStr += " | Дверь #" + std::to_string(activeDoorIdx + 1) + " (" + std::to_string(sd.x) + "," + std::to_string(sd.y) + ")";
-            if (sd.targetRoom > 0 && sd.targetDoorX >= 0 && sd.targetDoorY >= 0) {
-                doorTitleStr += " ⇄ room_" + std::to_string(sd.targetRoom) + " (" + std::to_string(sd.targetDoorX) + "," + std::to_string(sd.targetDoorY) + ")";
+            std::string targetDisplay = !sd.targetRoomName.empty() ? sd.targetRoomName : (sd.targetRoom > 0 ? ("room_" + std::to_string(sd.targetRoom)) : "");
+            if (!targetDisplay.empty() && sd.targetDoorX >= 0 && sd.targetDoorY >= 0) {
+                doorTitleStr += " ⇄ " + targetDisplay + " (" + std::to_string(sd.targetDoorX) + "," + std::to_string(sd.targetDoorY) + ")";
             } else {
                 doorTitleStr += " ⚠ НЕ СВЯЗАНА";
             }
         }
+        bool isDoorActiveLinked = (activeDoorIdx >= 0 && (!curDoors[activeDoorIdx].targetRoomName.empty() || curDoors[activeDoorIdx].targetRoom > 0) && curDoors[activeDoorIdx].targetDoorX >= 0 && curDoors[activeDoorIdx].targetDoorY >= 0);
         sf::Text dTitle(_font, toSfString(doorTitleStr), 12);
-        dTitle.setFillColor(activeDoorIdx >= 0 && curDoors[activeDoorIdx].targetRoom > 0 && curDoors[activeDoorIdx].targetDoorX >= 0 ? sf::Color(100, 240, 255) : sf::Color(255, 180, 50));
+        dTitle.setFillColor(isDoorActiveLinked ? sf::Color(100, 240, 255) : sf::Color(255, 180, 50));
         dTitle.setPosition({775.0f, insY + 12.0f});
         _window.draw(dTitle);
 
@@ -4045,7 +4112,7 @@ bool EditorApp::handleWorldLayoutClick(const sf::Vector2i& mousePixel, sf::Mouse
                 bool occupied = false;
                 for (const auto& d : cr.doors) { if (d.x == dx && d.y == dy) { occupied = true; break; } }
                 if (occupied) dy = std::max(0, dy - 1);
-                cr.doors.push_back({dx, dy, -1, -1, -1});
+                cr.doors.push_back({dx, dy, -1, -1, -1, ""});
                 if (dy < static_cast<int>(cr.map.size()) && dx < static_cast<int>(cr.map[dy].size())) {
                     cr.map[dy][dx] = 3;
                 }
@@ -4309,12 +4376,14 @@ void EditorApp::drawWorld() {
                     _window.draw(r);
 
                     if (_fontLoaded) {
-                        int tgtR = 1;
+                        int tgtR = -1;
+                        std::string tgtName = "";
                         int tgtDx = -1, tgtDy = -1;
                         const auto& dList = isActive ? _doors : cr.doors;
                         for (const auto& d : dList) {
                             if (d.x == x && d.y == y) {
                                 tgtR = d.targetRoom;
+                                tgtName = d.targetRoomName;
                                 tgtDx = d.targetDoorX;
                                 tgtDy = d.targetDoorY;
                                 break;
@@ -4330,7 +4399,14 @@ void EditorApp::drawWorld() {
                         badge.setOutlineThickness(1.0f);
                         _window.draw(badge);
 
-                        std::string label = "D->R" + std::to_string(tgtR);
+                        std::string label = "D->?";
+                        if (!tgtName.empty()) {
+                            std::string shortName = (tgtName.rfind("room_", 0) == 0) ? ("R" + tgtName.substr(5)) : tgtName;
+                            if (shortName.size() > 5) shortName = shortName.substr(0, 4) + ".";
+                            label = "D->" + shortName;
+                        } else if (tgtR > 0) {
+                            label = "D->R" + std::to_string(tgtR);
+                        }
                         if (tgtDx >= 0) label += "*";
                         sf::Text dTxt(_font, toSfString(label), 12);
                         dTxt.setFillColor(tgtDx >= 0 ? sf::Color(100, 255, 220) : sf::Color(0, 255, 240));
@@ -4488,13 +4564,7 @@ void EditorApp::drawWorld() {
         const auto& doorsA = (rA.name == _currentRoomName) ? _doors : rA.doors;
         for (const auto& dA : doorsA) {
             if (dA.targetDoorX >= 0 && dA.targetDoorY >= 0) {
-                const CanvasRoom* rB = nullptr;
-                for (const auto& candidate : _canvasRooms) {
-                    if (candidate.index == dA.targetRoom || candidate.name == ("room_" + std::to_string(dA.targetRoom))) {
-                        rB = &candidate;
-                        break;
-                    }
-                }
+                const CanvasRoom* rB = getTargetCanvasRoom(dA);
                 if (rB) {
                     std::string key1 = rA.name + ":" + std::to_string(dA.x) + "," + std::to_string(dA.y);
                     std::string key2 = rB->name + ":" + std::to_string(dA.targetDoorX) + "," + std::to_string(dA.targetDoorY);
