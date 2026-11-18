@@ -111,6 +111,9 @@
     "DummyAttack"
     {
         "windup"                    "0.38"      // Время замаха / телеграфа удара (сек)
+        "windup_frames"             "23"        // Кадры замаха (при 60 FPS)
+        "active_frames"             "10"        // Кадры активного хитбокса
+        "duration_frames"           "45"        // Общая длительность атаки в кадрах
         "active_time"               "0.16"      // Длительность активной фазы хитбокса
         "recovery"                  "0.20"      // Время восстановления после удара
         "damage"                    "1.5"       // Урон манекена (снижен для комфортного баланса)
@@ -139,6 +142,8 @@
             // Удар 1: нейтральный джеб
             "hit1"
             {
+                "active_frames"     "7"
+                "duration_frames"   "15"
                 "active_time"       "0.12"
                 "recovery_time"     "0.06"
                 "damage"            "1.0"
@@ -154,6 +159,8 @@
             "hit_f2"
             {
                 "lunge"             "18.0"      // Шаг/выпад вперед во время удара
+                "active_frames"     "10"
+                "duration_frames"   "18"
                 "active_time"       "0.16"
                 "recovery_time"     "0.06"
                 "damage"            "1.8"
@@ -169,6 +176,8 @@
             "hit_d1"
             {
                 "lunge"             "30.0"      // Рывок вперед перед ударом
+                "active_frames"     "11"
+                "duration_frames"   "20"
                 "active_time"       "0.18"
                 "recovery_time"     "0.06"
                 "damage"            "2.5"

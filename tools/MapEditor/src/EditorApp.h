@@ -49,6 +49,8 @@ struct EditorDoor {
     int x = 0;
     int y = 0;
     int targetRoom = 1;
+    int targetDoorX = -1; // X координата связанной двери в целевой комнате (-1 если не задано)
+    int targetDoorY = -1; // Y координата связанной двери в целевой комнате (-1 если не задано)
 };
 
 struct EditorEnemySpawn {
@@ -64,6 +66,21 @@ struct EditorTrigger {
     int type = 0; // 0 = JumpPad, 1 = Spikes, 2 = TriggerZone
     float power = 1000.0f;
     std::string tag = "";
+};
+
+struct CanvasRoom {
+    std::string name = "room_1";
+    int index = 1;
+    int width = 80;
+    int height = 20;
+    sf::Vector2f offset{0.0f, 0.0f};
+    std::vector<std::vector<int>> map;
+    std::vector<EditorDoor> doors;
+    std::vector<EditorEnemySpawn> enemySpawns;
+    std::vector<EditorTrigger> triggers;
+    bool hasPlayerSpawn = false;
+    sf::Vector2i playerSpawn{6, 14};
+    std::optional<sf::Vector2i> testSpawn;
 };
 
 struct TileSpriteItem {
@@ -209,6 +226,7 @@ private:
     std::vector<Enemy> _simEnemies;
     sf::Vector2f _savedEditorCameraPos;
     float _savedEditorViewScale = 1.0f;
+    float _simDoorCooldown = 0.0f;
 
     sf::Font _font;
     bool _fontLoaded = false;
@@ -263,12 +281,28 @@ private:
     void eraseAt(int tx, int ty);
     void addEnemySpawn(int tx, int ty, int type = 0);
     void removeEnemySpawn(int tx, int ty);
-    void setDoor(int tx, int ty, int targetRoom);
+    void setDoor(int tx, int ty, int targetRoom, int targetDoorX = -1, int targetDoorY = -1);
     void removeDoor(int tx, int ty);
     int getDoorTargetRoom(int tx, int ty) const;
     void addTrigger(int tx, int ty, int type);
     void removeTrigger(int tx, int ty);
     bool handleMinimapClick(const sf::Vector2i& mousePixel);
+
+    // Мульти-комнатный единый холст и связывание дверей
+    std::vector<CanvasRoom> _canvasRooms;
+    std::string _globalPlayerSpawnRoom = "room_1";
+    bool _hasPlayerSpawn = true;
+    bool _isLinkingDoor = false;
+    std::string _linkingSourceRoom = "";
+    int _linkingSourceDoorX = -1;
+    int _linkingSourceDoorY = -1;
+
+    void syncCurrentRoomToCanvas();
+    void syncCanvasToCurrentRoom(const std::string& roomName);
+    void updateCanvasRoomLayout();
+    int getCanvasRoomAt(sf::Vector2f worldPos) const;
+    sf::Vector2f getActiveRoomOffset() const;
+    void linkDoors(const std::string& roomA, int ax, int ay, const std::string& roomB, int bx, int by);
 
     void drawWorld();
     void drawUI();

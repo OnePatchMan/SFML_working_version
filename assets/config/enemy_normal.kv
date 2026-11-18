@@ -1,0 +1,328 @@
+// =====================================================================
+// КОНФИГУРАЦИЯ ОБЫЧНОГО ВРАГА (NORMAL ENEMY CONFIG & COMBOS)
+// Файл: assets/config/enemy_normal.kv
+// Серый цвет, малый запас ХП, легкая броня, стандартная скорость.
+// Кадры рассчитаны при базовой частоте 60 кадров/сек (1 кадр = 0.0166с).
+// =====================================================================
+
+"EnemyConfig"
+{
+    "Stats"
+    {
+        "max_hp"                    "45.0"
+        "speed"                     "220.0"
+        "approach_speed"            "280.0"
+        "damage_multiplier"         "1.0"
+        "scale"                     "1.0"
+        "gravity"                   "2600.0"
+        "whiff_recovery"            "0.50"
+        "hit_recovery"              "0.20"
+        "attack_cooldown"           "0.75"
+        "can_counter"               "0"
+        "can_block"                 "0"
+        "can_dodge"                 "0"
+    }
+
+    "Perception"
+    {
+        "view_distance"             "450.0"
+        "rear_view_distance"        "110.0"
+        "vertical_view_span"        "180.0"
+        "patrol_speed"              "120.0"
+        "patrol_radius"             "220.0"
+        "patrol_wait_time"          "1.00"
+        "alert_duration"            "0.45"
+        "lost_sight_timeout"        "2.50"
+        "jump_speed"                "850.0"
+        "jump_cooldown"             "0.65"
+    }
+
+    "Combos"
+    {
+        // -------------------------------------------------------------
+        // Комбо 1: 1 -> f2 -> d1 (Диагональный выпад и лаунчер)
+        // -------------------------------------------------------------
+        "1f2d1"
+        {
+            "windup"                "0.07"
+            "windup_frames"         "4"
+
+            "hit1"
+            {
+                "active_frames"     "7"
+                "duration_frames"   "15"
+                "active_time"       "0.12"
+                "recovery_time"     "0.06"
+                "damage"            "1.0"
+                "knock_x"           "160.0"
+                "knock_y"           "-25.0"
+                "stun"              "0.24"
+                "hitbox_w"          "55.0"
+                "hitbox_h"          "42.0"
+                "hitbox_offset_y"   "-18.0"
+            }
+
+            "hit_f2"
+            {
+                "lunge"             "18.0"
+                "active_frames"     "10"
+                "duration_frames"   "18"
+                "active_time"       "0.16"
+                "recovery_time"     "0.06"
+                "damage"            "1.8"
+                "knock_x"           "460.0"
+                "knock_y"           "-45.0"
+                "stun"              "0.35"
+                "hitbox_w"          "70.0"
+                "hitbox_h"          "46.0"
+                "hitbox_offset_y"   "-20.0"
+            }
+
+            "hit_d1"
+            {
+                "lunge"             "30.0"
+                "active_frames"     "11"
+                "duration_frames"   "20"
+                "active_time"       "0.18"
+                "recovery_time"     "0.06"
+                "damage"            "2.5"
+                "knock_x"           "220.0"
+                "knock_y"           "-435.0"
+                "stun"              "0.48"
+                "hitbox_w"          "75.0"
+                "hitbox_h"          "70.0"
+                "hitbox_offset_y"   "-42.0"
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Комбо 2: 1 -> 1 -> 2 (Быстрая серия джебов и лаунчер)
+        // -------------------------------------------------------------
+        "112"
+        {
+            "windup"                "0.06"
+            "windup_frames"         "4"
+
+            "hit1"
+            {
+                "active_frames"     "7"
+                "duration_frames"   "14"
+                "active_time"       "0.12"
+                "recovery_time"     "0.05"
+                "damage"            "1.0"
+                "knock_x"           "150.0"
+                "knock_y"           "-25.0"
+                "stun"              "0.24"
+                "hitbox_w"          "55.0"
+                "hitbox_h"          "42.0"
+                "hitbox_offset_y"   "-18.0"
+            }
+
+            "hit2nd1"
+            {
+                "lunge"             "14.0"
+                "active_frames"     "7"
+                "duration_frames"   "14"
+                "active_time"       "0.12"
+                "recovery_time"     "0.05"
+                "damage"            "1.1"
+                "knock_x"           "160.0"
+                "knock_y"           "-25.0"
+                "stun"              "0.24"
+                "hitbox_w"          "58.0"
+                "hitbox_h"          "44.0"
+                "hitbox_offset_y"   "-18.0"
+            }
+
+            "hit2"
+            {
+                "lunge"             "18.0"
+                "active_frames"     "11"
+                "duration_frames"   "19"
+                "active_time"       "0.18"
+                "recovery_time"     "0.06"
+                "damage"            "2.2"
+                "knock_x"           "180.0"
+                "knock_y"           "-435.0"
+                "stun"              "0.45"
+                "hitbox_w"          "70.0"
+                "hitbox_h"          "68.0"
+                "hitbox_offset_y"   "-40.0"
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Комбо 3: 2 -> 1 -> db1 (Рывок за спину и вертикальная подсечка)
+        // -------------------------------------------------------------
+        "21db1"
+        {
+            "windup"                "0.09"
+            "windup_frames"         "5"
+
+            "hit2"
+            {
+                "active_frames"     "10"
+                "duration_frames"   "18"
+                "active_time"       "0.16"
+                "recovery_time"     "0.06"
+                "damage"            "1.8"
+                "knock_x"           "350.0"
+                "knock_y"           "-35.0"
+                "stun"              "0.30"
+                "hitbox_w"          "65.0"
+                "hitbox_h"          "46.0"
+                "hitbox_offset_y"   "-18.0"
+            }
+
+            "hit1"
+            {
+                "lunge"             "16.0"
+                "active_frames"     "8"
+                "duration_frames"   "16"
+                "active_time"       "0.14"
+                "recovery_time"     "0.06"
+                "damage"            "1.5"
+                "knock_x"           "850.0"
+                "knock_y"           "-35.0"
+                "stun"              "0.35"
+                "hitbox_w"          "60.0"
+                "hitbox_h"          "44.0"
+                "hitbox_offset_y"   "-18.0"
+            }
+
+            "dash_behind"
+            {
+                "duration"          "0.08"
+                "duration_frames"   "5"
+                "offset"            "38.0"
+            }
+
+            "sweep_db1"
+            {
+                "active_frames"     "9"
+                "duration_frames"   "17"
+                "active_time"       "0.15"
+                "recovery_time"     "0.06"
+                "damage"            "2.4"
+                "knock_x"           "0.0"
+                "knock_y"           "-435.0"
+                "stun"              "0.48"
+                "hitbox_w"          "70.0"
+                "hitbox_h"          "50.0"
+                "hitbox_offset_y"   "-10.0"
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Воздушная ветка 1: Прыжок вдогонку и комбо a1 -> adw2
+        // -------------------------------------------------------------
+        "AirFollowup1"
+        {
+            "chase_jump"
+            {
+                "jump_vel_y"        "-880.0"
+                "duration"          "0.32"
+                "duration_frames"   "19"
+                "horiz_factor"      "6.5"
+                "max_speed_x"       "500.0"
+            }
+
+            "a1"
+            {
+                "active_frames"     "8"
+                "duration_frames"   "16"
+                "active_time"       "0.14"
+                "recovery_time"     "0.06"
+                "damage"            "1.0"
+                "knock_x"           "60.0"
+                "knock_y"           "-40.0"
+                "stun"              "0.35"
+                "hitbox_w"          "70.0"
+                "hitbox_h"          "55.0"
+                "hitbox_offset_y"   "-25.0"
+            }
+
+            "adw2"
+            {
+                "active_frames"     "11"
+                "duration_frames"   "19"
+                "active_time"       "0.18"
+                "recovery_time"     "0.06"
+                "damage"            "2.2"
+                "knock_x"           "440.0"
+                "knock_y"           "550.0"
+                "stun"              "0.42"
+                "hitbox_w"          "75.0"
+                "hitbox_h"          "60.0"
+                "hitbox_offset_y"   "-15.0"
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Воздушная ветка 2: Нагон на земле и финальный дайв-слэм a1 -> a1 -> adw2
+        // -------------------------------------------------------------
+        "AirFollowup2"
+        {
+            "ground_advance"
+            {
+                "duration"          "0.18"
+                "duration_frames"   "11"
+                "advance_dist"      "72.0"
+            }
+
+            "chase_jump"
+            {
+                "jump_vel_y"        "-860.0"
+                "duration"          "0.32"
+                "duration_frames"   "19"
+            }
+
+            "a1_first"
+            {
+                "active_frames"     "7"
+                "duration_frames"   "14"
+                "active_time"       "0.12"
+                "recovery_time"     "0.05"
+                "damage"            "1.0"
+                "knock_x"           "60.0"
+                "knock_y"           "-40.0"
+                "stun"              "0.35"
+                "hitbox_w"          "70.0"
+                "hitbox_h"          "55.0"
+                "hitbox_offset_y"   "-25.0"
+            }
+
+            "a1_second"
+            {
+                "active_frames"     "7"
+                "duration_frames"   "14"
+                "active_time"       "0.12"
+                "recovery_time"     "0.05"
+                "damage"            "1.0"
+                "knock_x"           "60.0"
+                "knock_y"           "-40.0"
+                "stun"              "0.35"
+                "hitbox_w"          "65.0"
+                "hitbox_h"          "50.0"
+                "hitbox_offset_y"   "-25.0"
+            }
+
+            "adw2_final"
+            {
+                "active_frames"     "18"
+                "duration_frames"   "48"
+                "active_time"       "0.30"
+                "recovery_time"     "0.50"
+                "damage"            "2.5"
+                "knock_x"           "1150.0"
+                "knock_x_vertical"  "600.0"
+                "knock_y"           "-280.0"
+                "stun"              "0.52"
+                "dive_vel_y"        "1200.0"
+                "hitbox_w"          "80.0"
+                "hitbox_h"          "65.0"
+                "hitbox_offset_y"   "-15.0"
+            }
+        }
+    }
+}

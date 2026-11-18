@@ -278,19 +278,39 @@ int main() {
             if (doorCooldown > 0.0f) doorCooldown -= dt;
 
             if (doorCooldown <= 0.0f) {
-                auto doorTarget = arena.getOverlappingDoorTargetRoom(player.position.x, player.position.y,
-                                                                     Player::HALF_W, Player::TOP_OFFSET, Player::BOTTOM_OFFSET);
-                if (doorTarget.has_value()) {
-                    int targetRoom = doorTarget.value();
+                auto doorOpt = arena.getOverlappingDoor(player.position.x, player.position.y,
+                                                        Player::HALF_W, Player::TOP_OFFSET, Player::BOTTOM_OFFSET);
+                if (doorOpt.has_value()) {
+                    const auto& door = doorOpt.value();
+                    int targetRoom = door.targetRoom;
                     if (targetRoom != arena.getCurrentRoomIndex()) {
                         arena.loadRoom(targetRoom);
-                        player.position = arena.getSpawnPosition();
+                        if (door.targetDoorX >= 0 && door.targetDoorY >= 0) {
+                            // Перемещение ровно к связанной двери в целевой комнате
+                            float ts = arena.getTileSize();
+                            player.position = { (door.targetDoorX + 0.5f) * ts,
+                                                (door.targetDoorY + 1.0f) * ts - Player::BOTTOM_OFFSET };
+                        } else {
+                            // Если точные координаты не заданы, ищем обратную дверь или спавн
+                            bool foundOpposite = false;
+                            for (const auto& d : arena.getDoors()) {
+                                if (d.targetRoom == arena.getCurrentRoomIndex() || d.targetRoom == door.targetRoom) {
+                                    float ts = arena.getTileSize();
+                                    player.position = { (d.x + 0.5f) * ts, (d.y + 1.0f) * ts - Player::BOTTOM_OFFSET };
+                                    foundOpposite = true;
+                                    break;
+                                }
+                            }
+                            if (!foundOpposite) {
+                                player.position = arena.getSpawnPosition();
+                            }
+                        }
                         player.velocity = {0.0f, 0.0f};
 
                         respawnEnemies();
                         combat.reset();
-                        doorCooldown = 0.6f; // Задержка перед следующим переходом, чтобы исключить зацикливание
-                        std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << targetRoom << " через блок двери!" << std::endl;
+                        doorCooldown = 0.8f; // Задержка перед следующим переходом, чтобы исключить зацикливание
+                        std::cout << "[DOOR TRANSITION] Игрок перешел в комнату " << targetRoom << " через связанную дверь!" << std::endl;
                     }
                 }
             }
@@ -325,7 +345,7 @@ int main() {
 
         // 1. Отрисовка игрового мира через камеру
         if (!menuSystem.isInMenu() || menuSystem.getAppState() == AppState::PAUSED) {
-            window.clear(sf::Color(25, 28, 35));
+            window.clear(sf::Color::Black);
             window.setView(camera);
 
             arena.draw(window);
@@ -334,6 +354,9 @@ int main() {
             }
             combat.drawWorld(window, player);
             player.draw(window);
+
+            // Полное скрытие всех областей за пределами локации (100% черный цвет)
+            arena.drawBlackoutMask(window);
         } else {
             // В главном меню (и окнах настроек/гайда) мир игры не рендерится, заливка 100% сплошная
             window.clear(sf::Color(13, 17, 26));

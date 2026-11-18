@@ -9,6 +9,8 @@ struct DoorBlock {
     int x = 0;
     int y = 0;
     int targetRoom = 1;
+    int targetDoorX = -1; // X координата связанной двери в целевой комнате (-1 если не задано)
+    int targetDoorY = -1; // Y координата связанной двери в целевой комнате (-1 если не задано)
 };
 
 struct ArenaTrigger {
@@ -88,7 +90,7 @@ public:
     bool raycastSolid(sf::Vector2f start, sf::Vector2f target, sf::Vector2f& hitPoint, sf::Vector2i& hitTile, sf::Vector2f& hitNormal) const;
     bool isDoor(int tx, int ty) const;
     int getDoorTargetRoom(int tx, int ty) const;
-    void setDoor(int tx, int ty, int targetRoom);
+    void setDoor(int tx, int ty, int targetRoom, int targetDoorX = -1, int targetDoorY = -1);
     void removeDoor(int tx, int ty);
     void clearDoors() { _doors.clear(); }
     const std::vector<DoorBlock>& getDoors() const { return _doors; }
@@ -96,6 +98,8 @@ public:
     bool hasLineOfSight(sf::Vector2f from, sf::Vector2f to) const;
     bool checkPlayerDoorOverlap(float px, float py, float halfW, float topOffset, float bottomOffset) const;
     std::optional<int> getOverlappingDoorTargetRoom(float px, float py, float halfW, float topOffset, float bottomOffset) const;
+    std::optional<DoorBlock> getOverlappingDoor(float px, float py, float halfW, float topOffset, float bottomOffset) const;
+    void drawBlackoutMask(sf::RenderWindow& window) const;
 
     sf::Vector2f getSpawnPosition() const { return _spawnPosition; }
     sf::Vector2f getEnemySpawnPosition() const { return _enemySpawnPosition; }

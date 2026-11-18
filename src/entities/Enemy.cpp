@@ -10,79 +10,83 @@ Enemy::Enemy(sf::Vector2f spawnPos, EnemyType type)
     setType(type);
 }
 
+const EnemyArchetypeData& Enemy::getEConfig() const {
+    return EnemyConfig::getArchetype(static_cast<int>(enemyType));
+}
+
 void Enemy::setType(EnemyType type) {
     enemyType = type;
-    const auto& ecfg = EnemyConfig::get();
+    const auto& ecfg = getEConfig();
     if (enemyType == EnemyType::NORMAL) {
-        maxHp = ecfg.normal.hp;
-        scale = ecfg.normal.scale;
+        maxHp = ecfg.hp;
+        scale = ecfg.scale;
         halfW = HALF_W * scale;
         halfH = HALF_H * scale;
         stunMultiplier = 1.0f;
         knockMultiplier = 1.0f;
-        damageMultiplier = ecfg.normal.damageMult;
+        damageMultiplier = ecfg.damageMult;
         hitboxScale = 1.0f;
         windupMultiplier = 1.0f;
-        canCounter = ecfg.normal.canCounter;
-        canBlock = ecfg.normal.canBlock;
-        canDodge = ecfg.normal.canDodge;
+        canCounter = ecfg.canCounter;
+        canBlock = ecfg.canBlock;
+        canDodge = ecfg.canDodge;
         aggressiveness = 0.5f;
         intelligence = 0.5f;
         maxComboHits = 1; // Обычный враг дает 1 комбо
         allowAirFollowup = false;
     } else if (enemyType == EnemyType::TANK) {
-        maxHp = ecfg.tank.hp;
-        scale = ecfg.tank.scale;
+        maxHp = ecfg.hp;
+        scale = ecfg.scale;
         halfW = HALF_W * scale;
         halfH = HALF_H * scale;
-        stunMultiplier = ecfg.tank.stunMult;
-        knockMultiplier = ecfg.tank.knockMult;
-        damageMultiplier = ecfg.tank.damageMult;
-        hitboxScale = ecfg.tank.hitboxScale;
-        windupMultiplier = ecfg.tank.windupMult;
-        canCounter = ecfg.tank.canCounter;
-        canBlock = ecfg.tank.canBlock;
+        stunMultiplier = ecfg.stunMult;
+        knockMultiplier = ecfg.knockMult;
+        damageMultiplier = ecfg.damageMult;
+        hitboxScale = ecfg.hitboxScale;
+        windupMultiplier = ecfg.windupMult;
+        canCounter = ecfg.canCounter;
+        canBlock = ecfg.canBlock;
         canDodge = false;
         aggressiveness = 0.55f;
         intelligence = 0.5f;
         maxComboHits = 2;
         allowAirFollowup = false;
     } else if (enemyType == EnemyType::DUELIST) {
-        maxHp = ecfg.duelist.hp;
-        scale = ecfg.duelist.scale;
+        maxHp = ecfg.hp;
+        scale = ecfg.scale;
         halfW = HALF_W * scale;
         halfH = HALF_H * scale;
         stunMultiplier = 1.0f;
         knockMultiplier = 1.0f;
-        damageMultiplier = ecfg.duelist.damageMult;
+        damageMultiplier = ecfg.damageMult;
         hitboxScale = 1.0f;
         windupMultiplier = 1.0f;
-        canCounter = ecfg.duelist.canCounter;
-        canBlock = ecfg.duelist.canBlock;
-        canDodge = ecfg.duelist.canDodge;
-        aggressiveness = ecfg.duelist.aggressiveness;
-        intelligence = ecfg.duelist.intelligence;
+        canCounter = ecfg.canCounter;
+        canBlock = ecfg.canBlock;
+        canDodge = ecfg.canDodge;
+        aggressiveness = ecfg.aggressiveness;
+        intelligence = ecfg.intelligence;
         maxComboHits = 3;
         allowAirFollowup = true;
     } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
-        maxHp = ecfg.duelistPassive.hp;
-        scale = ecfg.duelistPassive.scale;
+        maxHp = ecfg.hp;
+        scale = ecfg.scale;
         halfW = HALF_W * scale;
         halfH = HALF_H * scale;
         stunMultiplier = 1.0f;
         knockMultiplier = 1.0f;
-        damageMultiplier = ecfg.duelistPassive.damageMult;
+        damageMultiplier = ecfg.damageMult;
         hitboxScale = 1.0f;
         windupMultiplier = 1.0f;
-        canCounter = ecfg.duelistPassive.canCounter;
-        canBlock = ecfg.duelistPassive.canBlock;
-        canDodge = ecfg.duelistPassive.canDodge;
-        aggressiveness = ecfg.duelistPassive.aggressiveness;
-        intelligence = ecfg.duelistPassive.intelligence;
+        canCounter = ecfg.canCounter;
+        canBlock = ecfg.canBlock;
+        canDodge = ecfg.canDodge;
+        aggressiveness = ecfg.aggressiveness;
+        intelligence = ecfg.intelligence;
         maxComboHits = 3;
         allowAirFollowup = true;
         invisActiveTimer = 0.0f;
-        invisCooldownTimer = ecfg.duelistPassive.invisCooldown;
+        invisCooldownTimer = ecfg.invisCooldown;
     } else if (enemyType == EnemyType::DUMMY) {
         maxHp = 9999.0f;
         scale = 1.0f;
@@ -114,12 +118,10 @@ void Enemy::setType(EnemyType type) {
 
 void Enemy::triggerDodge(float dir) {
     if (isDead || hurtTimer > 0.0f || isDodging) return;
-    const auto& ecfg = EnemyConfig::get();
+    const auto& ecfg = getEConfig();
     isDodging = true;
     dodgeTimer = 0.24f;
-    dodgeCooldownTimer = (enemyType == EnemyType::DUELIST_PASSIVE) 
-                         ? ecfg.duelistPassive.dodgeCooldown 
-                         : ecfg.duelist.dodgeCooldown;
+    dodgeCooldownTimer = ecfg.dodgeCooldown;
     dodgeDirection = dir;
     if (std::abs(dir) > 0.01f) {
         velocity.x = dir * 450.0f;
@@ -341,7 +343,7 @@ void Enemy::applyAttackStats(const EnemyAttackStats& s, float dirX) {
 
 void Enemy::triggerAttack() {
     if (isDead || hurtTimer > 0.0f || attackState != EnemyAttackState::IDLE) return;
-    const auto& ecfg = EnemyConfig::get();
+    const auto& ecfg = getEConfig();
     behaviorState = AIBehaviorState::COMBAT;
     attackState = EnemyAttackState::WINDUP;
     attackStateTimer = ecfg.stats.dummyWindup * windupMultiplier; // Замах перед ударом
@@ -358,7 +360,7 @@ void Enemy::triggerAttack() {
 
 void Enemy::triggerCounterStance() {
     if (!canCounter || isDead || hurtTimer > 0.0f || counterStanceTimer > 0.0f || counterCooldownTimer > 0.0f) return;
-    const auto& ecfg = EnemyConfig::get();
+    const auto& ecfg = getEConfig();
     counterStanceTimer = ecfg.counter.window;
     counterCooldownTimer = ecfg.counter.cooldown;
     attackState = EnemyAttackState::IDLE;
@@ -451,7 +453,7 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
 }
 
 void Enemy::dropCombo() {
-    const auto& ecfg = EnemyConfig::get();
+    const auto& ecfg = getEConfig();
     aiComboState = AIComboState::IDLE;
     attackState = EnemyAttackState::RECOVERY;
     attackStateTimer = ecfg.stats.whiffRecovery; // Увеличенный стан-лок/восстановление при промахе (Whiff Recovery)
@@ -462,7 +464,7 @@ void Enemy::dropCombo() {
 }
 
 void Enemy::finishCombo(bool hitConfirmed) {
-    const auto& ecfg = EnemyConfig::get();
+    const auto& ecfg = getEConfig();
     aiComboState = AIComboState::IDLE;
     attackState = EnemyAttackState::RECOVERY;
     attackStateTimer = hitConfirmed ? ecfg.stats.hitRecovery : ecfg.stats.whiffRecovery;
@@ -558,7 +560,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     // Реакция на стан игрока (Паниш станов дуэлянтами, шанс зависит от интеллекта)
     if ((enemyType == EnemyType::DUELIST || enemyType == EnemyType::DUELIST_PASSIVE) && !isDead && hurtTimer <= 0.0f) {
         if (playerIsStunned && stunPunishCooldown <= 0.0f && aiComboState == AIComboState::IDLE) {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             float absX = std::abs(playerPos.x - position.x);
             float absY = std::abs(playerPos.y - position.y);
             float distSq = (playerPos.x - position.x) * (playerPos.x - position.x) + (playerPos.y - position.y) * (playerPos.y - position.y);
@@ -625,7 +627,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             // ПРОМАХ СТОЙКИ ПАРИРОВАНИЯ БОТА (WHIFF)!
             // Игрок не ударил бота во время стойки — бот получает ДОЛГИЙ СТАН!
             counterStanceTimer = 0.0f;
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             hurtTimer = ecfg.counter.whiffStun; // Долгий стан бота (1.2с)!
             attackState = EnemyAttackState::IDLE;
             attackStateTimer = 0.0f;
@@ -657,7 +659,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         if (alertEffectTimer > 0.0f) alertEffectTimer -= dt;
 
         const auto& pcfg = EnemyConfig::get().perception;
-        const auto& ecfg = EnemyConfig::get();
+        const auto& ecfg = getEConfig();
 
         bool hasPlayer = (playerPos.x != 0.0f || playerPos.y != 0.0f);
         bool canSeePlayer = false;
@@ -782,21 +784,9 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                         velocity.x = 0.0f;
                     } else {
                         // Базовые параметры движения по архетипам
-                    float baseSpeed = 220.0f;
-                    float spacingDist = 48.0f;
-                    if (enemyType == EnemyType::NORMAL) {
-                        baseSpeed = ecfg.normal.speed;
-                        spacingDist = 48.0f;
-                    } else if (enemyType == EnemyType::TANK) {
-                        baseSpeed = ecfg.tank.speed;
-                        spacingDist = 65.0f;
-                    } else if (enemyType == EnemyType::DUELIST) {
-                        baseSpeed = ecfg.duelist.speed;
-                        spacingDist = ecfg.duelist.spacingDistance;
-                    } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
-                        baseSpeed = ecfg.duelistPassive.speed;
-                        spacingDist = ecfg.duelistPassive.spacingDistance;
-                    }
+                        float baseSpeed = ecfg.speed;
+                        float spacingDist = (enemyType == EnemyType::NORMAL) ? 48.0f :
+                                            (enemyType == EnemyType::TANK)   ? 65.0f : ecfg.spacingDistance;
 
                     // 1. ПОВЕДЕНИЕ АГРЕССИВНОГО ДУЭЛЯНТА (DUELIST AGGRESSIVE):
                     // Ближний выверенный спейсинг (~95px: прямо перед носом у игрока, но вне зоны базовых ударов ~90px).
@@ -838,9 +828,9 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                         // ПРОВЕРКА БЕЗДЕЙСТВИЯ ИГРОКА (Player Inactivity Attack):
                         // Если игрок бездействует ~0.5с (зависит от интеллекта, нижняя граница ~0.25с — время атаки 2),
                         // дуэлянт сам переходит в агрессивное нападение через дэш!
-                        float baseDelay = ecfg.duelist.idleAttackDelay;
+                        float baseDelay = ecfg.idleAttackDelay;
                         float minDelay = 0.25f;
-                        float intel = ecfg.duelist.intelligence;
+                        float intel = ecfg.intelligence;
                         float idleThreshold = baseDelay - (intel - 0.5f) * (baseDelay - minDelay) * 2.0f;
                         idleThreshold = std::clamp(idleThreshold, minDelay, baseDelay);
 
@@ -973,7 +963,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             break;
 
         case AIComboState::APPROACH: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             isFacingLeft = (playerPos.x < position.x);
             dir = isFacingLeft ? -1.0f : 1.0f;
             float distToPlayer = std::abs(playerPos.x - position.x);
@@ -994,11 +984,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                (currentStarterType == AIStarterType::STARTER_21DB1) ? 54.0f : 48.0f;
             if (enemyType == EnemyType::TANK) targetDist *= 1.3f;
             if (distToPlayer > targetDist) {
-                float curApproach = ecfg.stats.approachSpeed;
-                if (enemyType == EnemyType::NORMAL) curApproach = ecfg.normal.approachSpeed;
-                else if (enemyType == EnemyType::TANK) curApproach = ecfg.tank.approachSpeed;
-                else if (enemyType == EnemyType::DUELIST) curApproach = ecfg.duelist.approachSpeed;
-                else if (enemyType == EnemyType::DUELIST_PASSIVE) curApproach = ecfg.duelistPassive.approachSpeed;
+                float curApproach = ecfg.approachSpeed;
                 if (punishBannerTimer > 0.0f) curApproach *= 1.30f; // Ускоренный напор при панише стана
                 velocity.x = dir * curApproach; // Стремительный рывок на сближение
                 // Агрессивный дуэлянт: игра через дэши при сближении в комбо
@@ -1056,7 +1042,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         // СТАРТЕР 1: 1-f2-d1 (Диагональный лаунчер)
         // =========================================================
         case AIComboState::LAUNCHER_1_WINDUP: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 aiComboState = AIComboState::LAUNCHER_1_ACTIVE;
@@ -1071,7 +1057,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::LAUNCHER_1_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 // Если удар не попал (уворот/промах) — прекращаем комбо
@@ -1088,7 +1074,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::LAUNCHER_1_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (maxComboHits <= 1) {
@@ -1112,7 +1098,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::LAUNCHER_F2_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1128,7 +1114,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::LAUNCHER_F2_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (maxComboHits <= 2) {
@@ -1152,7 +1138,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::LAUNCHER_D1_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1168,7 +1154,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::LAUNCHER_D1_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 // Если игрок не подброшен вверх или отключено воздушное преследование — завершаем комбо
@@ -1191,7 +1177,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         // СТАРТЕР 2: 1-1-2 (Быстрый лаунчер)
         // =========================================================
         case AIComboState::STARTER_112_1_WINDUP: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 aiComboState = AIComboState::STARTER_112_1_ACTIVE;
@@ -1206,7 +1192,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_112_1_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1222,7 +1208,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_112_1_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (maxComboHits <= 1) {
@@ -1245,7 +1231,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_112_2ND_1_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1261,7 +1247,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_112_2ND_1_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (maxComboHits <= 2) {
@@ -1285,7 +1271,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_112_2_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1301,7 +1287,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_112_2_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!allowAirFollowup || playerPos.y > position.y - 20.0f) {
@@ -1323,7 +1309,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         // СТАРТЕР 3: 2-1-db1 (Обход со спины и вертикальная подсечка)
         // =========================================================
         case AIComboState::STARTER_21DB1_2_WINDUP: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 aiComboState = AIComboState::STARTER_21DB1_2_ACTIVE;
@@ -1338,7 +1324,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_21DB1_2_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1354,7 +1340,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_21DB1_2_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (maxComboHits <= 1) {
@@ -1377,7 +1363,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_21DB1_1_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1393,7 +1379,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_21DB1_1_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (maxComboHits <= 2) {
@@ -1417,7 +1403,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_21DB1_DASH_BEHIND: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 // Выполнение подсечки db1 с разворота: поднимает строго вертикально вверх!
@@ -1434,7 +1420,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_21DB1_SWEEP_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1450,7 +1436,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_21DB1_SWEEP_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!allowAirFollowup || playerPos.y > position.y - 20.0f) {
@@ -1549,7 +1535,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::STARTER_GRAPPLE_LAUNCHER_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1583,7 +1569,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         // ОБЩАЯ ВОЗДУШНАЯ СВЯЗКА (СОВМЕЩЕНИЕ ЧЕРЕЗ ФОРСУ)
         // =========================================================
         case AIComboState::CHASE_JUMP_1: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             float diffX = playerPos.x - position.x;
             isFacingLeft = (diffX < 0.0f);
@@ -1614,7 +1600,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_1_A1_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             velocity.y = 0.0f;
             isAirSuspended = true;
@@ -1632,7 +1618,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_1_A1_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             velocity.y = 0.0f;
             isAirSuspended = true;
@@ -1661,7 +1647,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_1_ADW2_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
@@ -1677,7 +1663,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_1_ADW2_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             bool grounded = arena.overlapsSolid(position.x, position.y + 1.0f, halfW, halfH, halfH);
             if (grounded || aiStateTimer <= 0.0f) {
@@ -1697,7 +1683,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::CHASE_GROUND_ADVANCE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             float diffX = playerPos.x - position.x;
             isFacingLeft = (diffX < 0.0f);
@@ -1728,7 +1714,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::CHASE_JUMP_2: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             float diffX = playerPos.x - position.x;
             isFacingLeft = (diffX < 0.0f);
@@ -1758,7 +1744,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_2_A1_1_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             velocity.y = 0.0f;
             isAirSuspended = true;
@@ -1776,7 +1762,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_2_A1_1_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             velocity.y = 0.0f;
             isAirSuspended = true;
@@ -1798,7 +1784,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_2_A1_2_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             velocity.y = 0.0f;
             isAirSuspended = true;
@@ -1816,7 +1802,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_2_A1_2_RECOVERY: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             velocity.y = 0.0f;
             isAirSuspended = true;
@@ -1841,7 +1827,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::AIR_2_ADW2_ACTIVE: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             bool grounded = arena.overlapsSolid(position.x, position.y + 1.0f, halfW, halfH, halfH);
             if (grounded || aiStateTimer <= 0.0f) {
@@ -1856,7 +1842,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::COMBO_FINISHED: {
-            const auto& ecfg = EnemyConfig::get();
+            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 aiComboState = AIComboState::IDLE;
@@ -1921,7 +1907,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             }
         }
 
-        const auto& ecfg = EnemyConfig::get();
+        const auto& ecfg = getEConfig();
         if (attackState == EnemyAttackState::WINDUP) {
             attackStateTimer -= dt;
             if (attackStateTimer <= 0.0f) {

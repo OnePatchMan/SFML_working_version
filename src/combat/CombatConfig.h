@@ -270,6 +270,11 @@ public:
                                 else if (key == "enemy_stun" || key == "enemystun") st.enemyStun = std::stof(val);
                                 else if (key == "whiff_stun" || key == "whiffstun") st.whiffStun = std::stof(val);
                                 else if (key == "active_time" || key == "activetime") st.activeTime = std::stof(val);
+                                else if (key == "active_frames" || key == "activeframes") st.activeTime = std::stof(val) / 60.0f;
+                                else if (key == "duration_frames" || key == "durationframes" || key == "total_frames") {
+                                    float totalTime = std::stof(val) / 60.0f;
+                                    st.playerRecovery = std::max(0.01f, totalTime - st.activeTime);
+                                }
                                 else if (key == "lunge") st.lunge = std::stof(val);
                                 else if (key == "name" || key == "displayname") st.displayName = val;
                                 else if (key == "color") st.color = parseColor(val);
@@ -297,6 +302,11 @@ public:
                                 else if (key == "enemy_stun" || key == "enemystun") ce.stats.enemyStun = std::stof(val);
                                 else if (key == "whiff_stun" || key == "whiffstun") ce.stats.whiffStun = std::stof(val);
                                 else if (key == "active_time" || key == "activetime") ce.stats.activeTime = std::stof(val);
+                                else if (key == "active_frames" || key == "activeframes") ce.stats.activeTime = std::stof(val) / 60.0f;
+                                else if (key == "duration_frames" || key == "durationframes" || key == "total_frames") {
+                                    float totalTime = std::stof(val) / 60.0f;
+                                    ce.stats.playerRecovery = std::max(0.01f, totalTime - ce.stats.activeTime);
+                                }
                                 else if (key == "lunge") ce.stats.lunge = std::stof(val);
                                 else if (key == "name" || key == "displayname") ce.stats.displayName = val;
                                 else if (key == "color") ce.stats.color = parseColor(val);

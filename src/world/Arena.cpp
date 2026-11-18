@@ -1434,11 +1434,19 @@ bool Arena::saveToKVCoordinates(const std::string& kvPath) const {
         ss << "    \"enemy_spawn\"   \"" << eTx << " " << eTy << "\"\n";
     }
     if (!_doors.empty()) {
-        ss << "    \"door\"          \"" << _doors[0].x << " " << _doors[0].y << " " << _doors[0].targetRoom << "\"\n";
-        ss << "\n    // Список дверей и целевых комнат: [x  y  целевая_комната]\n";
+        ss << "    \"door\"          \"" << _doors[0].x << " " << _doors[0].y << " " << _doors[0].targetRoom;
+        if (_doors[0].targetDoorX >= 0 && _doors[0].targetDoorY >= 0) {
+            ss << " " << _doors[0].targetDoorX << " " << _doors[0].targetDoorY;
+        }
+        ss << "\"\n";
+        ss << "\n    // Список дверей и целевых комнат: [x  y  целевая_комната  целевая_дверь_x  целевая_дверь_y]\n";
         ss << "    \"Doors\"\n    {\n";
         for (size_t i = 0; i < _doors.size(); ++i) {
-            ss << "        \"door_" << i << "\"  \"" << _doors[i].x << " " << _doors[i].y << " " << _doors[i].targetRoom << "\"\n";
+            ss << "        \"door_" << i << "\"  \"" << _doors[i].x << " " << _doors[i].y << " " << _doors[i].targetRoom;
+            if (_doors[i].targetDoorX >= 0 && _doors[i].targetDoorY >= 0) {
+                ss << " " << _doors[i].targetDoorX << " " << _doors[i].targetDoorY;
+            }
+            ss << "\"\n";
         }
         ss << "    }\n";
     }
@@ -1554,17 +1562,19 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
                 hasE = true;
             } else if (key == "door") {
                 std::istringstream iss(val);
-                int dx = 0, dy = 0, dtgt = 1;
+                int dx = 0, dy = 0, dtgt = 1, tdx = -1, tdy = -1;
                 if (iss >> dx >> dy) {
                     if (!(iss >> dtgt)) dtgt = (_currentRoomIndex % _totalRooms) + 1;
-                    doors.push_back({dx, dy, dtgt});
+                    if (iss >> tdx >> tdy) {}
+                    doors.push_back({dx, dy, dtgt, tdx, tdy});
                 }
             } else if (currentSection == "doors") {
                 std::istringstream iss(val);
-                int dx = 0, dy = 0, dtgt = 1;
+                int dx = 0, dy = 0, dtgt = 1, tdx = -1, tdy = -1;
                 if (iss >> dx >> dy) {
                     if (!(iss >> dtgt)) dtgt = (_currentRoomIndex % _totalRooms) + 1;
-                    doors.push_back({dx, dy, dtgt});
+                    if (iss >> tdx >> tdy) {}
+                    doors.push_back({dx, dy, dtgt, tdx, tdy});
                 }
             } else if (currentSection == "enemies") {
                 std::istringstream iss(val);
@@ -1805,16 +1815,18 @@ int Arena::getDoorTargetRoom(int tx, int ty) const {
     return (_currentRoomIndex % _totalRooms) + 1;
 }
 
-void Arena::setDoor(int tx, int ty, int targetRoom) {
+void Arena::setDoor(int tx, int ty, int targetRoom, int targetDoorX, int targetDoorY) {
     if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return;
     _map[ty][tx] = 3;
     for (auto& d : _doors) {
         if (d.x == tx && d.y == ty) {
             d.targetRoom = targetRoom;
+            d.targetDoorX = targetDoorX;
+            d.targetDoorY = targetDoorY;
             return;
         }
     }
-    _doors.push_back({tx, ty, targetRoom});
+    _doors.push_back({tx, ty, targetRoom, targetDoorX, targetDoorY});
 }
 
 void Arena::removeDoor(int tx, int ty) {
@@ -1830,6 +1842,12 @@ bool Arena::checkPlayerDoorOverlap(float px, float py, float halfW, float topOff
 }
 
 std::optional<int> Arena::getOverlappingDoorTargetRoom(float px, float py, float halfW, float topOffset, float bottomOffset) const {
+    auto d = getOverlappingDoor(px, py, halfW, topOffset, bottomOffset);
+    if (d.has_value()) return d->targetRoom;
+    return std::nullopt;
+}
+
+std::optional<DoorBlock> Arena::getOverlappingDoor(float px, float py, float halfW, float topOffset, float bottomOffset) const {
     float left = px - halfW;
     float right = px + halfW - 0.001f;
     float top = py - topOffset;
@@ -1843,11 +1861,36 @@ std::optional<int> Arena::getOverlappingDoorTargetRoom(float px, float py, float
     for (int ty = minTy; ty <= maxTy; ++ty) {
         for (int tx = minTx; tx <= maxTx; ++tx) {
             if (isDoor(tx, ty)) {
-                return getDoorTargetRoom(tx, ty);
+                for (const auto& d : _doors) {
+                    if (d.x == tx && d.y == ty) return d;
+                }
+                return DoorBlock{tx, ty, (_currentRoomIndex % _totalRooms) + 1, -1, -1};
             }
         }
     }
     return std::nullopt;
+}
+
+void Arena::drawBlackoutMask(sf::RenderWindow& window) const {
+    float roomW = static_cast<float>(_width * _tileSize);
+    float roomH = static_cast<float>(_height * _tileSize);
+    float bigM = 300000.0f;
+
+    auto drawRect = [&](float x, float y, float w, float h) {
+        sf::RectangleShape r({w, h});
+        r.setPosition({x, y});
+        r.setFillColor(sf::Color::Black);
+        window.draw(r);
+    };
+
+    // Верхняя черная область
+    drawRect(-bigM, -bigM, bigM * 2.0f + roomW, bigM);
+    // Нижняя черная область
+    drawRect(-bigM, roomH, bigM * 2.0f + roomW, bigM);
+    // Левая черная область
+    drawRect(-bigM, 0.0f, bigM, roomH);
+    // Правая черная область
+    drawRect(roomW, 0.0f, bigM, roomH);
 }
 
 bool Arena::isSolid(int tx, int ty) const {
@@ -1986,6 +2029,14 @@ void Arena::draw(sf::RenderWindow& window) {
     int endX = std::min(_width, static_cast<int>((center.x + size.x / 2.0f) / _tileSize) + 2);
     int startY = std::max(0, static_cast<int>((center.y - size.y / 2.0f) / _tileSize) - 1);
     int endY = std::min(_height, static_cast<int>((center.y + size.y / 2.0f) / _tileSize) + 2);
+
+    // 0. Заливка фона текущей локации (пустые блоки внутри локации сохраняют привычный цвет)
+    float roomW = static_cast<float>(_width * _tileSize);
+    float roomH = static_cast<float>(_height * _tileSize);
+    sf::RectangleShape roomBg({roomW, roomH});
+    roomBg.setPosition({0.0f, 0.0f});
+    roomBg.setFillColor(sf::Color(25, 28, 35));
+    window.draw(roomBg);
 
     // 1. Пакетная отрисовка стекающей крови на заднем фоне (Batch VertexArray в 1 Draw Call)
     if (!_bgBloodStreaks.empty()) {

@@ -212,6 +212,8 @@ public:
     bool hasWallBounced = false; // Ограничение: максимум 1 отскок от стены за серию джаггла
     bool wasWallBounced() const { return hasWallBounced; }
 
+    const EnemyArchetypeData& getEConfig() const;
+
     // Тренировочный Манекен (Dummy)
     float dummyAccumDamage = 0.0f;
     float dummyResetTimer = 0.0f;       // Сброс накопленного урона через 5.0с
