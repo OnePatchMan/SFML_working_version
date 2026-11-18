@@ -1,8 +1,9 @@
-name: Build Windows Release
+name: Build Release Bundles
 
 on:
   push:
     branches: [ master ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 permissions:
@@ -21,23 +22,34 @@ jobs:
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
 
-      - name: Build Game
+      - name: Build Game & Editor
         run: |
-          cmake --build build --config Release -j 4 --target FightingComboArena
+          cmake --build build --config Release -j 4 --target FightingComboArena MapEditor
 
       - name: Package Windows Portable Bundle
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path dist/FightingComboArena
           Copy-Item -Recurse -Force assets dist/FightingComboArena/assets
-          
-          # Копируем исполняемый файл
+          Copy-Item -Force HOW_TO_RUN.md dist/FightingComboArena/HOW_TO_RUN.md
+          Copy-Item -Force README.md dist/FightingComboArena/README.md
+
+          # Создаем удобные батники для запуска в один клик
+          Set-Content -Path dist/FightingComboArena/run_game.bat -Value "@echo off`r`nstart FightingComboArena.exe`r`n"
+          Set-Content -Path dist/FightingComboArena/run_editor.bat -Value "@echo off`r`nstart MapEditor.exe`r`n"
+
+          # Копируем исполняемые файлы
           $exeFiles = Get-ChildItem -Path build -Recurse -Filter "FightingComboArena.exe"
           if ($exeFiles) {
               Copy-Item -Path $exeFiles[0].FullName -Destination dist/FightingComboArena/FightingComboArena.exe
           } else {
               Write-Error "FightingComboArena.exe not found!"
               exit 1
+          }
+
+          $editorExe = Get-ChildItem -Path build -Recurse -Filter "MapEditor.exe"
+          if ($editorExe) {
+              Copy-Item -Path $editorExe[0].FullName -Destination dist/FightingComboArena/MapEditor.exe
           }
 
           # Копируем все динамические библиотеки (.dll) SFML и зависимостей
@@ -55,22 +67,80 @@ jobs:
           path: FightingComboArena-Windows.zip
           retention-days: 30
 
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxrandr-dev libxcursor-dev libxi-dev libudev-dev libflac-dev libvorbis-dev libgl1-mesa-dev libfreetype-dev libharfbuzz-dev zip
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build Game & Editor
+        run: |
+          cmake --build build --config Release -j 4 --target FightingComboArena MapEditor
+
+      - name: Package Linux Bundle
+        run: |
+          mkdir -p dist/FightingComboArena-Linux
+          cp -r assets dist/FightingComboArena-Linux/
+          cp build/FightingComboArena dist/FightingComboArena-Linux/
+          cp build/MapEditor dist/FightingComboArena-Linux/
+          cp run_game.sh run_editor.sh HOW_TO_RUN.md README.md dist/FightingComboArena-Linux/
+          chmod +x dist/FightingComboArena-Linux/FightingComboArena dist/FightingComboArena-Linux/MapEditor dist/FightingComboArena-Linux/run_*.sh
+          cd dist && zip -r ../FightingComboArena-Linux.zip FightingComboArena-Linux
+
+      - name: Upload Linux Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FightingComboArena-Linux
+          path: FightingComboArena-Linux.zip
+          retention-days: 30
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: FightingComboArena-Windows
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: FightingComboArena-Linux
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/master'
         with:
-          tag_name: latest
-          name: "Fighting Combo Arena (Windows Portable)"
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
+          name: "Fighting Combo Arena & Autonomous MapEditor"
           body: |
-            ### 🎮 Fighting Combo Arena — Портативная сборка для Windows
+            ### 🎮 Fighting Combo Arena & Autonomous MapEditor
             
-            **Как запустить друзьям:**
-            1. Скачайте архив `FightingComboArena-Windows.zip` ниже.
-            2. Распакуйте его в любую папку.
-            3. Запустите `FightingComboArena.exe`.
+            **Скачать готовую сборку (Portable ZIP):**
+            * 🪟 **Windows**: скачайте `FightingComboArena-Windows.zip`, распакуйте в любую папку и запустите `run_game.bat` (игра) или `run_editor.bat` (редактор). Все DLL уже внутри, компилятор не требуется!
+            * 🐧 **Linux**: скачайте `FightingComboArena-Linux.zip`, распакуйте и запустите `./run_game.sh` или `./run_editor.sh`.
             
-            Никаких дополнительных программ или библиотек устанавливать не нужно!
-          files: FightingComboArena-Windows.zip
+            **Что нового:**
+            * 📁 Свободное создание и именование комнат без лимита в 10 комнат.
+            * 🖼 Двухколоночный визуальный браузер комнат с превью-скриншотами и навигацией стрелочками.
+            * 🎯 Тренировочный манекен (Dummy) с HUD урона (5с сброс), замером окон между ударами (Frame Gap при 60 FPS) и физикой отталкивания.
+            * 🎨 Пиксель-арт текстуры для батута (Jump Pad) и шипов (Spikes).
+            * 🔤 Четкий пиксельный шрифт с поддержкой кириллицы.
+            * 🛠 Автономный MapEditor с мгновенным тест-плеем по [Tab] прямо из редактора!
+          files: |
+            FightingComboArena-Windows.zip
+            FightingComboArena-Linux.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
