@@ -46,6 +46,14 @@ void triggerCounter(Player& player) {
     player.handleInput(event);
 }
 
+void triggerJump(CombatSystem& combat, Player& player) {
+    sf::Event::KeyPressed kp;
+    kp.code = sf::Keyboard::Key::Space;
+    sf::Event event(kp);
+    player.handleInput(event);
+    combat.handleInput(event, player, {0.0f, 0.0f});
+}
+
 int main() {
     // Создаем изолированную тестовую арену с открытым небом, чтобы тесты комбо
     // и физики никогда не конфликтовали с пользовательскими платформами комнат
@@ -4706,6 +4714,80 @@ int main() {
         enemy.reset();
 
         std::cout << "-> PASSED: MapEditor Advanced Tools (Undo/Redo, Bucket, Eyedropper, Clipboard, Room Actions) verified 100%!" << std::endl;
+    }
+
+    // -------------------------------------------------------------
+    // TEST 65: WEAPON STOMP (dw1) & WEAPON COMBO (dw1-j-adw1 SKY HOOK LAUNCHER)
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 65] Testing Weapon Stomp (dw1) & Weapon Combo dw1-j-adw1 (Stomp -> Jump -> Sky Hook)..." << std::endl;
+        combat.reset();
+        player.reset(arena.getSpawnPosition(), false);
+        player.setHasWeapon(true);
+        enemy.setType(EnemyType::DUMMY);
+        enemy.reset();
+        enemy.position = {player.position.x + 40.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.isFacingLeft = true;
+        tick(0.1f, arena, player, enemy, combat);
+        assert(player.isOnGround());
+
+        // 1. Trigger dw1 (Down + Light with weapon) -> Weapon Stomp & Pop-up
+        player.setSimulatedVerticalDir(1.0f); // Hold Down
+        triggerLight(combat, player);
+        player.setSimulatedVerticalDir(0.0f);
+
+        std::cout << "-> Triggered dw1 with weapon: '" << combat.getCurrentComboName() << "'" << std::endl;
+        assert(combat.getCurrentComboName().find("STOMP") != std::string::npos);
+
+        // Tick frames to register hit
+        bool stompConnected = false;
+        for (int f = 0; f < 10; ++f) {
+            tick(0.016f, arena, player, enemy, combat);
+            if (enemy.velocity.y < -350.0f) {
+                stompConnected = true;
+                break;
+            }
+        }
+        assert(stompConnected);
+        std::cout << "-> Verified enemy launched upward by dw1 stomp (knockY: " << enemy.velocity.y << " px/s)!" << std::endl;
+
+        // 2. Player Jumps (j)
+        triggerJump(combat, player);
+        player.velocity.y = -520.0f;
+
+        // Advance in air for 4 frames
+        for (int f = 0; f < 4; ++f) {
+            tick(0.016f, arena, player, enemy, combat);
+        }
+
+        // Align enemy near/under player in air
+        enemy.position = {player.position.x + 35.0f, player.position.y + 15.0f};
+
+        // 3. Trigger adw1 in air (Down + Light) -> dw1-j-adw1 Sky Hook Combo!
+        player.setSimulatedVerticalDir(1.0f); // Hold Down in air
+        triggerLight(combat, player);
+        player.setSimulatedVerticalDir(0.0f);
+
+        assert(combat.getCurrentComboName().find("dw1-j-adw1") != std::string::npos ||
+               combat.getCurrentComboName().find("SKY HOOK") != std::string::npos);
+        std::cout << "-> Verified air follow-up triggered combo: " << combat.getCurrentComboName() << std::endl;
+
+        // Tick to connect Sky Hook attack
+        bool hookConnected = false;
+        for (int f = 0; f < 12; ++f) {
+            tick(0.016f, arena, player, enemy, combat);
+            if (enemy.velocity.y < -450.0f) {
+                hookConnected = true;
+                break;
+            }
+        }
+        assert(hookConnected);
+        assert(enemy.isStunned());
+        assert(player.isAirSuspended());
+        std::cout << "-> Verified Sky Hook connected! Enemy launched skyward (knockY: " << enemy.velocity.y 
+                  << " px/s) and player air suspended!" << std::endl;
+
+        std::cout << "-> PASSED: Weapon attack dw1 (Stomp) & Combo dw1jadw1 (Sky Hook) verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

@@ -284,6 +284,19 @@
             "name"              "AIR ATTACK: a2 (Horizontal Air Push)"
             "color"             "240 130 255"
         }
+        "adw1"
+        {
+            "damage"            "2.8"
+            "knock_x"           "80.0"
+            "knock_y"           "-320.0"
+            "player_recovery"   "0.18"
+            "enemy_stun"        "0.35"
+            "whiff_stun"        "0.20"
+            "active_time"       "0.13"
+            "lunge"             "6.0"
+            "name"              "AIR ATTACK: adw1 (Air Down Hook)"
+            "color"             "255 190 60"
+        }
         "adw2"
         {
             "damage"            "4.0"
@@ -598,6 +611,24 @@
             "lunge"             "10.0"
             "name"              "COMBO db1-u1: REVERSE TURN & SKY POP-UP!"
             "color"             "255 110 180"
+            "is_unique"         "1"
+            "is_finisher"       "1"
+        }
+
+        // dw1jadw1: топот по земле булавой (dw1), поднимающий врага + прыжок (j) + удар под себя с крюком в воздух (adw1)
+        "dw1jadw1"
+        {
+            "sequence"          "dw1 j adw1"
+            "damage"            "5.5"
+            "knock_x"           "80.0"
+            "knock_y"           "-520.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.50"
+            "whiff_stun"        "0.24"
+            "active_time"       "0.16"
+            "lunge"             "0.0"
+            "name"              "COMBO dw1-j-adw1: STOMP & SKY HOOK!"
+            "color"             "255 160 40"
             "is_unique"         "1"
             "is_finisher"       "1"
         }

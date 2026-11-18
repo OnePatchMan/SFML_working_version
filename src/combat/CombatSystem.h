@@ -108,6 +108,8 @@ public:
         float apexHoverTimer = 0.0f;    // Таймер зависания в пиковой точке
     };
 
+    void registerJump();
+
     void throwWeapon(Player& player, const sf::Vector2f& targetPoint = {0.0f, 0.0f});
     bool tryRetrieveWeapon(Player& player);
     const std::vector<ThrownMace>& getThrownMaces() const { return _thrownMaces; }
@@ -153,6 +155,7 @@ private:
     sf::Color _comboDisplayColor{255, 255, 255};
 
     bool _isAirAttack = false;
+    bool _wasGroundedLastFrame = true;
     float _airSuspendedRemaining = 0.0f;
     float _attackTimer = 0.0f;
     float _attackCooldown = 0.0f;

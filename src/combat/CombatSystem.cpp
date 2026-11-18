@@ -80,7 +80,9 @@ void CombatSystem::handleInput(const std::optional<sf::Event>& event, Player& pl
     }
 
     if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
-        if (keyPressed->code == sf::Keyboard::Key::J) {
+        if (keyPressed->code == sf::Keyboard::Key::Space) {
+            registerJump();
+        } else if (keyPressed->code == sf::Keyboard::Key::J) {
             triggerAttack(AttackInput::LIGHT, player, mouseWorld);
         } else if (keyPressed->code == sf::Keyboard::Key::K || keyPressed->code == sf::Keyboard::Key::G) {
             triggerAttack(AttackInput::HEAVY, player, mouseWorld);
@@ -92,6 +94,15 @@ void CombatSystem::handleInput(const std::optional<sf::Event>& event, Player& pl
                 tryRetrieveWeapon(player);
             }
         }
+    }
+}
+
+void CombatSystem::registerJump() {
+    if (_comboResetTimer > 0.0f && !_comboHistory.empty()) {
+        if (_comboHistory.back() != "j") {
+            _comboHistory.push_back("j");
+        }
+        _comboResetTimer = std::max(_comboResetTimer, 0.85f);
     }
 }
 
@@ -119,7 +130,8 @@ AttackAnimType CombatSystem::resolveAttackAnimType(const std::string& attackType
         return AttackAnimType::SWEEP;
     }
     if (comboName.find("DIVE SLAM") != std::string::npos || comboName.find("GROUND BOUNCE SLAM") != std::string::npos || 
-        attackType == "adw2" || attackType == "addw2") {
+        comboName.find("dw1-j-adw1") != std::string::npos || comboName.find("SKY HOOK") != std::string::npos ||
+        attackType == "adw1" || attackType == "adw2" || attackType == "addw2") {
         return AttackAnimType::DIVE_SLAM;
     }
     if (comboName.find("AIR PUSH") != std::string::npos || comboName.find("AIR JUGGLE") != std::string::npos || 
@@ -402,6 +414,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     }
     _comboHistory.push_back(attackType);
     _comboResetTimer = 0.42f; // Короткое окно продолжения комбо цепочки
+    if (player.hasWeapon() && (attackType == "dw1" || attackType == "ddw1")) {
+        _comboResetTimer = 0.85f; // Больше времени для прыжка и продолжения серии в воздухе
+    }
 
     auto tokenMatches = [](const std::string& actual, const std::string& expected) -> bool {
         if (actual == expected) return true;
@@ -416,6 +431,7 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         if ((actual == "af2" && expected == "a2") || (actual == "a2" && expected == "af2")) return true;
         if (actual == "f1" && expected == "1") return true;
         if ((actual == "addw2" && expected == "adw2") || (actual == "adw2" && expected == "addw2")) return true;
+        if ((actual == "addw1" && expected == "adw1") || (actual == "adw1" && expected == "addw1")) return true;
         if ((actual == "dw1" || actual == "ddw1") && (expected == "db1" || expected == "dw1" || expected == "ddw1")) return true;
         if (actual == "db1" && (expected == "dw1" || expected == "ddw1")) return true;
         if ((actual == "u1" && (expected == "up1" || expected == "u1")) || (actual == "up1" && (expected == "u1" || expected == "up1"))) return true;
@@ -425,12 +441,39 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     };
 
     auto endsWith = [this, &tokenMatches](const std::vector<std::string>& seq) -> bool {
-        if (_comboHistory.size() < seq.size()) return false;
-        size_t start = _comboHistory.size() - seq.size();
-        for (size_t i = 0; i < seq.size(); ++i) {
-            if (!tokenMatches(_comboHistory[start + i], seq[i])) return false;
+        if (_comboHistory.size() >= seq.size()) {
+            size_t start = _comboHistory.size() - seq.size();
+            bool match = true;
+            for (size_t i = 0; i < seq.size(); ++i) {
+                if (!tokenMatches(_comboHistory[start + i], seq[i])) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
         }
-        return true;
+
+        // Гибкое сопоставление комбо с прыжками (пропускаем 'j', если игрок прыгнул в тайминг)
+        std::vector<std::string> histNoJ;
+        for (const auto& s : _comboHistory) {
+            if (s != "j") histNoJ.push_back(s);
+        }
+        std::vector<std::string> seqNoJ;
+        for (const auto& s : seq) {
+            if (s != "j") seqNoJ.push_back(s);
+        }
+        if (seqNoJ.size() > 1 && histNoJ.size() >= seqNoJ.size()) {
+            size_t start = histNoJ.size() - seqNoJ.size();
+            bool match = true;
+            for (size_t i = 0; i < seqNoJ.size(); ++i) {
+                if (!tokenMatches(histNoJ[start + i], seqNoJ[i])) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
     };
 
     // ==========================================
@@ -438,9 +481,10 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     // ==========================================
     const ComboEntry* matchedCombo = nullptr;
     for (const auto& entry : CombatConfig::getCombos()) {
-        // Разделение комбо: 12f1, b21u2, 121, db1u1 — оружие, остальное — руки
+        // Разделение комбо: 12f1, b21u2, 121, db1u1, dw1jadw1 — оружие, остальное — руки
         bool isWeaponCombo = (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21" ||
-                              entry.id == "121" || entry.id == "db1u1" || entry.id == "db1up1" || entry.id == "b1u1");
+                              entry.id == "121" || entry.id == "db1u1" || entry.id == "db1up1" || entry.id == "b1u1" ||
+                              entry.id == "dw1jadw1" || entry.id == "dw1adw1");
         if (player.hasWeapon()) {
             if (!isWeaponCombo && entry.id != "12") {
                 continue; // С оружием в руках рукопашные комбо заблокированы
@@ -484,6 +528,18 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         stats = matchedCombo->stats;
     } else {
         stats = CombatConfig::getBaseAttack(attackType);
+        if (player.hasWeapon() && (attackType == "dw1" || attackType == "ddw1")) {
+            stats.damage = 3.2f;
+            stats.knockX = 50.0f;
+            stats.knockY = -440.0f;
+            stats.playerRecovery = 0.16f;
+            stats.enemyStun = 0.55f;
+            stats.whiffStun = 0.22f;
+            stats.activeTime = 0.14f;
+            stats.lunge = 6.0f;
+            stats.displayName = "WEAPON STOMP & POP-UP!";
+            stats.color = sf::Color(255, 175, 40);
+        }
     }
 
     _attackTimer = stats.activeTime;
@@ -515,6 +571,13 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     }
     SoundManager::get().playAttack(attackType, comboPrefix, inAir);
 
+    if (player.hasWeapon() && (attackType == "dw1" || attackType == "ddw1")) {
+        _empoweredShockwaves.push_back({sf::Vector2f(player.position.x + _attackDirection * 20.0f, player.position.y), 8.0f, 65.0f, 0.28f, 0.28f, sf::Color(255, 175, 40)});
+        _shakeTimer = 0.12f;
+        _shakeIntensity = 5.0f;
+        SoundManager::get().play("adw2", 65.0f);
+    }
+
     // Если комбо повторено 2 раза подряд — штрафной стан-лок игрока
     if (spamStunTriggered) {
         player.triggerStun(0.75f);
@@ -541,6 +604,12 @@ void CombatSystem::update(float dt, Player& player, std::vector<Enemy>& enemies)
 }
 
 void CombatSystem::updateInternal(float dt, Player& player, const std::vector<Enemy*>& enemiesList) {
+    bool isGroundedNow = player.isOnGround();
+    if (_wasGroundedLastFrame && !isGroundedNow && player.velocity.y < -120.0f) {
+        registerJump();
+    }
+    _wasGroundedLastFrame = isGroundedNow;
+
     if (_attackCooldown > 0.0f) {
         _attackCooldown -= dt;
     }
@@ -646,6 +715,16 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             hbw = 70.0f;
             hbh = 70.0f;
             hby = player.position.y - 42.0f;
+        } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || _comboDisplayName.find("SKY HOOK") != std::string::npos || _currentAttackType == "adw1") {
+            // Удар под себя с зацепом в воздухе (adw1 / dw1jadw1)
+            hbw = 85.0f;
+            hbh = 70.0f;
+            hby = player.position.y - 10.0f;
+        } else if (player.hasWeapon() && (_currentAttackType == "dw1" || _comboDisplayName.find("STOMP") != std::string::npos)) {
+            // Топот булавой по земле
+            hbw = 90.0f;
+            hbh = 50.0f;
+            hby = player.position.y - 12.0f;
         } else if (_comboDisplayName.find("SLAM") != std::string::npos || _comboDisplayName.find("THROW") != std::string::npos) {
             hbw = 75.0f;
             hbh = 60.0f;
@@ -763,6 +842,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                         _comboDisplayName.find("b2-1-u2") != std::string::npos ||
                                         _comboDisplayName.find("b21u2") != std::string::npos ||
                                         _comboDisplayName.find("SKY LAUNCHER") != std::string::npos ||
+                                        _comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
+                                        _comboDisplayName.find("SKY HOOK") != std::string::npos ||
                                         _comboDisplayName.find("a1-a2") != std::string::npos)) {
                         isFinisher = true;
                     }
@@ -833,6 +914,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                             _comboDisplayName.find("GROUND BOUNCE SLAM") != std::string::npos ||
                                             _comboDisplayName.find("1-1-2") != std::string::npos ||
                                             _comboDisplayName.find("1-f2-d1") != std::string::npos ||
+                                            _comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
+                                            _comboDisplayName.find("SKY HOOK") != std::string::npos ||
                                             _comboDisplayName.find("a1-a2") != std::string::npos)) {
                             isFinisher = true;
                         }
@@ -874,6 +957,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                                 _comboDisplayName.find("db1-u1") != std::string::npos ||
                                                 _comboDisplayName.find("db1u1") != std::string::npos ||
                                                 _comboDisplayName.find("SKY POP-UP") != std::string::npos ||
+                                                _comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
+                                                _comboDisplayName.find("SKY HOOK") != std::string::npos ||
                                                 _comboDisplayName.find("UNIQUE") != std::string::npos;
                         if (isUniqueFinisher) {
                             if (Arena::getActive()) {
@@ -887,6 +972,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                     _comboDisplayName.find("DIVE SLAM") != std::string::npos) {
                                     // a1a1adw2 / a1adw2 (a1s2) бьет вниз по диагонали вперед прямо в пол
                                     finisherForceDir = sf::Vector2f(dirX * 0.707f, 0.707f);
+                                } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || 
+                                           _comboDisplayName.find("SKY HOOK") != std::string::npos) {
+                                    // dw1-j-adw1 подброс булавой строго вверх в небо
+                                    finisherForceDir = sf::Vector2f(dirX * 0.15f, -0.99f);
                                 } else if (_comboDisplayName.find("1-1-b2") != std::string::npos || 
                                            _comboDisplayName.find("BACK THROW") != std::string::npos) {
                                     // 1-1-b2 бросок назад и вверх
@@ -1002,6 +1091,32 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     enemy.velocity.y = 0.0f;
                 }
 
+                // Особая логика комбо dw1jadw1 (зацеп булавой в воздухе и подброс высоко в небо):
+                if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
+                    _comboDisplayName.find("SKY HOOK") != std::string::npos) {
+                    enemy.velocity.x = _attackDirection * 80.0f;
+                    enemy.velocity.y = -520.0f;
+                    enemy.triggerStun(0.50f);
+                    player.setAirSuspended(true);
+                    _airSuspendedRemaining = 0.25f;
+                    player.velocity.y = -60.0f; // Легкий подскок игрока в воздухе
+
+                    _empoweredShockwaves.push_back({enemy.position, 10.0f, 75.0f, 0.32f, 0.32f, sf::Color(255, 170, 40)});
+                    for (int i = 0; i < 20; ++i) {
+                        HitParticle p;
+                        p.position = enemy.position;
+                        float angle = (-90.0f + static_cast<float>(_rng() % 70) - 35.0f) * 3.14159f / 180.0f;
+                        float spd = 200.0f + static_cast<float>(_rng() % 160);
+                        p.velocity = {std::cos(angle) * spd, std::sin(angle) * spd};
+                        p.color = sf::Color(255, 190, 50);
+                        p.size = 3.2f;
+                        p.lifetime = 0.35f;
+                        _hitParticles.push_back(p);
+                    }
+                    _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -55.0f),
+                                                    "★ SKY HOOK LAUNCH! ★", sf::Color(255, 185, 45), 0.85f, 0.85f, 1.3f, 255.0f});
+                }
+
                 // Особая логика импульсов комбо: берется строго из KV таблицы баланса (_knockX, _knockY)
                 if (_comboDisplayName.find("1-2-df2") != std::string::npos ||
                     _comboDisplayName.find("12df2") != std::string::npos ||
@@ -1016,6 +1131,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     _comboDisplayName.find("b2-1-u2") != std::string::npos ||
                     _comboDisplayName.find("b21u2") != std::string::npos ||
                     _comboDisplayName.find("SKY LAUNCHER") != std::string::npos ||
+                    _comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
+                    _comboDisplayName.find("SKY HOOK") != std::string::npos ||
                     _comboDisplayName.find("COMBO 1-2:") != std::string::npos ||
                     _comboDisplayName.find("b2-1") != std::string::npos ||
                     _currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos) {
@@ -1568,6 +1685,12 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
         if (_comboDisplayName.find("UPPERCUT") != std::string::npos) {
             topY = midY - 30.0f;
             botY = midY + 10.0f;
+        } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || _comboDisplayName.find("SKY HOOK") != std::string::npos || _currentAttackType == "adw1") {
+            topY = midY + 20.0f;
+            botY = midY - 25.0f;
+        } else if (player.hasWeapon() && (_currentAttackType == "dw1" || _comboDisplayName.find("STOMP") != std::string::npos)) {
+            topY = midY - 12.0f;
+            botY = midY + 22.0f;
         } else if (_comboDisplayName.find("SLAM") != std::string::npos || _comboDisplayName.find("THROW") != std::string::npos) {
             topY = midY - 10.0f;
             botY = midY + 30.0f;
@@ -1669,7 +1792,7 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
         _hint1Text.emplace(_font, toSfString("[ЛКМ/J]: 1 | [ПКМ/K]: 2 | [Q]: Контр-атака | [Shift]: Рывок/Уворот | [Tab]: ИИ | [F5]: КВ/Карта | [T]: Атака"), 13);
         _hint1Text->setFillColor(sf::Color(220, 220, 235, 210));
 
-        _hint2Text.emplace(_font, toSfString("Комбо: 111 | 222 | 11b2 (бросок назад) | 112 | 1f2d1 | 21db1 (подсечка) | a1a2 | a1a1adw2 | a1adw2 | a2ad1"), 13);
+        _hint2Text.emplace(_font, toSfString("Комбо: 111 | 222 | 11b2 (бросок назад) | 112 | 1f2d1 | 21db1 | dw1-j-adw1 (топот+крюк) | a1a2 | a1a1adw2"), 13);
         _hint2Text->setFillColor(sf::Color(255, 200, 110, 220));
 
         _pLabelText.emplace(_font, "", 11);
