@@ -111,6 +111,18 @@ void Enemy::setType(EnemyType type) {
         dummyLastGapFrames = 0;
         dummyHadFirstHit = false;
         dummyPopups.clear();
+        dummyNeedsBlockAfterStun = false;
+        dummyBlockHoldTimer = 0.0f;
+        if (dummyBlockMode == DummyBlockMode::HIGH) {
+            blockType = BlockType::HIGH;
+            isBlocking = true;
+        } else if (dummyBlockMode == DummyBlockMode::LOW) {
+            blockType = BlockType::LOW;
+            isBlocking = true;
+        } else {
+            blockType = BlockType::NONE;
+            isBlocking = false;
+        }
     }
     hp = maxHp;
     displayedHp = maxHp;
@@ -180,6 +192,19 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
         float effectiveStun = blockDefended ? 0.14f : (stunTime * stunMultiplier);
         if (blockDefended) {
             blockStunTimer = 0.14f;
+            if (dummyBlockMode == DummyBlockMode::AFTER_HIT) {
+                // Если удар заблокирован в окне блока — продолжаем удерживать блок на 1с
+                dummyBlockHoldTimer = 1.0f;
+            }
+        } else {
+            if (dummyBlockMode == DummyBlockMode::AFTER_HIT) {
+                // Чистое попадание / пробитие блока: сбрасываем блок и взводим флаг
+                // "поднять блок на 1с ровно по окончании этого стана"
+                isBlocking = false;
+                blockType = BlockType::NONE;
+                dummyBlockHoldTimer = 0.0f;
+                dummyNeedsBlockAfterStun = true;
+            }
         }
 
         // Расчет гэпа между ударами в кадрах (при 60 FPS):
@@ -605,13 +630,52 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     blockType = BlockType::HIGH;
                 }
                 isBlocking = true;
+            } else if (dummyBlockMode == DummyBlockMode::AFTER_HIT) {
+                // Режим "Блок после удара / в окно"
+                if (hurtTimer > 0.0f && blockStunTimer <= 0.0f) {
+                    // Пока манекен находится в стане от полученного удара — блок строго опущен
+                    isBlocking = false;
+                    blockType = BlockType::NONE;
+                    dummyBlockHoldTimer = 0.0f;
+                    dummyNeedsBlockAfterStun = true;
+                } else {
+                    // Стан закончился (или манекен в блок-стане)!
+                    if (dummyNeedsBlockAfterStun) {
+                        dummyNeedsBlockAfterStun = false;
+                        dummyBlockHoldTimer = 1.0f; // Поднимаем блок ровно на 1 секунду!
+                    }
+
+                    if (dummyBlockHoldTimer > 0.0f) {
+                        dummyBlockHoldTimer -= dt;
+                        if (dummyBlockHoldTimer <= 0.0f) {
+                            dummyBlockHoldTimer = 0.0f;
+                        }
+                    }
+
+                    if (dummyBlockHoldTimer > 0.0f || blockStunTimer > 0.0f) {
+                        isBlocking = true;
+                        isFacingLeft = (playerPos.x < position.x);
+                        if (playerPos.y > position.y + 15.0f) {
+                            blockType = BlockType::LOW;
+                        } else {
+                            blockType = BlockType::HIGH;
+                        }
+                    } else {
+                        isBlocking = false;
+                        blockType = BlockType::NONE;
+                    }
+                }
             } else {
                 blockType = BlockType::NONE;
                 isBlocking = false;
             }
         } else {
+            // В воздухе блок строго запрещен
             blockType = BlockType::NONE;
             isBlocking = false;
+            if (hurtTimer > 0.0f) {
+                dummyNeedsBlockAfterStun = true;
+            }
         }
 
         if (dummyResetTimer > 0.0f) {
@@ -745,6 +809,16 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
 
     if (hurtTimer > 0.0f) {
         hurtTimer -= dt;
+        if (hurtTimer <= 0.0f) {
+            hurtTimer = 0.0f;
+            if (enemyType == EnemyType::DUMMY && dummyBlockMode == DummyBlockMode::AFTER_HIT && isOnGround && dummyNeedsBlockAfterStun) {
+                dummyNeedsBlockAfterStun = false;
+                dummyBlockHoldTimer = 1.0f;
+                isBlocking = true;
+                isFacingLeft = (playerPos.x < position.x);
+                blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
+            }
+        }
         attackState = EnemyAttackState::IDLE;
         attackStateTimer = 0.0f;
         if (hurtTimer > 0.3f) {
@@ -2275,6 +2349,14 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         isBlocking = false;
         blockType = BlockType::NONE;
         blockHoldTimer = 0.0f;
+    } else {
+        if (enemyType == EnemyType::DUMMY && dummyBlockMode == DummyBlockMode::AFTER_HIT && dummyNeedsBlockAfterStun && hurtTimer <= 0.0f) {
+            dummyNeedsBlockAfterStun = false;
+            dummyBlockHoldTimer = 1.0f;
+            isBlocking = true;
+            isFacingLeft = (playerPos.x < position.x);
+            blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
+        }
     }
 }
 

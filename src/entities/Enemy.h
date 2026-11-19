@@ -35,7 +35,8 @@ enum class DummyBlockMode {
     NONE = 0,         // Манекен без блока (принимает все удары)
     HIGH = 1,         // Верхний блок: защищает от Mid и Overhead, пробивается Low
     LOW = 2,          // Нижний блок: защищает от Mid и Low, пробивается Overhead
-    AUTO = 3          // Авто-реакция: анализирует положение игрока и блокирует в его сторону
+    AUTO = 3,         // Авто-реакция: анализирует положение игрока и блокирует в его сторону
+    AFTER_HIT = 4     // Блок после удара / в окно (нажимает блок и держит 1.0с по выходу из стана)
 };
 
 enum class AIStarterType {
@@ -190,8 +191,13 @@ public:
     bool isBlockStunned() const { return blockStunTimer > 0.0f; }
 
     DummyBlockMode dummyBlockMode = DummyBlockMode::NONE;
+    bool dummyNeedsBlockAfterStun = false;
+    float dummyBlockHoldTimer = 0.0f;
+
     void setDummyBlockMode(DummyBlockMode mode) {
         dummyBlockMode = mode;
+        dummyNeedsBlockAfterStun = false;
+        dummyBlockHoldTimer = 0.0f;
         if (enemyType == EnemyType::DUMMY) {
             if (mode == DummyBlockMode::HIGH) {
                 blockType = BlockType::HIGH;
@@ -199,7 +205,7 @@ public:
             } else if (mode == DummyBlockMode::LOW) {
                 blockType = BlockType::LOW;
                 isBlocking = true;
-            } else if (mode == DummyBlockMode::NONE) {
+            } else if (mode == DummyBlockMode::NONE || mode == DummyBlockMode::AFTER_HIT) {
                 blockType = BlockType::NONE;
                 isBlocking = false;
             }

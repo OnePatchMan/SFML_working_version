@@ -301,18 +301,21 @@ int main() {
                     // F6 - переключение режима блока манекена в тренировочном режиме
                     if (keyPressed->code == sf::Keyboard::Key::F6) {
                         if (isTrainingMode) {
-                            dummyBlockMode = (dummyBlockMode == DummyBlockMode::NONE) ? DummyBlockMode::HIGH :
-                                             (dummyBlockMode == DummyBlockMode::HIGH) ? DummyBlockMode::LOW :
-                                             (dummyBlockMode == DummyBlockMode::LOW)  ? DummyBlockMode::AUTO :
-                                                                                        DummyBlockMode::NONE;
+                            dummyBlockMode = (dummyBlockMode == DummyBlockMode::NONE)      ? DummyBlockMode::HIGH :
+                                             (dummyBlockMode == DummyBlockMode::HIGH)      ? DummyBlockMode::LOW :
+                                             (dummyBlockMode == DummyBlockMode::LOW)       ? DummyBlockMode::AUTO :
+                                             (dummyBlockMode == DummyBlockMode::AUTO)      ? DummyBlockMode::AFTER_HIT :
+                                                                                             DummyBlockMode::NONE;
                             for (auto& e : enemies) {
                                 if (e.getType() == EnemyType::DUMMY) {
                                     e.setDummyBlockMode(dummyBlockMode);
                                 }
                             }
-                            const char* bName = (dummyBlockMode == DummyBlockMode::NONE) ? "БЕЗ БЛОКА" :
-                                                (dummyBlockMode == DummyBlockMode::HIGH) ? "ВЕРХНИЙ БЛОК (HIGH)" :
-                                                (dummyBlockMode == DummyBlockMode::LOW)  ? "НИЖНИЙ БЛОК (LOW)" : "АВТО-РЕАКЦИЯ";
+                            const char* bName = (dummyBlockMode == DummyBlockMode::NONE)      ? "БЕЗ БЛОКА" :
+                                                (dummyBlockMode == DummyBlockMode::HIGH)      ? "ВЕРХНИЙ БЛОК (HIGH)" :
+                                                (dummyBlockMode == DummyBlockMode::LOW)       ? "НИЖНИЙ БЛОК (LOW)" :
+                                                (dummyBlockMode == DummyBlockMode::AUTO)      ? "АВТО-РЕАКЦИЯ" :
+                                                                                                "БЛОК ПОСЛЕ УДАРА / В ОКНО (1.0с)";
                             std::cout << "[TRAINING] Режим блока манекена: " << bName << std::endl;
                         }
                     }
@@ -500,7 +503,7 @@ int main() {
             // Информационная панель режима тренировки (вверху по центру экрана)
             if (isTrainingMode && combat.getFont()) {
                 const sf::Font& font = *combat.getFont();
-                float barW = 580.0f;
+                float barW = 640.0f;
                 float barH = 30.0f;
                 float barX = winSize.x * 0.5f - barW * 0.5f;
                 float barY = 12.0f;
@@ -512,9 +515,11 @@ int main() {
                 banner.setOutlineColor(sf::Color(55, 195, 125, 220));
                 window.draw(banner);
 
-                std::string blockStr = (dummyBlockMode == DummyBlockMode::NONE) ? "БЕЗ БЛОКА" :
-                                       (dummyBlockMode == DummyBlockMode::HIGH) ? "ВЕРХНИЙ БЛОК" :
-                                       (dummyBlockMode == DummyBlockMode::LOW)  ? "НИЖНИЙ БЛОК" : "АВТО-РЕАКЦИЯ";
+                std::string blockStr = (dummyBlockMode == DummyBlockMode::NONE)      ? "БЕЗ БЛОКА" :
+                                       (dummyBlockMode == DummyBlockMode::HIGH)      ? "ВЕРХНИЙ БЛОК" :
+                                       (dummyBlockMode == DummyBlockMode::LOW)       ? "НИЖНИЙ БЛОК" :
+                                       (dummyBlockMode == DummyBlockMode::AUTO)      ? "АВТО-РЕАКЦИЯ" :
+                                                                                       "ПОСЛЕ УДАРА (1с)";
                 std::string infoStr = "РЕЖИМ ТРЕНИРОВКИ  |  Манекен: Бессмертный  |  [F6] Блок: " + blockStr + "  |  [Backspace] Сброс";
                 sf::Text bannerText(font, toSfString(infoStr), 13);
                 bannerText.setFillColor(sf::Color(215, 255, 230));
