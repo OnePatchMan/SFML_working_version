@@ -5029,6 +5029,92 @@ int main() {
         std::cout << "-> PASSED: Bot Post-Combo Freeze Fix verified 100%!" << std::endl;
     }
 
+    // =========================================================================
+    // TEST 70: FORBID AIR BLOCK & ALL AIR ATTACKS ARE OVERHEADS
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 70] Testing Air Block Forbidden & All Air Attacks Overheads..." << std::endl;
+        CombatSystem combat;
+        Player player(arena.getSpawnPosition());
+        player.hp = 100.0f;
+        player.maxHp = 100.0f;
+
+        // 1. Player Air Block is Strictly Forbidden
+        player.setAirborneForTest(true); // Player in air
+        assert(!player.isOnGround());
+
+        player.setBlockType(BlockType::HIGH);
+        assert(!player.isBlocking());
+        assert(player.getBlockType() == BlockType::NONE);
+
+        player.setBlocking(true);
+        assert(!player.isBlocking());
+        assert(player.getBlockType() == BlockType::NONE);
+
+        // Taking damage in air does not reduce damage even if an attempt to block was made
+        player.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID);
+        assert(std::abs(player.hp - 80.0f) < 0.01f); // Full 20 dmg taken!
+        std::cout << "-> Player air block strictly forbidden: full damage taken in air!" << std::endl;
+
+        // Land player
+        player.reset(arena.getSpawnPosition(), false);
+        player.setAirborneForTest(false);
+        assert(player.isOnGround());
+
+        // 2. Enemy Air Block is Strictly Forbidden
+        Enemy enemy({player.position.x + 50.0f, player.position.y});
+        enemy.maxHp = 100.0f;
+        enemy.hp = 100.0f;
+        enemy.isOnGround = false; // Enemy in air
+
+        enemy.setBlockType(BlockType::HIGH);
+        assert(!enemy.isBlocking);
+        assert(enemy.getBlockType() == BlockType::NONE);
+
+        enemy.setBlocking(true);
+        assert(!enemy.isBlocking);
+        assert(enemy.getBlockType() == BlockType::NONE);
+
+        // Taking damage in air does not reduce damage
+        enemy.takeDamage(30.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID);
+        assert(std::abs(enemy.hp - 70.0f) < 0.01f); // Full 30 dmg taken in air!
+        std::cout << "-> Enemy air block strictly forbidden: full damage taken in air!" << std::endl;
+
+        // 3. All Air Attacks are Overheads (penetrate LOW block)
+        enemy.isOnGround = true; // Enemy on ground
+        enemy.hp = 100.0f;
+        enemy.setBlockType(BlockType::LOW); // Enemy in LOW block
+        assert(enemy.getBlockType() == BlockType::LOW);
+
+        // Player attacks from air (e.g. a1 or inAir) -> Must be OVERHEAD!
+        player.setAirborneForTest(true);
+        assert(!player.isOnGround());
+        triggerLight(combat, player); // Air light attack (a1)
+        assert(combat.getCurrentHitLevel() == HitLevel::OVERHEAD);
+        std::cout << "-> Verified player air attack getCurrentHitLevel() == HitLevel::OVERHEAD!" << std::endl;
+
+        // Enemy in LOW block takes hit from player air attack (OVERHEAD penetrates LOW block!)
+        enemy.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, combat.getCurrentHitLevel());
+        assert(std::abs(enemy.hp - 80.0f) < 0.01f); // Full 20 dmg taken because OVERHEAD penetrates LOW block!
+        std::cout << "-> Player air attack (OVERHEAD) penetrated enemy LOW block!" << std::endl;
+
+        // 4. Enemy Air Attack is Overhead (penetrates player LOW block)
+        player.reset(arena.getSpawnPosition(), false);
+        player.setAirborneForTest(false);
+        player.setBlockType(BlockType::LOW); // Player in LOW block on ground
+        assert(player.getBlockType() == BlockType::LOW);
+
+        enemy.isOnGround = false; // Enemy in air attacking player
+        HitLevel enemyAirHitLevel = enemy.getCurrentAttackHitLevel();
+        assert(enemyAirHitLevel == HitLevel::OVERHEAD);
+
+        player.takeDamage(25.0f, 0.0f, 0.0f, 0.0f, enemyAirHitLevel);
+        assert(std::abs(player.hp - 75.0f) < 0.01f); // Full 25 dmg taken!
+        std::cout << "-> Enemy air attack (OVERHEAD) penetrated player LOW block!" << std::endl;
+
+        std::cout << "-> PASSED: Air Block Forbidden & All Air Attacks Overheads verified 100%!" << std::endl;
+    }
+
     std::cout << "\n======================================================" << std::endl;
     std::cout << "ALL DIRECTIONAL COMBOS & BALANCING TESTS PASSED 100%!" << std::endl;
     std::cout << "======================================================" << std::endl;

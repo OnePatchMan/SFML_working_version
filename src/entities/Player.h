@@ -74,6 +74,7 @@ public:
     }
 
     bool isOnGround() const { return _isOnGround; }
+    void setAirborneForTest(bool airborne) { _isOnGround = !airborne; if (airborne) _blockType = BlockType::NONE; }
     bool isFacingRight() const { return _animation.isFacingRight(); }
     bool isDashing() const { return _dashTimer > 0.0f; }
     void cancelDash() { _dashTimer = 0.0f; }
@@ -103,11 +104,23 @@ public:
     bool hasWeapon() const { return _hasWeapon; }
     void setHasWeapon(bool val) { _hasWeapon = val; }
 
-    // Система защиты / блока (верхний и нижний блок, снижение урона на 80%, удержание F/E)
-    BlockType getBlockType() const { return _blockType; }
-    void setBlockType(BlockType bt) { _blockType = bt; }
-    bool isBlocking() const { return _blockType != BlockType::NONE; }
-    void setBlocking(bool b) { _blockType = b ? BlockType::HIGH : BlockType::NONE; }
+    // Система защиты / блока (верхний и нижний блок, снижение урона на 80%, удержание F/E, строго на земле)
+    BlockType getBlockType() const { return _isOnGround ? _blockType : BlockType::NONE; }
+    void setBlockType(BlockType bt) {
+        if (!_isOnGround && bt != BlockType::NONE) {
+            _blockType = BlockType::NONE;
+            return;
+        }
+        _blockType = bt;
+    }
+    bool isBlocking() const { return _isOnGround && (_blockType != BlockType::NONE); }
+    void setBlocking(bool b) {
+        if (!_isOnGround && b) {
+            _blockType = BlockType::NONE;
+            return;
+        }
+        _blockType = b ? BlockType::HIGH : BlockType::NONE;
+    }
     bool isBlockStunned() const { return _blockStunTimer > 0.0f; }
     float getBlockStunTimer() const { return _blockStunTimer; }
     void triggerBlockStun(float dur = 0.14f) { _blockStunTimer = dur; }
@@ -167,7 +180,7 @@ private:
 
     void syncAllAnimations(const sf::Color& color);
 
-    bool _isOnGround = false;
+    bool _isOnGround = true; // С момента спавна персонаж стоит на земле, обновляется Arena коллизией
     bool _isAirSuspended = false;
     bool _facingLocked = false;
     float _turnDelayTimer = 0.0f;
@@ -179,6 +192,7 @@ private:
     float _simulatedVerticalDir = 0.0f;
     float _stunTimer = 0.0f;
     bool _isJuggledByEnemy = false;
+    bool _forceAirborneForTest = false;
 
     float _dashTimer = 0.0f;
     float _dashWindowTimer = 0.0f;

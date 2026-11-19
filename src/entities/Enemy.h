@@ -153,12 +153,32 @@ public:
     float counterStanceTimer = 0.0f;
     float counterCooldownTimer = 0.0f;
 
-    // Система защиты / блока бота (верхний и нижний блок, снижает входящий урон на 80%)
+    // Система защиты / блока бота (верхний и нижний блок, снижает входящий урон на 80%, строго на земле)
     bool isBlocking = false;
     BlockType blockType = BlockType::NONE;
-    BlockType getBlockType() const { return (blockType != BlockType::NONE) ? blockType : (isBlocking ? BlockType::HIGH : BlockType::NONE); }
-    void setBlockType(BlockType bt) { blockType = bt; isBlocking = (bt != BlockType::NONE); }
-    void setBlocking(bool b) { isBlocking = b; blockType = b ? BlockType::HIGH : BlockType::NONE; }
+    bool isOnGround = true; // Обновляется Arena коллизией; true по умолчанию в тестах
+    BlockType getBlockType() const { 
+        if (!isOnGround) return BlockType::NONE;
+        return (blockType != BlockType::NONE) ? blockType : (isBlocking ? BlockType::HIGH : BlockType::NONE); 
+    }
+    void setBlockType(BlockType bt) { 
+        if (!isOnGround && bt != BlockType::NONE) {
+            blockType = BlockType::NONE;
+            isBlocking = false;
+            return;
+        }
+        blockType = bt; 
+        isBlocking = (bt != BlockType::NONE); 
+    }
+    void setBlocking(bool b) { 
+        if (!isOnGround && b) {
+            isBlocking = false;
+            blockType = BlockType::NONE;
+            return;
+        }
+        isBlocking = b; 
+        blockType = b ? BlockType::HIGH : BlockType::NONE; 
+    }
     float blockStunTimer = 0.0f;
     bool isBlockStunned() const { return blockStunTimer > 0.0f; }
 
@@ -176,7 +196,10 @@ public:
     float currentAttackStun = 0.18f;
     HitLevel currentAttackHitLevel = HitLevel::MID;
     bool currentAttackIsBackHit = false;
-    HitLevel getCurrentAttackHitLevel() const { return currentAttackHitLevel; }
+    HitLevel getCurrentAttackHitLevel() const { 
+        if (!isOnGround || currentAttackIsDiveSlam) return HitLevel::OVERHEAD;
+        return currentAttackHitLevel; 
+    }
     bool getCurrentAttackIsBackHit() const { return currentAttackIsBackHit; }
     bool currentAttackIsDiveSlam = false;
     float currentHbw = 55.0f;

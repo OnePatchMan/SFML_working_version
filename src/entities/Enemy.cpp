@@ -218,7 +218,7 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
         }
     }
 
-    bool canBlockNow = (isBlocking || blockType != BlockType::NONE) && (hurtTimer <= 0.0f || blockStunTimer > 0.0f);
+    bool canBlockNow = isOnGround && (isBlocking || blockType != BlockType::NONE) && (hurtTimer <= 0.0f || blockStunTimer > 0.0f);
     bool blockDefended = false;
     BlockType curBlock = getBlockType();
 
@@ -858,6 +858,16 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                 triggerDodge(dir); // Стремительный додж сквозь игрока за спину!
                             } else if (canCounter && counterCooldownTimer <= 0.0f && distToPlayer <= ecfg.counter.triggerDistance && playerIsAttacking) {
                                 triggerCounterStance();
+                            } else if (canBlock && isOnGround && blockHoldTimer <= 0.0f && playerIsAttacking && distToPlayer < 110.0f) {
+                                if (playerPos.y < position.y - 18.0f) {
+                                    blockType = BlockType::HIGH; // Атака сверху/в прыжке (оверхэд) -> верхний блок
+                                } else if (playerPos.y > position.y + 15.0f) {
+                                    blockType = BlockType::LOW;  // Атака снизу -> нижний блок
+                                } else {
+                                    blockType = (rand() % 100 < 35) ? BlockType::LOW : BlockType::HIGH;
+                                }
+                                isBlocking = true;
+                                blockHoldTimer = 0.35f;
                             }
                         } else if (distToPlayer > maxSpacing && vertDist < 90.0f) {
                             // Игрок разрывает дистанцию — дуэлянт агрессивно поджимает вперед
@@ -913,8 +923,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                     velocity.x = 0.0f; // Не спрыгивать спиной с обрыва
                                 }
 
-                                if (canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
-                                    blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
+                                if (isOnGround && canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
+                                    if (playerPos.y < position.y - 18.0f) {
+                                        blockType = BlockType::HIGH;
+                                    } else if (playerPos.y > position.y + 15.0f) {
+                                        blockType = BlockType::LOW;
+                                    } else {
+                                        blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
+                                    }
+                                    isBlocking = true;
                                     blockHoldTimer = 0.45f;
                                 }
 
@@ -932,8 +949,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                             } else {
                                 // Идеальная зона спейсинга (золотая середина): держит стойку, следит за игроком
                                 velocity.x = 0.0f;
-                                if (canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f && (rand() % 100 < 20)) {
-                                    blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
+                                if (isOnGround && canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f && (rand() % 100 < 20)) {
+                                    if (playerPos.y < position.y - 18.0f) {
+                                        blockType = BlockType::HIGH;
+                                    } else if (playerPos.y > position.y + 15.0f) {
+                                        blockType = BlockType::LOW;
+                                    } else {
+                                        blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
+                                    }
+                                    isBlocking = true;
                                     blockHoldTimer = 0.35f;
                                 }
                             }
@@ -942,8 +966,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     // 3. ПОВЕДЕНИЕ ЖИРНОГО ВРАГА (TANK):
                     // Медленный, тяжелая броня, при близком контакте может закрыться блоком
                     else if (enemyType == EnemyType::TANK) {
-                        if (distToPlayer <= 65.0f && vertDist < 50.0f && canBlock && blockHoldTimer <= 0.0f && (nextStarterChoice % 2 == 0)) {
-                            blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
+                        if (isOnGround && distToPlayer <= 65.0f && vertDist < 50.0f && canBlock && blockHoldTimer <= 0.0f && (nextStarterChoice % 2 == 0)) {
+                            if (playerPos.y < position.y - 18.0f) {
+                                blockType = BlockType::HIGH;
+                            } else if (playerPos.y > position.y + 15.0f) {
+                                blockType = BlockType::LOW;
+                            } else {
+                                blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
+                            }
+                            isBlocking = true;
                             blockHoldTimer = 0.45f;
                         }
                         if (distToPlayer > 55.0f) {
@@ -951,8 +982,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                             velocity.x = dir * stalkSpeed;
                         } else {
                             if (attackCooldown > 0.0f) {
-                                if (canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
-                                    blockType = BlockType::HIGH;
+                                if (isOnGround && canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
+                                    if (playerPos.y < position.y - 18.0f) {
+                                        blockType = BlockType::HIGH;
+                                    } else if (playerPos.y > position.y + 15.0f) {
+                                        blockType = BlockType::LOW;
+                                    } else {
+                                        blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
+                                    }
+                                    isBlocking = true;
                                     blockHoldTimer = 0.35f;
                                 }
                                 velocity.x = -dir * (baseSpeed * 0.30f); // Медленно держит дистанцию во время отката
@@ -2166,6 +2204,13 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
     }
 
+    // Финальная проверка нахождения на земле и строгий запрет блока в воздухе
+    isOnGround = arena.overlapsSolid(position.x, position.y + 1.5f, halfW, halfH, halfH);
+    if (!isOnGround) {
+        isBlocking = false;
+        blockType = BlockType::NONE;
+        blockHoldTimer = 0.0f;
+    }
 }
 
 void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
@@ -2279,26 +2324,36 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(pWave);
     }
 
-    // Энергетический щит защиты / блока бота (Верхний и Нижний блок)
-    if (blockType != BlockType::NONE) {
+    // Энергетический щит защиты / блока бота (Верхний и Нижний блок, строго на земле)
+    if (blockType != BlockType::NONE && isOnGround) {
         float shieldX = isFacingLeft ? (position.x - halfW - 6.0f) : (position.x + halfW + 6.0f);
         if (blockType == BlockType::HIGH) {
             // Верхний блок: щит на уровне корпуса и головы
             sf::RectangleShape shieldBar({6.0f, halfH * 2.0f});
             shieldBar.setOrigin({3.0f, halfH * 1.0f});
             shieldBar.setPosition({shieldX, position.y - 4.0f});
-            shieldBar.setFillColor(sf::Color(80, 200, 255, 200));
+            if (blockStunTimer > 0.0f) {
+                shieldBar.setFillColor(sf::Color(255, 255, 255, 240));
+                shieldBar.setOutlineColor(sf::Color(80, 220, 255, 255));
+            } else {
+                shieldBar.setFillColor(sf::Color(80, 200, 255, 200));
+                shieldBar.setOutlineColor(sf::Color(255, 255, 255, 230));
+            }
             shieldBar.setOutlineThickness(1.5f);
-            shieldBar.setOutlineColor(sf::Color(255, 255, 255, 230));
             window.draw(shieldBar);
         } else {
             // Нижний блок: приземистый щит на уровне ног и пола
             sf::RectangleShape shieldBar({8.0f, halfH * 1.3f});
             shieldBar.setOrigin({4.0f, halfH * 0.4f});
             shieldBar.setPosition({shieldX, position.y + 10.0f});
-            shieldBar.setFillColor(sf::Color(255, 150, 50, 200));
+            if (blockStunTimer > 0.0f) {
+                shieldBar.setFillColor(sf::Color(255, 255, 255, 240));
+                shieldBar.setOutlineColor(sf::Color(255, 180, 0, 255));
+            } else {
+                shieldBar.setFillColor(sf::Color(255, 150, 50, 200));
+                shieldBar.setOutlineColor(sf::Color(255, 220, 100, 230));
+            }
             shieldBar.setOutlineThickness(1.5f);
-            shieldBar.setOutlineColor(sf::Color(255, 220, 100, 230));
             window.draw(shieldBar);
         }
     }

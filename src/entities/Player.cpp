@@ -87,6 +87,7 @@ void Player::reset(sf::Vector2f spawnPos, bool withWeapon) {
     position = spawnPos;
     velocity = {0.0f, 0.0f};
     _isOnGround = false;
+    _forceAirborneForTest = false;
     _isAirSuspended = false;
     _isJuggledByEnemy = false;
     _coyoteTime = 0.0f;
@@ -140,9 +141,9 @@ bool Player::takeDamage(float amount, float knockX, float knockY, float stunTime
         }
     }
 
-    // Проверка эффективности блока
+    // Проверка эффективности блока (блок работает строго на земле!)
     bool blockDefended = false;
-    if (_blockType != BlockType::NONE && !hitFromBehind) {
+    if (_blockType != BlockType::NONE && _isOnGround && !hitFromBehind) {
         if (hitLevel == HitLevel::MID) {
             blockDefended = true; // Нейтральные атаки блокируются и верхним, и нижним блоком
         } else if (hitLevel == HitLevel::OVERHEAD) {
@@ -185,7 +186,9 @@ bool Player::takeDamage(float amount, float knockX, float knockY, float stunTime
     velocity.y = knockY;
     _stunTimer = stunTime;
     _isJuggledByEnemy = (knockY < 0.0f);
-    _isOnGround = false;
+    if (knockY < 0.0f) {
+        _isOnGround = false;
+    }
     _isAirSuspended = false;
     return true;
 }
@@ -378,7 +381,7 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
     }
 
     bool wantsBlock = (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::F) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E));
-    if (wantsBlock && _stunTimer <= 0.0f && _dashTimer <= 0.0f && !_isCounterStance && !_isSpotDodging) {
+    if (_isOnGround && wantsBlock && _stunTimer <= 0.0f && _dashTimer <= 0.0f && !_isCounterStance && !_isSpotDodging) {
         if (isHoldingDown()) {
             _blockType = BlockType::LOW;
         } else {
@@ -789,8 +792,8 @@ void Player::draw(sf::RenderWindow& window) {
         window.draw(parryLine);
     }
 
-    // Отрисовка защитного барьера блока (F / E: Верхний и Нижний блок)
-    if (_blockType != BlockType::NONE && !isDead) {
+    // Отрисовка защитного барьера блока (F / E: Верхний и Нижний блок, строго на земле)
+    if (_blockType != BlockType::NONE && _isOnGround && !isDead) {
         float dir = isFacingRight() ? 1.0f : -1.0f;
         if (_blockType == BlockType::HIGH) {
             // ВЕРХНИЙ БЛОК (стоя): щит на уровне корпуса и головы

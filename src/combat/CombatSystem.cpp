@@ -573,6 +573,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     _knockY = stats.knockY;
     _enemyStunTime = stats.enemyStun;
     _currentHitLevel = stats.hitLevel;
+    if (inAir || _isAirAttack || attackType.rfind("a", 0) == 0) {
+        _currentHitLevel = HitLevel::OVERHEAD; // Все воздушные атаки игрока — строго оверхэды
+    }
     _currentIsBackHit = stats.isBackHit;
     if (attackType == "b1" || attackType == "b2") {
         _currentIsBackHit = true;
@@ -883,9 +886,15 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     // Снижение стана (Hitstun Decay) уменьшает стан связующих ударов (финишеры сохраняют кинематику запуска)
                     float scaledStun   = isFinisher ? _enemyStunTime : (_enemyStunTime * _currentHitstunDecay);
 
+                    // Все воздушные атаки — строго оверхэды
+                    HitLevel pAttackHitLevel = _currentHitLevel;
+                    if (_isAirAttack || !player.isOnGround() || _currentAttackType.rfind("a", 0) == 0) {
+                        pAttackHitLevel = HitLevel::OVERHEAD;
+                    }
+
                     // Наносим урон и импульс врагу с проверкой блока и добивания
-                    // Враг может заблокировать удар ТОЛЬКО если он уже блокирует или находится в блок-стане, но НЕ в чистом хитстане от ударов комбо!
-                    bool targetWasBlocking = enemy.isBlocking && (enemy.hurtTimer <= 0.0f || enemy.blockStunTimer > 0.0f);
+                    // Враг может заблокировать удар ТОЛЬКО если стоит на земле и уже блокирует или находится в блок-стане, но НЕ в чистом хитстане от ударов комбо!
+                    bool targetWasBlocking = enemy.isBlocking && enemy.isOnGround && (enemy.hurtTimer <= 0.0f || enemy.blockStunTimer > 0.0f);
                     bool hitFromBehind = _currentIsBackHit;
                     if (enemy.isFacingLeft && player.position.x > enemy.position.x + 5.0f) {
                         hitFromBehind = true;
@@ -895,17 +904,17 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                     bool blockSucceeded = false;
                     if (targetWasBlocking && !hitFromBehind) {
-                        if (_currentHitLevel == HitLevel::MID) {
+                        if (pAttackHitLevel == HitLevel::MID) {
                             blockSucceeded = true;
-                        } else if (_currentHitLevel == HitLevel::OVERHEAD) {
+                        } else if (pAttackHitLevel == HitLevel::OVERHEAD) {
                             if (enemy.getBlockType() == BlockType::HIGH) blockSucceeded = true;
-                        } else if (_currentHitLevel == HitLevel::LOW) {
+                        } else if (pAttackHitLevel == HitLevel::LOW) {
                             if (enemy.getBlockType() == BlockType::LOW) blockSucceeded = true;
                         }
                     }
 
                     bool targetWasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
-                    enemy.takeDamage(scaledDamage, _knockX, _knockY, scaledStun, _currentHitLevel, _currentIsBackHit, player.position);
+                    enemy.takeDamage(scaledDamage, _knockX, _knockY, scaledStun, pAttackHitLevel, _currentIsBackHit, player.position);
                     bool enemyJustDied = !targetWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f);
 
                     // Особые комбо-маркеры и эффекты при попадании усиленной атаки из идеального уворота
@@ -1366,8 +1375,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 _shakeTimer = 0.12f;
                 _shakeIntensity = 4.0f;
 
-                bool playerWasBlocking = player.isBlocking();
+                bool playerWasBlocking = player.isBlocking() && player.isOnGround();
                 HitLevel eHitLevel = enemy.getCurrentAttackHitLevel();
+                if (!enemy.isOnGround || enemy.currentAttackIsDiveSlam) {
+                    eHitLevel = HitLevel::OVERHEAD; // Все воздушные атаки врагов — строго оверхэды
+                }
                 bool eIsBack = enemy.getCurrentAttackIsBackHit();
                 bool hitPlayerFromBehind = eIsBack;
                 if (player.isFacingRight() && enemy.position.x < player.position.x - 5.0f) {

@@ -119,6 +119,7 @@ public:
     float getDamageScaling() const { return _currentDamageScaling; }
     float getHitstunDecay() const { return _currentHitstunDecay; }
     bool isEmpoweredStrikeActive() const { return _isEmpoweredStrike; }
+    HitLevel getCurrentHitLevel() const { return _currentHitLevel; }
     const std::vector<SpecialComboMarker>& getSpecialComboMarkers() const { return _specialComboMarkers; }
 
     const sf::FloatRect& getAttackHitbox() const { return _attackHitbox; }
