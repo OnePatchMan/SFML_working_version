@@ -5288,6 +5288,11 @@ int main() {
     {
         std::cout << "\n[TEST 73] Testing Fluorescent Lamp & Dynamic Lighting System..." << std::endl;
         Arena arena(80, 20);
+        for (int y = 0; y < arena.getHeight(); ++y) {
+            for (int x = 0; x < arena.getWidth(); ++x) {
+                if (arena.getTile(x, y) == 4) arena.setTile(x, y, 0);
+            }
+        }
         arena.setTile(10, 2, 4);
         arena.setTile(20, 2, 4);
         arena.scanLamps();
@@ -5329,8 +5334,14 @@ int main() {
         Player player(arena.getSpawnPosition());
         player.hp = 50.0f;
 
+        for (int y = 0; y < arena.getHeight(); ++y) {
+            for (int x = 0; x < arena.getWidth(); ++x) {
+                if (arena.getTile(x, y) == 4) arena.setTile(x, y, 0);
+            }
+        }
         arena.setTile(12, 3, 4);
         arena.scanLamps();
+        assert(!arena.getLamps().empty());
         arena.getLamps()[0].tag = "light_chamber";
         assert(arena.getLamps()[0].enabled);
 

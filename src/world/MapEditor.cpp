@@ -1699,15 +1699,15 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
     // 1. Верхняя панель инструментов
     sf::RectangleShape bar({winW, 118.0f});
     bar.setPosition({0.0f, 0.0f});
-    bar.setFillColor(sf::Color(10, 11, 14, 250));
-    bar.setOutlineColor(sf::Color(40, 44, 52, 220));
+    bar.setFillColor(sf::Color(18, 18, 22, 250));
+    bar.setOutlineColor(sf::Color(45, 45, 52, 220));
     bar.setOutlineThickness(1.0f);
     window.draw(bar);
 
     if (font) {
-        // Заголовок
+        // Заголовок - чистый белый текст
         sf::Text title(*font, toSfString("[ РЕДАКТОР КАРТ ]  (Tab/P - Тест с курсора | Ctrl+Z/Y - Undo/Redo | Ctrl+S / F7 - Сохранить)"), 16);
-        title.setFillColor(sf::Color(255, 215, 0));
+        title.setFillColor(sf::Color::White);
         title.setPosition({20.0f, 6.0f});
         window.draw(title);
 
@@ -1718,7 +1718,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
                                "Размер: " + std::to_string(arena.getWidth()) + "x" + std::to_string(arena.getHeight()) + " (Alt+Стрелки)    " +
                                "Зум: " + std::to_string(static_cast<int>(100.0f / _viewScale)) + "% (Z / C / Wheel)";
         sf::Text roomText(*font, toSfString(roomInfo), 13);
-        roomText.setFillColor(sf::Color(100, 220, 255));
+        roomText.setFillColor(sf::Color(220, 220, 230));
         roomText.setPosition({20.0f, 30.0f});
         window.draw(roomText);
 
@@ -1741,7 +1741,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
         toolsStr += "| Кисть: [B] " + std::to_string(_brushSize) + "x" + std::to_string(_brushSize);
 
         sf::Text toolsText(*font, toSfString(toolsStr), 13);
-        toolsText.setFillColor(sf::Color(220, 235, 255));
+        toolsText.setFillColor(sf::Color::White);
         toolsText.setPosition({20.0f, 54.0f});
         window.draw(toolsText);
 
@@ -1750,7 +1750,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
                             std::to_string(_undoStack.size()) + ") | Ctrl+C/V: Копия/Вставка | J: Дуга прыжка (" +
                             (_showJumpRuler ? "ВКЛ" : "ВЫКЛ") + ") | Ctrl+G: Сетка (" + (_showGrid ? "ВКЛ" : "ВЫКЛ") + ")";
         sf::Text hintText(*font, toSfString(hints), 12);
-        hintText.setFillColor(sf::Color(160, 185, 215));
+        hintText.setFillColor(sf::Color(200, 200, 210));
         hintText.setPosition({20.0f, 82.0f});
         window.draw(hintText);
 
@@ -1787,14 +1787,14 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
 
     sf::RectangleShape mmBg({mmW, mmH});
     mmBg.setPosition({mmX, mmY});
-    mmBg.setFillColor(sf::Color(8, 9, 12, 250));
-    mmBg.setOutlineColor(sf::Color(35, 40, 50, 220));
+    mmBg.setFillColor(sf::Color(18, 18, 22, 250));
+    mmBg.setOutlineColor(sf::Color(45, 45, 52, 220));
     mmBg.setOutlineThickness(1.5f);
     window.draw(mmBg);
 
     if (font) {
         sf::Text mmTitle(*font, toSfString("МИНИКАРТА (Клик для прыжка)"), 12);
-        mmTitle.setFillColor(sf::Color(160, 185, 215));
+        mmTitle.setFillColor(sf::Color::White);
         mmTitle.setPosition({mmX + 8.0f, mmY + 5.0f});
         window.draw(mmTitle);
     }
@@ -1865,19 +1865,19 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
 
     sf::RectangleShape palBg({palW, palH});
     palBg.setPosition({palX, palY});
-    palBg.setFillColor(sf::Color(10, 11, 14, 250));
-    palBg.setOutlineColor(sf::Color(40, 44, 52, 220));
+    palBg.setFillColor(sf::Color(18, 18, 22, 250));
+    palBg.setOutlineColor(sf::Color(45, 45, 52, 220));
     palBg.setOutlineThickness(1.5f);
     window.draw(palBg);
 
     if (font) {
         sf::Text palTitle(*font, toSfString("ПАЛИТРА И ГАЛЕРЕЯ КОМНАТ"), 13);
-        palTitle.setFillColor(sf::Color(255, 215, 0));
+        palTitle.setFillColor(sf::Color::White);
         palTitle.setPosition({palX + 10.0f, palY + 6.0f});
         window.draw(palTitle);
 
         sf::Text doorLabel(*font, toSfString("ЦЕЛЬ ДВЕРИ:"), 12);
-        doorLabel.setFillColor(_tool == EditorTool::DOOR ? sf::Color(0, 255, 255) : sf::Color(140, 180, 200));
+        doorLabel.setFillColor(sf::Color::White);
         doorLabel.setPosition({palX + 220.0f, palY + 6.0f});
         window.draw(doorLabel);
 
@@ -1988,8 +1988,8 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
         bool isSelected = (_tool == _paletteSprites[i].tool);
         sf::RectangleShape card({cardW, cardH});
         card.setPosition({cardX, cardY});
-        card.setFillColor(isSelected ? sf::Color(25, 30, 40) : sf::Color(14, 16, 20));
-        card.setOutlineColor(isSelected ? sf::Color(0, 220, 255) : sf::Color(35, 40, 50));
+        card.setFillColor(isSelected ? sf::Color(38, 38, 44) : sf::Color(22, 22, 26));
+        card.setOutlineColor(isSelected ? sf::Color::White : sf::Color(55, 55, 62));
         card.setOutlineThickness(isSelected ? 2.5f : 1.0f);
         window.draw(card);
 
@@ -2012,7 +2012,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
 
             if (!hotkeyStr.empty()) {
                 sf::Text hkTxt(*font, hotkeyStr, 10);
-                hkTxt.setFillColor(isSelected ? sf::Color(255, 235, 120) : sf::Color(140, 160, 180));
+                hkTxt.setFillColor(sf::Color::White);
                 hkTxt.setPosition({cardX + 4.0f, cardY + 3.0f});
                 window.draw(hkTxt);
             }
@@ -2074,7 +2074,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             std::string label = _paletteSprites[i].name;
             if (label.size() > 9) label = label.substr(0, 8) + ".";
             sf::Text cardTxt(*font, toSfString(label), 10);
-            cardTxt.setFillColor(isSelected ? sf::Color(255, 235, 120) : sf::Color(180, 195, 215));
+            cardTxt.setFillColor(sf::Color::White);
             cardTxt.setPosition({cardX + 4.0f, cardY + 56.0f});
             window.draw(cardTxt);
         }

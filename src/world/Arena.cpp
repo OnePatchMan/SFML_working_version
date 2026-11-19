@@ -2659,9 +2659,9 @@ void Arena::scanLamps() {
                 lamp.tileX = x;
                 lamp.tileY = y;
                 lamp.worldPos = {(x + 0.5f) * _tileSize, (y + 0.5f) * _tileSize};
-                lamp.radius = 480.0f;
+                lamp.radius = 850.0f;
                 lamp.intensity = 1.0f;
-                lamp.color = sf::Color(220, 240, 255);
+                lamp.color = sf::Color(230, 245, 255);
                 lamp.enabled = true;
                 lamp.flickering = false;
                 lamp.tag = "lamp_" + std::to_string(lampIndex++);
@@ -2689,9 +2689,9 @@ void Arena::addLamp(int tx, int ty, const std::string& tag, bool flickering) {
     lamp.tileX = tx;
     lamp.tileY = ty;
     lamp.worldPos = {(tx + 0.5f) * _tileSize, (ty + 0.5f) * _tileSize};
-    lamp.radius = 480.0f;
+    lamp.radius = 850.0f;
     lamp.intensity = 1.0f;
-    lamp.color = sf::Color(220, 240, 255);
+    lamp.color = sf::Color(230, 245, 255);
     lamp.enabled = true;
     lamp.flickering = flickering;
     lamp.tag = tag.empty() ? ("lamp_" + std::to_string(_lamps.size())) : tag;
@@ -2759,8 +2759,8 @@ void Arena::renderLighting(sf::RenderWindow& window, const sf::View& camera, sf:
         if (effectiveIntensity <= 0.01f) continue;
 
         sf::Vector2f sourcePos = {lamp.worldPos.x, lamp.worldPos.y + 6.0f};
-        float radX = lamp.radius * 1.1f;
-        float radY = lamp.radius * 1.35f;
+        float radX = lamp.radius * 1.0f;
+        float radY = lamp.radius * 1.55f;
 
         const int segments = 32;
         sf::VertexArray lightFan(sf::PrimitiveType::TriangleFan);
@@ -2776,7 +2776,7 @@ void Arena::renderLighting(sf::RenderWindow& window, const sf::View& camera, sf:
         for (int i = 0; i <= segments; ++i) {
             float angle = static_cast<float>(i) * (2.0f * 3.14159265f / segments);
             float dirY = std::sin(angle);
-            float currentRadY = (dirY > 0.0f) ? radY : (radY * 0.45f);
+            float currentRadY = (dirY > 0.0f) ? radY : (radY * 0.25f);
             float lx = sourcePos.x + std::cos(angle) * radX;
             float ly = sourcePos.y + dirY * currentRadY;
             lightFan.append({{lx, ly}, sf::Color(0, 0, 0, 255)});
@@ -2786,29 +2786,16 @@ void Arena::renderLighting(sf::RenderWindow& window, const sf::View& camera, sf:
         // Яркий точечный фокус вокруг лампы
         sf::VertexArray coreFan(sf::PrimitiveType::TriangleFan);
         coreFan.append({sourcePos, sf::Color(255, 255, 255, 255)});
-        float coreRad = 60.0f * effectiveIntensity;
+        float coreRad = 85.0f * effectiveIntensity;
         for (int i = 0; i <= 16; ++i) {
             float angle = static_cast<float>(i) * (2.0f * 3.14159265f / 16);
-            coreFan.append({{sourcePos.x + std::cos(angle) * coreRad * 1.8f, 
+            coreFan.append({{sourcePos.x + std::cos(angle) * coreRad * 2.2f, 
                              sourcePos.y + std::sin(angle) * coreRad * 0.8f}, sf::Color(0, 0, 0, 255)});
         }
         _lightmap.draw(coreFan, addStates);
     }
 
-    // 2. Персональная аура игрока (фонарик / костюм / оружие)
-    {
-        float pRadius = playerArmed ? 150.0f : 120.0f;
-        sf::VertexArray playerFan(sf::PrimitiveType::TriangleFan);
-        sf::Color pCol = playerArmed ? sf::Color(70, 110, 150, 255) : sf::Color(50, 60, 85, 255);
-        playerFan.append({playerPos, pCol});
-        const int pSegments = 24;
-        for (int i = 0; i <= pSegments; ++i) {
-            float angle = static_cast<float>(i) * (2.0f * 3.14159265f / pSegments);
-            playerFan.append({{playerPos.x + std::cos(angle) * pRadius,
-                              playerPos.y + std::sin(angle) * pRadius}, sf::Color(0, 0, 0, 255)});
-        }
-        _lightmap.draw(playerFan, addStates);
-    }
+    // 2. Персональная аура игрока удалена (свет излучается строго лампами)
 
     _lightmap.display();
 

@@ -515,9 +515,9 @@ int main() {
 
                 sf::RectangleShape banner({barW, barH});
                 banner.setPosition({barX, barY});
-                banner.setFillColor(sf::Color(11, 13, 17, 245));
+                banner.setFillColor(sf::Color(18, 18, 22, 245));
                 banner.setOutlineThickness(1.5f);
-                banner.setOutlineColor(sf::Color(65, 72, 85, 230));
+                banner.setOutlineColor(sf::Color(55, 55, 62, 230));
                 window.draw(banner);
 
                 std::string blockStr = (dummyBlockMode == DummyBlockMode::NONE)      ? "БЕЗ БЛОКА" :
@@ -527,7 +527,7 @@ int main() {
                                                                                        "ПОСЛЕ УДАРА (1с)";
                 std::string infoStr = "РЕЖИМ ТРЕНИРОВКИ  |  Манекен: Бессмертный  |  [F6] Блок: " + blockStr + "  |  [Backspace] Сброс";
                 sf::Text bannerText(font, toSfString(infoStr), 13);
-                bannerText.setFillColor(sf::Color(215, 255, 230));
+                bannerText.setFillColor(sf::Color::White);
                 sf::FloatRect tb = bannerText.getLocalBounds();
                 bannerText.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
                 bannerText.setPosition(sf::Vector2f(winSize.x * 0.5f, barY + barH * 0.5f));

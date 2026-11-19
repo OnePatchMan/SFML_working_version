@@ -3782,8 +3782,8 @@ void EditorApp::drawWorldLayoutUI() {
     // 1. Верхняя панель (высота 90px)
     sf::RectangleShape topBar({winW, 90.0f});
     topBar.setPosition({0.0f, 0.0f});
-    topBar.setFillColor(sf::Color(10, 11, 14, 250));
-    topBar.setOutlineColor(sf::Color(40, 44, 52, 220));
+    topBar.setFillColor(sf::Color(18, 18, 22, 250));
+    topBar.setOutlineColor(sf::Color(45, 45, 52, 220));
     topBar.setOutlineThickness(1.0f);
     _window.draw(topBar);
 
@@ -3791,46 +3791,46 @@ void EditorApp::drawWorldLayoutUI() {
         // Таб 1: Редактор комнат (активен)
         sf::RectangleShape tabWorld({240.0f, 38.0f});
         tabWorld.setPosition({20.0f, 10.0f});
-        tabWorld.setFillColor(sf::Color(35, 75, 115, 240));
-        tabWorld.setOutlineColor(sf::Color(255, 215, 0));
+        tabWorld.setFillColor(sf::Color(32, 32, 38, 240));
+        tabWorld.setOutlineColor(sf::Color::White);
         tabWorld.setOutlineThickness(2.0f);
         _window.draw(tabWorld);
 
         sf::Text tabWText(_font, toSfString("🌍 РЕДАКТОР КОМНАТ (F1)"), 13);
-        tabWText.setFillColor(sf::Color(255, 225, 90));
+        tabWText.setFillColor(sf::Color::White);
         tabWText.setPosition({32.0f, 20.0f});
         _window.draw(tabWText);
 
         // Таб 2: Редактор комнаты (клик переключает)
         sf::RectangleShape tabRoom({260.0f, 38.0f});
         tabRoom.setPosition({270.0f, 10.0f});
-        tabRoom.setFillColor(sf::Color(25, 32, 45, 210));
-        tabRoom.setOutlineColor(sf::Color(70, 90, 120));
+        tabRoom.setFillColor(sf::Color(22, 22, 26, 210));
+        tabRoom.setOutlineColor(sf::Color(55, 55, 62));
         tabRoom.setOutlineThickness(1.5f);
         _window.draw(tabRoom);
 
         sf::Text tabRText(_font, toSfString("✏ РЕДАКТОР КОМНАТЫ (F2)"), 13);
-        tabRText.setFillColor(sf::Color(180, 210, 240));
+        tabRText.setFillColor(sf::Color(200, 200, 210));
         tabRText.setPosition({282.0f, 20.0f});
         _window.draw(tabRText);
 
         // Кнопка: + Новая комната
         sf::RectangleShape btnNew({170.0f, 38.0f});
         btnNew.setPosition({540.0f, 10.0f});
-        btnNew.setFillColor(sf::Color(40, 60, 50, 220));
-        btnNew.setOutlineColor(sf::Color(80, 200, 120));
+        btnNew.setFillColor(sf::Color(26, 32, 28, 220));
+        btnNew.setOutlineColor(sf::Color(70, 110, 80));
         btnNew.setOutlineThickness(1.5f);
         _window.draw(btnNew);
 
         sf::Text btnNewText(_font, toSfString("+ Новая комната"), 13);
-        btnNewText.setFillColor(sf::Color(100, 255, 150));
+        btnNewText.setFillColor(sf::Color::White);
         btnNewText.setPosition({558.0f, 20.0f});
         _window.draw(btnNewText);
 
         // Правые кнопки: Зум [-] [%] [+] [Сброс] [F11]
         float rX = winW - 380.0f;
         sf::Text zoomLabel(_font, toSfString("Зум: " + std::to_string(static_cast<int>(100.0f / _viewScale)) + "%"), 13);
-        zoomLabel.setFillColor(sf::Color(160, 190, 225));
+        zoomLabel.setFillColor(sf::Color::White);
         zoomLabel.setPosition({rX, 20.0f});
         _window.draw(zoomLabel);
 
