@@ -2515,16 +2515,22 @@ int main() {
 
         // 3. Combos into block allowed, with intermediate stunlock on attacker after finisher
         CombatSystem combat;
-        Player attacker(arena.getSpawnPosition()); attacker.setHasWeapon(false);
-        Enemy blockingEnemy(arena.getSpawnPosition() + sf::Vector2f(35.0f, (Player::BOTTOM_OFFSET - Enemy::HALF_H)));
-        blockingEnemy.isBlocking = true;
+        float groundY = 19.0f * 64.0f;
+        Player attacker({arena.getSpawnPosition().x, groundY - Player::BOTTOM_OFFSET});
+        attacker.setHasWeapon(false);
+        Enemy blockingEnemy({arena.getSpawnPosition().x + 35.0f, groundY - Enemy::HALF_H});
+        blockingEnemy.isOnGround = true;
+        blockingEnemy.setBlocking(true);
         if (!attacker.isFacingRight()) attacker.turnAround();
-        tick(0.25f, arena, attacker, blockingEnemy, combat);
+        attacker.update(0.016f, arena, {0.0f, 0.0f});
         assert(attacker.isOnGround());
 
         // Hit 1 of combo 1-1-2:
-        blockingEnemy.position = {attacker.position.x + 35.0f, attacker.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
-        blockingEnemy.isBlocking = true;
+        blockingEnemy.position = {attacker.position.x + 35.0f, attacker.position.y + 2.0f};
+        blockingEnemy.velocity = {0.0f, 0.0f};
+        blockingEnemy.isOnGround = true;
+        blockingEnemy.setBlocking(true);
+        blockingEnemy.hurtTimer = 0.0f;
         triggerLight(combat, attacker);
         tick(0.12f, arena, attacker, blockingEnemy, combat);
         // Hit confirms and combo continues into block!
@@ -2532,15 +2538,21 @@ int main() {
         assert(!attacker.isStunned());
 
         // Hit 2 of combo:
-        blockingEnemy.position = {attacker.position.x + 35.0f, attacker.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
-        blockingEnemy.isBlocking = true;
+        blockingEnemy.position = {attacker.position.x + 35.0f, attacker.position.y + 2.0f};
+        blockingEnemy.velocity = {0.0f, 0.0f};
+        blockingEnemy.isOnGround = true;
+        blockingEnemy.setBlocking(true);
+        blockingEnemy.hurtTimer = 0.0f;
         triggerLight(combat, attacker);
         tick(0.12f, arena, attacker, blockingEnemy, combat);
         assert(combat.hasHitThisSwing());
 
         // Finisher 2 of combo 1-1-2 into block:
-        blockingEnemy.position = {attacker.position.x + 35.0f, attacker.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
-        blockingEnemy.isBlocking = true;
+        blockingEnemy.position = {attacker.position.x + 35.0f, attacker.position.y + 2.0f};
+        blockingEnemy.velocity = {0.0f, 0.0f};
+        blockingEnemy.isOnGround = true;
+        blockingEnemy.setBlocking(true);
+        blockingEnemy.hurtTimer = 0.0f;
         triggerHeavy(combat, attacker);
         tick(0.016f, arena, attacker, blockingEnemy, combat);
         // Attacker enters intermediate stunlock between hit recovery and whiff!
@@ -3394,8 +3406,8 @@ int main() {
         Player player(arena.getSpawnPosition()); player.setHasWeapon(false);
         if (!player.isFacingRight()) player.turnAround();
         Enemy enemy({player.position.x + 40.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
-        int pTileX = static_cast<int>(player.position.x / 32.0f);
-        int pTileY = static_cast<int>((player.position.y + Player::BOTTOM_OFFSET + 4.0f) / 32.0f);
+        int pTileX = static_cast<int>(player.position.x / arena.getTileSize());
+        int pTileY = static_cast<int>((player.position.y + Player::BOTTOM_OFFSET + 4.0f) / arena.getTileSize());
         arena.setTile(pTileX, pTileY, 1);
         arena.setTile(pTileX + 1, pTileY, 1);
         tick(0.2f, arena, player, enemy, combat);
@@ -3627,6 +3639,8 @@ int main() {
         // 4. Verify Mace Flying Hit: Speed Damage, Knock Force & Stun Extension
         combat.clearThrownMaces();
         arena.clearBlood();
+        player.reset(arena.getSpawnPosition(), true);
+        if (!player.isFacingRight()) player.turnAround();
         enemy.reset();
         enemy.hp = 30.0f;
         enemy.position = {player.position.x + 100.0f, player.position.y};
@@ -3751,15 +3765,17 @@ int main() {
     {
         std::cout << "\n[TEST 52] Testing Combo 12f1 (Ground Slam & Pop-Up -> Baseball Bat Swing)..." << std::endl;
         Arena arena(80, 20);
-        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
+        float groundY = 19.0f * 64.0f;
         CombatSystem combat;
-        Player player(arena.getSpawnPosition());
-        Enemy enemy({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+        Player player({arena.getSpawnPosition().x, groundY - Player::BOTTOM_OFFSET});
+        Enemy enemy({player.position.x + 35.0f, groundY - Enemy::HALF_H});
         combat.reset();
-        player.reset(arena.getSpawnPosition(), true);
+        player.reset({arena.getSpawnPosition().x, groundY - Player::BOTTOM_OFFSET}, true);
         if (!player.isFacingRight()) player.turnAround();
         enemy.reset();
-        tick(0.1f, arena, player, enemy, combat);
+        enemy.position = {player.position.x + 35.0f, groundY - Enemy::HALF_H};
+        player.update(0.016f, arena, {0.0f, 0.0f});
+        enemy.update(0.016f, arena, player.position, false, false);
 
         // Hit 1: Neutral Light 1
         enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
@@ -3911,15 +3927,17 @@ int main() {
     {
         std::cout << "\n[TEST 54] Testing Weapon Combo 121 (Tenderizer Push)..." << std::endl;
         Arena arena(80, 20);
-        std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
+        float groundY = 19.0f * 64.0f;
         CombatSystem combat;
-        Player player(arena.getSpawnPosition());
-        Enemy enemy({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
+        Player player({arena.getSpawnPosition().x, groundY - Player::BOTTOM_OFFSET});
+        Enemy enemy({player.position.x + 35.0f, groundY - Enemy::HALF_H});
         combat.reset();
-        player.reset(arena.getSpawnPosition(), true);
+        player.reset({arena.getSpawnPosition().x, groundY - Player::BOTTOM_OFFSET}, true);
         if (!player.isFacingRight()) player.turnAround();
         enemy.reset();
-        tick(0.1f, arena, player, enemy, combat);
+        enemy.position = {player.position.x + 35.0f, groundY - Enemy::HALF_H};
+        player.update(0.016f, arena, {0.0f, 0.0f});
+        enemy.update(0.016f, arena, player.position, false, false);
 
         // Hit 1: Neutral Light 1
         enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
@@ -4126,8 +4144,9 @@ int main() {
 
         // Aggressive Duelist Grapple Pull test:
         // Position enemy facing right towards player at distance 140 (within 200px long grapple range)
-        enemy.position = {200.0f, arena.getSpawnPosition().y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
-        player.position = {340.0f, arena.getSpawnPosition().y};
+        enemy.position = {300.0f, arena.getSpawnPosition().y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
+        enemy.isFacingLeft = false;
+        player.position = {440.0f, arena.getSpawnPosition().y};
         enemy.triggerComboSequence(static_cast<int>(AIStarterType::STARTER_GRAPPLE_PULL));
 
         assert(enemy.aiComboState == AIComboState::APPROACH);
@@ -4144,7 +4163,7 @@ int main() {
         assert(enemy.currentAttackKnockX == expectedPullDir);
 
         // Advance past active state (0.20s) to recovery and branching
-        tick(0.21f, arena, player, enemy, combat);
+        for (int i = 0; i < 14; ++i) tick(0.016f, arena, player, enemy, combat);
         assert(enemy.aiComboState == AIComboState::STARTER_GRAPPLE_RECOVERY);
 
         // Advance recovery (0.08s) -> branches into Launcher or Shove
@@ -4340,19 +4359,19 @@ int main() {
     {
         std::cout << "\n[TEST 60] TESTING COMBO HITSTUN LOCKOUT (NO MID-COMBO BLOCK / PUNISH)..." << std::endl;
         Arena arena;
-        Player player(arena.getSpawnPosition());
-        player.position = {200.0f, arena.getSpawnPosition().y};
+        float groundY = 19.0f * 64.0f;
+        Player player({200.0f, groundY - Player::BOTTOM_OFFSET});
         if (!player.isFacingRight()) player.turnAround();
-        Enemy duelist({player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)}, EnemyType::DUELIST_PASSIVE);
+        Enemy duelist({player.position.x + 35.0f, groundY - Enemy::HALF_H}, EnemyType::DUELIST_PASSIVE);
         duelist.setSmartAI(true);
         CombatSystem combat;
-        tick(0.1f, arena, player, duelist, combat);
 
         combat.reset();
-        player.reset(arena.getSpawnPosition(), false);
+        player.reset({200.0f, groundY - Player::BOTTOM_OFFSET}, false);
         if (!player.isFacingRight()) player.turnAround();
         duelist.reset();
-        tick(0.1f, arena, player, duelist, combat); // Land on ground
+        player.update(0.016f, arena, {0.0f, 0.0f});
+        duelist.update(0.016f, arena, player.position, false, false);
         assert(player.isOnGround());
         duelist.position = {player.position.x + 40.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
 
@@ -4408,7 +4427,7 @@ int main() {
         std::cout << "\n[TEST 61] AGGRESSIVE DUELIST: 108PX CLOSE SPACING, NO HUGGING, IDLE ATTACK & 1.5S DASH..." << std::endl;
         Arena arena;
         Player player(arena.getSpawnPosition());
-        player.position = {200.0f, arena.getSpawnPosition().y};
+        player.position = {300.0f, arena.getSpawnPosition().y};
         if (!player.isFacingRight()) player.turnAround();
 
         Enemy duelist({player.position.x + 108.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)}, EnemyType::DUELIST);
@@ -4437,7 +4456,7 @@ int main() {
         // 4. No-hugging test: when player closes in (<100px, e.g. dist=75px), duelist steps back!
         combat.reset();
         player.reset(arena.getSpawnPosition(), false);
-        player.position = {200.0f, arena.getSpawnPosition().y};
+        player.position = {300.0f, arena.getSpawnPosition().y};
         if (!player.isFacingRight()) player.turnAround();
         duelist.position = {player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
         duelist.attackCooldown = 1.0f; // prevent immediate attack during spacing test
@@ -4516,6 +4535,8 @@ int main() {
         arena.loadRoom(1);
         int enemyTileY = static_cast<int>((arena.getSpawnPosition().y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)) / 64.0f);
         arena.setTile(0, enemyTileY, 2);
+        arena.setTile(0, enemyTileY - 1, 2);
+        arena.setTile(1, enemyTileY - 1, 0);
         arena.setTile(0, 6, 2);
         Player player(arena.getSpawnPosition());
         CombatSystem combat;
@@ -5259,6 +5280,85 @@ int main() {
         std::cout << "-> Verified Dummy takes full damage in True 3-hit combo and raises 1.0s block after 3rd hit!" << std::endl;
 
         std::cout << "-> PASSED: Dummy Auto Block After Hit & In Gap (1.0s hold) verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 73: FLUORESCENT LAMP & LABORATORY LIGHTING SYSTEM
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 73] Testing Fluorescent Lamp & Dynamic Lighting System..." << std::endl;
+        Arena arena(80, 20);
+        arena.setTile(10, 2, 4);
+        arena.setTile(20, 2, 4);
+        arena.scanLamps();
+        assert(arena.getLamps().size() == 2);
+        assert(arena.getTile(10, 2) == 4);
+        assert(arena.getTile(20, 2) == 4);
+
+        assert(!arena.isBlockSolid(10, 2));
+        assert(!arena.isSolid(10, 2));
+
+        arena.getLamps()[0].tag = "lamp_lab_1";
+        arena.getLamps()[1].tag = "lamp_lab_2";
+
+        assert(arena.getLamps()[0].enabled);
+        arena.toggleLamp("lamp_lab_1");
+        assert(!arena.getLamps()[0].enabled);
+        assert(arena.getLamps()[1].enabled);
+
+        arena.setLampState("lamp_lab_1", true);
+        assert(arena.getLamps()[0].enabled);
+
+        arena.setLampFlicker("lamp_lab_1", true);
+        assert(arena.getLamps()[0].flickering);
+        arena.update(0.15f);
+
+        arena.setAmbientColor(sf::Color(15, 18, 24));
+        assert(arena.getAmbientColor() == sf::Color(15, 18, 24));
+
+        std::cout << "-> Verified Fluorescent Lamp placement, non-solid collision, scanning & toggling!" << std::endl;
+        std::cout << "-> PASSED: Fluorescent Lamp & Laboratory Lighting verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 74: ARENA TRIGGER SETTINGS & MICRO-SCRIPT EXECUTION ENGINE
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 74] Testing Arena Trigger Settings & Micro-Script Engine..." << std::endl;
+        Arena arena(80, 20);
+        Player player(arena.getSpawnPosition());
+        player.hp = 50.0f;
+
+        arena.setTile(12, 3, 4);
+        arena.scanLamps();
+        arena.getLamps()[0].tag = "light_chamber";
+        assert(arena.getLamps()[0].enabled);
+
+        ArenaTrigger tr;
+        tr.x = static_cast<int>(player.position.x / arena.getTileSize());
+        tr.y = static_cast<int>(player.position.y / arena.getTileSize());
+        tr.type = 4;
+        tr.condition = 0;
+        tr.triggerOnce = true;
+        tr.tag = "chamber_trigger";
+        tr.action = "light:toggle light_chamber; player:heal 35; msg:show 'СИСТЕМА: ПИТАНИЕ ВОССТАНОВЛЕНО' 3.0 100 255 180";
+        arena.addTrigger(tr);
+
+        arena.updateTriggers(0.016f, player);
+
+        assert(!arena.getLamps()[0].enabled);
+        assert(player.hp == 85.0f);
+        assert(arena.getActiveNotification().find("ПИТАНИЕ ВОССТАНОВЛЕНО") != std::string::npos);
+        assert(arena.getNotificationTimer() > 2.0f);
+        assert(arena.getTriggers().front().hasTriggered);
+
+        arena.updateTriggers(0.016f, player);
+        assert(!arena.getLamps()[0].enabled);
+        assert(player.hp == 85.0f);
+
+        std::cout << "-> Verified Trigger Micro-Script (light:toggle, player:heal, msg:show)!" << std::endl;
+        std::cout << "-> Verified triggerOnce condition & cooldown logic!" << std::endl;
+        std::cout << "-> PASSED: Arena Trigger Settings & Micro-Script Engine verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

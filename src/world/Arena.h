@@ -5,6 +5,8 @@
 #include <optional>
 #include "core/Common.h"
 
+class Player;
+
 struct DoorBlock {
     int x = 0;
     int y = 0;
@@ -14,11 +16,35 @@ struct DoorBlock {
     std::string targetRoomName = ""; // Имя целевой комнаты (например "room_1", "Test")
 };
 
+struct LampLight {
+    int tileX = 0;
+    int tileY = 0;
+    sf::Vector2f worldPos;
+    float radius = 420.0f;
+    float intensity = 1.0f;
+    sf::Color color{220, 240, 255};
+    bool enabled = true;
+    bool flickering = false;
+    float flickerTimer = 0.0f;
+    float flickerDip = 0.0f;
+    std::string tag = "";
+};
+
 struct ArenaTrigger {
     int x = 0;
     int y = 0;
-    int type = 0; // 0 = JumpPad, 1 = Spikes, 2 = TriggerZone
-    float power = 1000.0f;
+    int width = 1;     // Ширина зоны в тайлах
+    int height = 1;    // Высота зоны в тайлах
+    int type = 0;      // 0 = JumpPad, 1 = Spikes, 2 = TriggerZone, 3 = LightSwitch, 4 = ScriptZone
+    float power = 1000.0f; // Сила батута / урон шипов
+    std::string tag = "";       // Идентификатор триггера (например "lab_switch_1")
+    std::string targetTag = ""; // Целевой объект (например "lamp_1")
+    std::string action = "";    // Команда / микро-скрипт (например "light:toggle lamp_1; msg:show \"Свет включен\" 2.0")
+    int condition = 0;          // 0 = ON_ENTER, 1 = ON_INTERACT (E), 2 = ON_HIT
+    bool triggerOnce = false;   // Одноразовый триггер
+    bool hasTriggered = false;  // Флаг срабатывания
+    float cooldown = 1.0f;      // Перезарядка в секундах
+    float currentCooldown = 0.0f;
 };
 
 struct EnemySpawnConfig {
@@ -171,6 +197,34 @@ public:
     std::string getCurrentRoomName() const { return _currentRoomName; }
     void setCurrentRoomName(const std::string& name) { _currentRoomName = name; }
     const std::vector<ArenaTrigger>& getTriggers() const { return _triggers; }
+    std::vector<ArenaTrigger>& getTriggers() { return _triggers; }
+    void addTrigger(const ArenaTrigger& tr) { _triggers.push_back(tr); }
+    void clearTriggers() { _triggers.clear(); }
+    void setTriggers(const std::vector<ArenaTrigger>& trs) { _triggers = trs; }
+    bool removeTriggerAtTile(int tx, int ty);
+    void updateTriggers(float dt, Player& player);
+    void executeTriggerAction(const std::string& action, Player* player = nullptr, const ArenaTrigger* tr = nullptr);
+
+    // Лабораторное освещение и флуоресцентные лампы
+    void scanLamps();
+    const std::vector<LampLight>& getLamps() const { return _lamps; }
+    std::vector<LampLight>& getLamps() { return _lamps; }
+    void addLamp(int tx, int ty, const std::string& tag = "", bool flickering = false);
+    void removeLamp(int tx, int ty);
+    void setLampState(const std::string& tag, bool enabled);
+    void toggleLamp(const std::string& tag);
+    void setLampFlicker(const std::string& tag, bool flicker);
+    void setAmbientColor(sf::Color col) { _ambientColor = col; }
+    sf::Color getAmbientColor() const { return _ambientColor; }
+    bool isLightingEnabled() const { return _lightingEnabled; }
+    void setLightingEnabled(bool enabled) { _lightingEnabled = enabled; }
+    void renderLighting(sf::RenderWindow& window, const sf::View& camera, sf::Vector2f playerPos, bool playerArmed = false);
+
+    // Кинематографические сообщения / уведомления лаборатории
+    void showNotification(const std::string& text, float duration = 3.0f, sf::Color col = sf::Color(100, 255, 180));
+    std::string getActiveNotification() const { return _notificationText; }
+    float getNotificationTimer() const { return _notificationTimer; }
+    void drawNotificationUI(sf::RenderWindow& window, const sf::Font* font);
 
     void draw(sf::RenderWindow& window);
     void markTilemapDirty() { _tilemapDirty = true; }
@@ -214,6 +268,19 @@ private:
     std::vector<BloodDecal> _bloodDecals;
     std::vector<BloodParticle> _bloodParticles;
     std::vector<BackgroundBloodStreak> _bgBloodStreaks;
+
+    // Динамическое лабораторное освещение
+    std::vector<LampLight> _lamps;
+    sf::Color _ambientColor{26, 30, 40}; // Темный лабораторный полумрак
+    bool _lightingEnabled = true;
+    mutable sf::RenderTexture _lightmap;
+    bool _lightmapInitialized = false;
+
+    // Всплывающие уведомления / лог лаборатории
+    std::string _notificationText = "";
+    float _notificationTimer = 0.0f;
+    float _notificationDuration = 3.0f;
+    sf::Color _notificationColor{100, 255, 180};
 
     void loadTileset(const std::string& texturePath = "assets/sprites/BlocksTest.png");
     void buildDefaultMap();

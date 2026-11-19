@@ -56,12 +56,12 @@ void MenuSystem::drawKeybindRow(sf::RenderWindow& window, float x, float y, floa
                                const std::string& key, const std::string& desc, sf::Color keyCol) {
     if (!_font) return;
 
-    // Фон строки - полностью непрозрачный
+    // Фон строки - глубокий темный оттенок
     sf::RectangleShape rowBg({w, 32.0f});
     rowBg.setPosition(sf::Vector2f(x, y));
-    rowBg.setFillColor(sf::Color(24, 32, 46, 255));
+    rowBg.setFillColor(sf::Color(14, 16, 22, 255));
     rowBg.setOutlineThickness(1.0f);
-    rowBg.setOutlineColor(sf::Color(45, 62, 88));
+    rowBg.setOutlineColor(sf::Color(35, 42, 55));
     window.draw(rowBg);
 
     // Клавиша
@@ -74,7 +74,7 @@ void MenuSystem::drawKeybindRow(sf::RenderWindow& window, float x, float y, floa
     // Разделитель
     sf::RectangleShape div({2.0f, 22.0f});
     div.setPosition(sf::Vector2f(x + 225.0f, y + 5.0f));
-    div.setFillColor(sf::Color(45, 62, 88));
+    div.setFillColor(sf::Color(35, 42, 55));
     window.draw(div);
 
     // Описание с большим запасом по ширине
@@ -88,15 +88,15 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
     float cx = winSize.x * 0.5f;
     float cy = winSize.y * 0.5f;
 
-    // Заливка всего экрана глубоким сплошным непрозрачным цветом
+    // Заливка всего экрана глубоким черным графитовым тоном
     sf::RectangleShape bgFill(winSize);
-    bgFill.setFillColor(sf::Color(13, 17, 26, 255));
+    bgFill.setFillColor(sf::Color(8, 9, 12, 255));
     window.draw(bgFill);
 
-    // Верхняя акцентная полоса
-    sf::RectangleShape topGlow({winSize.x, 4.0f});
+    // Верхняя акцентная полоса в стильных титановых тонах
+    sf::RectangleShape topGlow({winSize.x, 3.0f});
     topGlow.setPosition(sf::Vector2f(0.0f, 0.0f));
-    topGlow.setFillColor(sf::Color(55, 125, 225));
+    topGlow.setFillColor(sf::Color(55, 65, 80));
     window.draw(topGlow);
 
     if (_font) {
@@ -136,7 +136,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
     if (_appState == AppState::MAIN_MENU) {
         // 1. ИГРАТЬ (Обычная игра)
         Button btnPlay{{{cx - btnW * 0.5f, startY}, {btnW, btnH}}, "ИГРАТЬ",
-                       sf::Color(32, 75, 145), sf::Color(50, 115, 225), sf::Color(90, 155, 255), 22};
+                       sf::Color(18, 24, 34), sf::Color(28, 48, 72), sf::Color(65, 120, 200), 22};
         if (drawButton(window, btnPlay, mousePos) && justClicked) {
             SoundManager::get().play("1", 40.0f);
             _isTrainingMode = false;
@@ -146,7 +146,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
 
         // 2. ТРЕНИРОВКА (Режим с бессмертным манекеном и комбо-счетчиком)
         Button btnTrain{{{cx - btnW * 0.5f, startY + stepY}, {btnW, btnH}}, "ТРЕНИРОВКА (МАНЕКЕН)",
-                        sf::Color(36, 75, 60), sf::Color(45, 125, 90), sf::Color(80, 215, 150), 21};
+                        sf::Color(16, 26, 22), sf::Color(24, 52, 40), sf::Color(50, 160, 105), 21};
         if (drawButton(window, btnTrain, mousePos) && justClicked) {
             SoundManager::get().play("1", 40.0f);
             _isTrainingMode = true;
@@ -156,7 +156,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
 
         // 3. НАСТРОЙКИ
         Button btnSettings{{{cx - btnW * 0.5f, startY + stepY * 2.0f}, {btnW, btnH}}, "НАСТРОЙКИ",
-                           sf::Color(26, 42, 68), sf::Color(42, 72, 118), sf::Color(75, 115, 180), 20};
+                           sf::Color(18, 20, 28), sf::Color(32, 38, 52), sf::Color(65, 85, 125), 20};
         if (drawButton(window, btnSettings, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::SETTINGS;
@@ -164,7 +164,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
 
         // 4. ГАЙД
         Button btnGuide{{{cx - btnW * 0.5f, startY + stepY * 3.0f}, {btnW, btnH}}, "ГАЙД ПО ИГРЕ",
-                        sf::Color(32, 55, 65), sf::Color(48, 92, 108), sf::Color(80, 155, 180), 20};
+                        sf::Color(18, 22, 28), sf::Color(28, 42, 54), sf::Color(55, 105, 130), 20};
         if (drawButton(window, btnGuide, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::GUIDE;
@@ -172,14 +172,14 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
 
         // 5. ВЫХОД
         Button btnExit{{{cx - btnW * 0.5f, startY + stepY * 4.0f}, {btnW, btnH}}, "ВЫХОД",
-                       sf::Color(68, 26, 34), sf::Color(145, 42, 54), sf::Color(220, 75, 88), 20};
+                       sf::Color(28, 16, 20), sf::Color(56, 22, 28), sf::Color(160, 50, 65), 20};
         if (drawButton(window, btnExit, mousePos) && justClicked) {
             if (_onExitGame) _onExitGame();
         }
     } else {
         // PAUSED STATE
         Button btnResume{{{cx - btnW * 0.5f, startY}, {btnW, btnH}}, "ПРОДОЛЖИТЬ [ESC]",
-                         sf::Color(32, 75, 145), sf::Color(50, 115, 225), sf::Color(90, 155, 255), 21};
+                         sf::Color(18, 24, 34), sf::Color(28, 48, 72), sf::Color(65, 120, 200), 21};
         if (drawButton(window, btnResume, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             resumeGame();
@@ -187,7 +187,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
 
         std::string modeToggleLabel = _isTrainingMode ? "ВЫЙТИ ИЗ ТРЕНИРОВКИ" : "РЕЖИМ ТРЕНИРОВКИ";
         Button btnSwitchMode{{{cx - btnW * 0.5f, startY + stepY}, {btnW, btnH}}, modeToggleLabel,
-                             sf::Color(36, 75, 60), sf::Color(45, 125, 90), sf::Color(80, 215, 150), 19};
+                             sf::Color(16, 26, 22), sf::Color(24, 52, 40), sf::Color(50, 160, 105), 19};
         if (drawButton(window, btnSwitchMode, mousePos) && justClicked) {
             SoundManager::get().play("1", 40.0f);
             if (_isTrainingMode) {
@@ -201,21 +201,21 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
         }
 
         Button btnSettings{{{cx - btnW * 0.5f, startY + stepY * 2.0f}, {btnW, btnH}}, "НАСТРОЙКИ",
-                           sf::Color(26, 42, 68), sf::Color(42, 72, 118), sf::Color(75, 115, 180), 20};
+                           sf::Color(18, 20, 28), sf::Color(32, 38, 52), sf::Color(65, 85, 125), 20};
         if (drawButton(window, btnSettings, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::SETTINGS;
         }
 
         Button btnGuide{{{cx - btnW * 0.5f, startY + stepY * 3.0f}, {btnW, btnH}}, "ГАЙД ПО ИГРЕ",
-                        sf::Color(32, 55, 65), sf::Color(48, 92, 108), sf::Color(80, 155, 180), 20};
+                        sf::Color(18, 22, 28), sf::Color(28, 42, 54), sf::Color(55, 105, 130), 20};
         if (drawButton(window, btnGuide, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::GUIDE;
         }
 
         Button btnToMenu{{{cx - btnW * 0.5f, startY + stepY * 4.0f}, {btnW, btnH}}, "В ГЛАВНОЕ МЕНЮ",
-                         sf::Color(35, 35, 52), sf::Color(62, 62, 92), sf::Color(110, 110, 155), 19};
+                         sf::Color(22, 22, 28), sf::Color(38, 38, 52), sf::Color(75, 75, 105), 19};
         if (drawButton(window, btnToMenu, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             if (_onResetGame) _onResetGame();
@@ -223,7 +223,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
         }
 
         Button btnExit{{{cx - btnW * 0.5f, startY + stepY * 5.0f}, {btnW, btnH}}, "ВЫЙТИ ИЗ ИГРЫ",
-                       sf::Color(68, 26, 34), sf::Color(145, 42, 54), sf::Color(220, 75, 88), 19};
+                       sf::Color(28, 16, 20), sf::Color(56, 22, 28), sf::Color(160, 50, 65), 19};
         if (drawButton(window, btnExit, mousePos) && justClicked) {
             if (_onExitGame) _onExitGame();
         }
@@ -235,16 +235,16 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
 
     // Сплошная заливка на весь экран
     sf::RectangleShape bgFill(winSize);
-    bgFill.setFillColor(sf::Color(13, 17, 26));
+    bgFill.setFillColor(sf::Color(8, 9, 12));
     window.draw(bgFill);
 
     // Верхняя плашка шапки
     float topH = 75.0f;
     sf::RectangleShape topBar({winSize.x, topH});
     topBar.setPosition(sf::Vector2f(0.0f, 0.0f));
-    topBar.setFillColor(sf::Color(18, 24, 38));
+    topBar.setFillColor(sf::Color(12, 14, 18));
     topBar.setOutlineThickness(1.5f);
-    topBar.setOutlineColor(sf::Color(45, 62, 95));
+    topBar.setOutlineColor(sf::Color(35, 42, 55));
     window.draw(topBar);
 
     if (_font) {
@@ -269,21 +269,21 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
     float tabsStartX = cx - (tabW * 3.0f + 24.0f) * 0.5f;
 
     Button btnTabBinds{{{tabsStartX, tabY}, {tabW, tabH}}, "БИНДЫ (УПРАВЛЕНИЕ)",
-                      sf::Color(25, 36, 54), sf::Color(45, 82, 130), sf::Color(80, 135, 205), 16};
+                      sf::Color(18, 22, 28), sf::Color(32, 48, 68), sf::Color(65, 110, 165), 16};
     if (drawButton(window, btnTabBinds, mousePos, _settingsTab == SettingsTab::BINDS) && justClicked) {
         _settingsTab = SettingsTab::BINDS;
         SoundManager::get().play("1", 30.0f);
     }
 
     Button btnTabSound{{{tabsStartX + tabW + 12.0f, tabY}, {tabW, tabH}}, "ЗВУК",
-                      sf::Color(25, 36, 54), sf::Color(45, 82, 130), sf::Color(80, 135, 205), 16};
+                      sf::Color(18, 22, 28), sf::Color(32, 48, 68), sf::Color(65, 110, 165), 16};
     if (drawButton(window, btnTabSound, mousePos, _settingsTab == SettingsTab::SOUND) && justClicked) {
         _settingsTab = SettingsTab::SOUND;
         SoundManager::get().play("1", 30.0f);
     }
 
     Button btnTabFps{{{tabsStartX + (tabW + 12.0f) * 2.0f, tabY}, {tabW, tabH}}, "ФПС И ГРАФИКА",
-                    sf::Color(25, 36, 54), sf::Color(45, 82, 130), sf::Color(80, 135, 205), 16};
+                    sf::Color(18, 22, 28), sf::Color(32, 48, 68), sf::Color(65, 110, 165), 16};
     if (drawButton(window, btnTabFps, mousePos, _settingsTab == SettingsTab::FPS) && justClicked) {
         _settingsTab = SettingsTab::FPS;
         SoundManager::get().play("1", 30.0f);
@@ -299,9 +299,9 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
 
     sf::RectangleShape contentBox({contentW, contentH});
     contentBox.setPosition(sf::Vector2f(contentX, contentY));
-    contentBox.setFillColor(sf::Color(18, 24, 36, 255));
+    contentBox.setFillColor(sf::Color(11, 13, 17, 255));
     contentBox.setOutlineThickness(1.5f);
-    contentBox.setOutlineColor(sf::Color(45, 60, 90));
+    contentBox.setOutlineColor(sf::Color(32, 38, 50));
     window.draw(contentBox);
 
     if (_settingsTab == SettingsTab::BINDS) {
@@ -476,15 +476,15 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
     // Нижняя плашка с кнопкой НАЗАД
     sf::RectangleShape bottomBar({winSize.x, bottomBarH});
     bottomBar.setPosition(sf::Vector2f(0.0f, winSize.y - bottomBarH));
-    bottomBar.setFillColor(sf::Color(18, 24, 38));
+    bottomBar.setFillColor(sf::Color(12, 14, 18));
     bottomBar.setOutlineThickness(1.5f);
-    bottomBar.setOutlineColor(sf::Color(45, 62, 95));
+    bottomBar.setOutlineColor(sf::Color(35, 42, 55));
     window.draw(bottomBar);
 
     float backW = 240.0f;
     float backH = 48.0f;
     Button btnBack{{{cx - backW * 0.5f, winSize.y - bottomBarH * 0.5f - backH * 0.5f}, {backW, backH}}, "НАЗАД",
-                   sf::Color(32, 48, 72), sf::Color(52, 82, 128), sf::Color(90, 138, 202), 20};
+                   sf::Color(20, 24, 32), sf::Color(32, 42, 56), sf::Color(65, 85, 115), 20};
     if (drawButton(window, btnBack, mousePos) && justClicked) {
         _currentScreen = MenuScreen::MAIN;
         SoundManager::get().play("1", 30.0f);
@@ -531,9 +531,9 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
 
         sf::RectangleShape rowBg({w - 30.0f, rowH - 2.0f});
         rowBg.setPosition(sf::Vector2f(x + 15.0f, ry));
-        rowBg.setFillColor((i % 2 == 0) ? sf::Color(22, 28, 40, 255) : sf::Color(27, 35, 52, 255));
+        rowBg.setFillColor((i % 2 == 0) ? sf::Color(14, 16, 22, 255) : sf::Color(18, 20, 28, 255));
         rowBg.setOutlineThickness(1.0f);
-        rowBg.setOutlineColor(sf::Color(48, 65, 92));
+        rowBg.setOutlineColor(sf::Color(35, 42, 55));
         window.draw(rowBg);
 
         // Инпуты комбо
@@ -612,9 +612,9 @@ void MenuSystem::drawMechanicsTab(sf::RenderWindow& window, float x, float y, fl
 
         sf::RectangleShape cardBg({w - 30.0f, cardH});
         cardBg.setPosition(sf::Vector2f(x + 15.0f, cy));
-        cardBg.setFillColor(sf::Color(22, 30, 46, 255));
+        cardBg.setFillColor(sf::Color(14, 16, 22, 255));
         cardBg.setOutlineThickness(1.0f);
-        cardBg.setOutlineColor(sf::Color(48, 65, 92));
+        cardBg.setOutlineColor(sf::Color(35, 42, 55));
         window.draw(cardBg);
 
         sf::Text txtTitle(*_font, toSfString(items[i].title), 15);
@@ -664,7 +664,7 @@ void MenuSystem::drawEnemiesTab(sf::RenderWindow& window, float x, float y, floa
 
         sf::RectangleShape cardBg({w - 30.0f, cardH});
         cardBg.setPosition(sf::Vector2f(x + 15.0f, cy));
-        cardBg.setFillColor(sf::Color(22, 30, 46, 255));
+        cardBg.setFillColor(sf::Color(14, 16, 22, 255));
         cardBg.setOutlineThickness(1.5f);
         cardBg.setOutlineColor(items[i].col);
         window.draw(cardBg);
@@ -700,16 +700,16 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
 
     // Сплошная заливка на весь экран
     sf::RectangleShape bgFill(winSize);
-    bgFill.setFillColor(sf::Color(13, 17, 26));
+    bgFill.setFillColor(sf::Color(8, 9, 12));
     window.draw(bgFill);
 
     // Верхняя плашка шапки
     float topH = 75.0f;
     sf::RectangleShape topBar({winSize.x, topH});
     topBar.setPosition(sf::Vector2f(0.0f, 0.0f));
-    topBar.setFillColor(sf::Color(18, 24, 38));
+    topBar.setFillColor(sf::Color(12, 14, 18));
     topBar.setOutlineThickness(1.5f);
-    topBar.setOutlineColor(sf::Color(45, 62, 95));
+    topBar.setOutlineColor(sf::Color(35, 42, 55));
     window.draw(topBar);
 
     if (_font) {
@@ -734,21 +734,21 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
     float tabsStartX = cx - (tabW * 3.0f + 24.0f) * 0.5f;
 
     Button btnTabCombos{{{tabsStartX, tabY}, {tabW, tabH}}, "1. КОМБО-ЦЕПОЧКИ",
-                       sf::Color(25, 36, 54), sf::Color(45, 82, 130), sf::Color(80, 135, 205), 16};
+                       sf::Color(18, 22, 28), sf::Color(32, 48, 68), sf::Color(65, 110, 165), 16};
     if (drawButton(window, btnTabCombos, mousePos, _guideTab == GuideTab::COMBOS) && justClicked) {
         _guideTab = GuideTab::COMBOS;
         SoundManager::get().play("1", 30.0f);
     }
 
     Button btnTabMech{{{tabsStartX + tabW + 12.0f, tabY}, {tabW, tabH}}, "2. МЕХАНИКИ БОЯ",
-                     sf::Color(25, 36, 54), sf::Color(45, 82, 130), sf::Color(80, 135, 205), 16};
+                     sf::Color(18, 22, 28), sf::Color(32, 48, 68), sf::Color(65, 110, 165), 16};
     if (drawButton(window, btnTabMech, mousePos, _guideTab == GuideTab::MECHANICS) && justClicked) {
         _guideTab = GuideTab::MECHANICS;
         SoundManager::get().play("1", 30.0f);
     }
 
     Button btnTabEnemies{{{tabsStartX + (tabW + 12.0f) * 2.0f, tabY}, {tabW, tabH}}, "3. АРХЕТИПЫ ВРАГОВ",
-                        sf::Color(25, 36, 54), sf::Color(45, 82, 130), sf::Color(80, 135, 205), 16};
+                        sf::Color(18, 22, 28), sf::Color(32, 48, 68), sf::Color(65, 110, 165), 16};
     if (drawButton(window, btnTabEnemies, mousePos, _guideTab == GuideTab::ENEMIES) && justClicked) {
         _guideTab = GuideTab::ENEMIES;
         SoundManager::get().play("1", 30.0f);
@@ -764,9 +764,9 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
 
     sf::RectangleShape contentBox({contentW, contentH});
     contentBox.setPosition(sf::Vector2f(contentX, contentY));
-    contentBox.setFillColor(sf::Color(18, 24, 36, 255));
+    contentBox.setFillColor(sf::Color(11, 13, 17, 255));
     contentBox.setOutlineThickness(1.5f);
-    contentBox.setOutlineColor(sf::Color(45, 60, 90));
+    contentBox.setOutlineColor(sf::Color(32, 38, 50));
     window.draw(contentBox);
 
     if (_guideTab == GuideTab::COMBOS) {
@@ -780,15 +780,15 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
     // Нижняя плашка с кнопкой НАЗАД
     sf::RectangleShape bottomBar({winSize.x, bottomBarH});
     bottomBar.setPosition(sf::Vector2f(0.0f, winSize.y - bottomBarH));
-    bottomBar.setFillColor(sf::Color(18, 24, 38));
+    bottomBar.setFillColor(sf::Color(12, 14, 18));
     bottomBar.setOutlineThickness(1.5f);
-    bottomBar.setOutlineColor(sf::Color(45, 62, 95));
+    bottomBar.setOutlineColor(sf::Color(35, 42, 55));
     window.draw(bottomBar);
 
     float backW = 240.0f;
     float backH = 48.0f;
     Button btnBack{{{cx - backW * 0.5f, winSize.y - bottomBarH * 0.5f - backH * 0.5f}, {backW, backH}}, "НАЗАД",
-                   sf::Color(32, 48, 72), sf::Color(52, 82, 128), sf::Color(90, 138, 202), 20};
+                   sf::Color(20, 24, 32), sf::Color(32, 42, 56), sf::Color(65, 85, 115), 20};
     if (drawButton(window, btnBack, mousePos) && justClicked) {
         _currentScreen = MenuScreen::MAIN;
         SoundManager::get().play("1", 30.0f);

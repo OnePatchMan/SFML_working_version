@@ -25,7 +25,8 @@ enum class EditorTool {
     BOX_FILL = 10,             // Прямоугольная заливка
     LINE = 11,                 // Линия
     FLOOD_FILL = 12,           // Заливка замкнутой области (Bucket)
-    EYEDROPPER = 13            // Пипетка
+    EYEDROPPER = 13,           // Пипетка
+    LAMP = 14                  // 'L' Тайл 4 (Люминесцентная лампа)
 };
 
 struct EditorSnapshot {

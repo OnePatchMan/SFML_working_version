@@ -1,5 +1,7 @@
 #include "world/Arena.h"
 #include "combat/CombatConfig.h"
+#include "entities/Player.h"
+#include "audio/SoundManager.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -88,7 +90,7 @@ Arena::~Arena() {
 bool Arena::isBlockSolid(int tx, int ty) const {
     if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return true; // Границы арены непроницаемы
     int t = _map[ty][tx];
-    return t != 0 && t != 3;
+    return (t == 1 || t == 2);
 }
 
 bool Arena::raycastSolid(sf::Vector2f start, sf::Vector2f target, sf::Vector2f& hitPoint, sf::Vector2i& hitTile, sf::Vector2f& hitNormal) const {
@@ -776,6 +778,40 @@ void Arena::update(float dt) {
     if (_bgBloodStreaks.size() > 1600) {
         _bgBloodStreaks.erase(_bgBloodStreaks.begin(), _bgBloodStreaks.begin() + 150);
     }
+
+    // 3. Обновление мерцания флуоресцентных ламп лаборатории
+    for (auto& lamp : _lamps) {
+        if (!lamp.enabled) {
+            lamp.flickerDip = 0.0f;
+            continue;
+        }
+        if (lamp.flickering) {
+            lamp.flickerTimer -= dt;
+            if (lamp.flickerTimer <= 0.0f) {
+                lamp.flickerTimer = static_cast<float>(rand() % 16 + 4) / 100.0f;
+                lamp.flickerDip = (rand() % 100 < 35) ? (static_cast<float>(rand() % 65 + 25) / 100.0f) : 0.0f;
+            }
+        } else {
+            lamp.flickerDip = 0.0f;
+        }
+    }
+
+    // 4. Обновление кулдаунов триггеров
+    for (auto& tr : _triggers) {
+        if (tr.currentCooldown > 0.0f) {
+            tr.currentCooldown -= dt;
+            if (tr.currentCooldown < 0.0f) tr.currentCooldown = 0.0f;
+        }
+    }
+
+    // 5. Обновление таймера уведомлений
+    if (_notificationTimer > 0.0f) {
+        _notificationTimer -= dt;
+        if (_notificationTimer <= 0.0f) {
+            _notificationTimer = 0.0f;
+            _notificationText.clear();
+        }
+    }
 }
 
 void Arena::loadTileset(const std::string& texturePath) {
@@ -1095,6 +1131,8 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
             } else if (c == 'D' || c == '3') {
                 _map[y][x] = 3; // Тайл 3 = Дверь / портал перехода между комнатами
                 _doors.push_back({x, y, -1, -1, -1, ""});
+            } else if (c == 'L' || c == '4') {
+                _map[y][x] = 4; // Тайл 4 = Флуоресцентная лампа лаборатории
             } else if (c == 'P') {
                 _map[y][x] = 0; // Воздух
                 _spawnPosition = {static_cast<float>(x * _tileSize), 
@@ -1127,10 +1165,20 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
                 _enemySpawns.push_back({pos, 4});
             } else if (c == '^' || c == 'J') {
                 _map[y][x] = 0;
-                _triggers.push_back({x, y, 0, 1000.0f}); // JumpPad
+                ArenaTrigger tr;
+                tr.x = x;
+                tr.y = y;
+                tr.type = 0;
+                tr.power = 1000.0f;
+                _triggers.push_back(tr); // JumpPad
             } else if (c == 'S' || c == 'v') {
                 _map[y][x] = 0;
-                _triggers.push_back({x, y, 1, 20.0f}); // Spikes
+                ArenaTrigger tr;
+                tr.x = x;
+                tr.y = y;
+                tr.type = 1;
+                tr.power = 20.0f;
+                _triggers.push_back(tr); // Spikes
             } else {
                 _map[y][x] = 0; // Воздух (., пробел и т.д.)
             }
@@ -1152,6 +1200,7 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
     syncEnemySpawnPositions();
     _enemySpawnPosition = _enemySpawnPositions[0];
     _tilemapDirty = true;
+    scanLamps();
 
     return true;
 }
@@ -1226,6 +1275,7 @@ bool Arena::saveToAsciiFile(const std::string& asciiPath) const {
                     if (tile == 2) row += '#';
                     else if (tile == 1) row += '=';
                     else if (tile == 3) row += 'D';
+                    else if (tile == 4) row += 'L';
                     else row += ' ';
                 }
             }
@@ -1282,6 +1332,7 @@ bool Arena::saveToImageFile(const std::string& imagePath) const {
                     if (tile == 2) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(0, 0, 0)); // Black = Wall
                     else if (tile == 1) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(76, 175, 80)); // Green = Platform
                     else if (tile == 3) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(0, 229, 255)); // Cyan = Door
+                    else if (tile == 4) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(255, 255, 150)); // Lamp
                     else img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(255, 255, 255)); // White = Air
                 }
             }
@@ -1356,6 +1407,10 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
                 for (const auto& d : _doors) { if (d.x == x && d.y == y) { dfound = true; break; } }
                 if (!dfound) _doors.push_back({x, y, -1, -1, -1, ""});
             }
+            // Светло-желтый / неоновый = Флуоресцентная лампа (L)
+            else if (c.r > 230 && c.g > 230 && c.b > 120 && c.b < 200) {
+                _map[y][x] = 4;
+            }
             // Пурпурный / Фиолетовый = Спавн дуэлянта (Duelist Aggressive)
             else if (c.r > 150 && c.g < 100 && c.b > 150) {
                 _map[y][x] = 0;
@@ -1398,6 +1453,7 @@ bool Arena::loadFromImageFile(const std::string& imagePath) {
     }
     syncEnemySpawnPositions();
     _tilemapDirty = true;
+    scanLamps();
 
     return true;
 }
@@ -1679,6 +1735,7 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
     }
     syncEnemySpawnPositions();
     _tilemapDirty = true;
+    scanLamps();
 
     return true;
 }
@@ -1771,7 +1828,33 @@ void Arena::loadKVOverlays(const std::string& kvPath) {
                 float tpow = 1000.0f;
                 if (iss >> tx >> ty >> ttype) {
                     if (iss >> tpow) {}
-                    kvTriggers.push_back({tx, ty, ttype, tpow});
+                    ArenaTrigger tr;
+                    tr.x = tx;
+                    tr.y = ty;
+                    tr.type = ttype;
+                    tr.power = tpow;
+                    std::string token;
+                    while (iss >> token) {
+                        if (token.rfind("tag:", 0) == 0) tr.tag = token.substr(4);
+                        else if (token.rfind("target:", 0) == 0) tr.targetTag = token.substr(7);
+                        else if (token.rfind("action:", 0) == 0) tr.action = token.substr(7);
+                        else if (token.rfind("cond:", 0) == 0) {
+                            try { tr.condition = std::stoi(token.substr(5)); } catch (...) {}
+                        }
+                        else if (token.rfind("once:", 0) == 0) tr.triggerOnce = (token.substr(5) == "1");
+                        else if (token.rfind("cd:", 0) == 0) {
+                            try { tr.cooldown = std::stof(token.substr(3)); } catch (...) {}
+                        }
+                    }
+                    kvTriggers.push_back(tr);
+                }
+            } else if (currentSection == "lamps" || key.rfind("lamp", 0) == 0) {
+                std::istringstream iss(val);
+                int lx = 0, ly = 0;
+                if (iss >> lx >> ly) {
+                    if (lx >= 0 && lx < _width && ly >= 0 && ly < _height) {
+                        _map[ly][lx] = 4;
+                    }
                 }
             } else if (currentSection == "platforms") {
                 std::istringstream iss(val);
@@ -1861,6 +1944,8 @@ bool Arena::loadRoomByName(const std::string& name) {
     if (std::filesystem::exists(kvPath)) {
         loadKVOverlays(kvPath);
     }
+
+    scanLamps();
 
     return loadedBase;
 }
@@ -2116,6 +2201,7 @@ int Arena::getTile(int tx, int ty) const {
 
 void Arena::setTile(int tx, int ty, int tile) {
     if (tx >= 0 && tx < _width && ty >= 0 && ty < _height) {
+        int oldTile = _map[ty][tx];
         _map[ty][tx] = tile;
         _tilemapDirty = true;
         if (tile == 3) {
@@ -2128,6 +2214,12 @@ void Arena::setTile(int tx, int ty, int tile) {
             }
         } else {
             removeDoor(tx, ty);
+        }
+
+        if (oldTile == 4 && tile != 4) {
+            removeLamp(tx, ty);
+        } else if (oldTile != 4 && tile == 4) {
+            addLamp(tx, ty);
         }
     }
 }
@@ -2149,7 +2241,7 @@ void Arena::rebuildTilemapVertices() {
     for (int y = 0; y < _height; ++y) {
         for (int x = 0; x < _width; ++x) {
             int tile = _map[y][x];
-            if (tile == 0 || tile == 3) continue; // 0 = воздух, 3 = дверь
+            if (tile == 0 || tile == 3 || tile == 4) continue; // 0 = воздух, 3 = дверь, 4 = флуоресцентная лампа
             if (tile < 0 || static_cast<size_t>(tile) >= _tileSprites.size()) continue;
 
             float px = static_cast<float>(x * _tileSize);
@@ -2275,7 +2367,66 @@ void Arena::draw(sf::RenderWindow& window) {
         }
     }
 
-    // 5. Отрисовка интерактивных триггеров (батуты и шипы с текстурами)
+    // 4.1. Отрисовка флуоресцентных лабораторных ламп
+    for (int y = startY; y < endY; ++y) {
+        for (int x = startX; x < endX; ++x) {
+            if (_map[y][x] == 4) {
+                float lx = static_cast<float>(x * _tileSize);
+                float ly = static_cast<float>(y * _tileSize);
+
+                bool isEnabled = true;
+                float flickerDip = 0.0f;
+                for (const auto& l : _lamps) {
+                    if (l.tileX == x && l.tileY == y) {
+                        isEnabled = l.enabled;
+                        flickerDip = l.flickerDip;
+                        break;
+                    }
+                }
+
+                sf::RectangleShape fixture({_tileSize - 6.0f, 14.0f});
+                fixture.setPosition({lx + 3.0f, ly + 2.0f});
+                fixture.setFillColor(sf::Color(38, 42, 50));
+                fixture.setOutlineColor(sf::Color(70, 78, 92));
+                fixture.setOutlineThickness(1.0f);
+                window.draw(fixture);
+
+                sf::RectangleShape mountL({4.0f, 6.0f});
+                mountL.setPosition({lx + 6.0f, ly});
+                mountL.setFillColor(sf::Color(80, 88, 102));
+                window.draw(mountL);
+
+                sf::RectangleShape mountR({4.0f, 6.0f});
+                mountR.setPosition({lx + _tileSize - 10.0f, ly});
+                mountR.setFillColor(sf::Color(80, 88, 102));
+                window.draw(mountR);
+
+                sf::RectangleShape tube({_tileSize - 18.0f, 7.0f});
+                tube.setPosition({lx + 9.0f, ly + 6.0f});
+
+                if (isEnabled) {
+                    float factor = std::clamp(1.0f - flickerDip * 0.85f, 0.15f, 1.0f);
+                    sf::Color tubeColor(
+                        static_cast<uint8_t>(240 * factor),
+                        static_cast<uint8_t>(252 * factor),
+                        static_cast<uint8_t>(255 * factor)
+                    );
+                    tube.setFillColor(tubeColor);
+                    window.draw(tube);
+
+                    sf::RectangleShape glow({_tileSize - 14.0f, 11.0f});
+                    glow.setPosition({lx + 7.0f, ly + 4.0f});
+                    glow.setFillColor(sf::Color(120, 225, 255, static_cast<uint8_t>(75 * factor)));
+                    window.draw(glow);
+                } else {
+                    tube.setFillColor(sf::Color(55, 60, 70));
+                    window.draw(tube);
+                }
+            }
+        }
+    }
+
+    // 5. Отрисовка интерактивных триггеров (батуты и шипы с текстурами, переключатели)
     for (const auto& tr : _triggers) {
         if (tr.x < startX - 1 || tr.x > endX + 1 || tr.y < startY - 1 || tr.y > endY + 1) continue;
         float tx = static_cast<float>(tr.x * _tileSize);
@@ -2295,6 +2446,25 @@ void Arena::draw(sf::RenderWindow& window) {
             float sy = _tileSize / static_cast<float>(_spikesTexture.getSize().y);
             spr.setScale({sx, sy});
             window.draw(spr);
+        } else if (tr.type == 3) {
+            sf::RectangleShape panel({32.0f, 44.0f});
+            panel.setPosition({tx + 16.0f, ty + 10.0f});
+            panel.setFillColor(sf::Color(22, 25, 32));
+            panel.setOutlineColor(sf::Color(0, 220, 255));
+            panel.setOutlineThickness(1.5f);
+            window.draw(panel);
+
+            sf::RectangleShape swBtn({16.0f, 12.0f});
+            swBtn.setPosition({tx + 24.0f, ty + 24.0f});
+            swBtn.setFillColor(sf::Color(45, 52, 65));
+            swBtn.setOutlineColor(sf::Color(100, 200, 255));
+            swBtn.setOutlineThickness(1.0f);
+            window.draw(swBtn);
+
+            sf::CircleShape led(3.0f);
+            led.setPosition({tx + 29.0f, ty + 14.0f});
+            led.setFillColor(sf::Color(0, 255, 180));
+            window.draw(led);
         } else {
             sf::RectangleShape tBox({_tileSize, _tileSize});
             tBox.setPosition({tx, ty});
@@ -2312,4 +2482,381 @@ void Arena::draw(sf::RenderWindow& window) {
             window.draw(tBox);
         }
     }
+}
+
+bool Arena::removeTriggerAtTile(int tx, int ty) {
+    auto it = std::remove_if(_triggers.begin(), _triggers.end(), [tx, ty](const ArenaTrigger& tr) {
+        return tr.x == tx && tr.y == ty;
+    });
+    if (it != _triggers.end()) {
+        _triggers.erase(it, _triggers.end());
+        return true;
+    }
+    return false;
+}
+
+void Arena::updateTriggers(float dt, Player& player) {
+    float px = player.position.x;
+    float py = player.position.y;
+    float halfW = 16.0f;
+    float topOffset = 30.0f;
+    float bottomOffset = 30.0f;
+    sf::FloatRect playerBox({px - halfW, py - topOffset}, {halfW * 2.0f, topOffset + bottomOffset});
+
+    for (auto& tr : _triggers) {
+        sf::FloatRect trBox({tr.x * _tileSize, tr.y * _tileSize}, 
+                            {std::max(1, tr.width) * _tileSize, std::max(1, tr.height) * _tileSize});
+
+        bool overlap = playerBox.findIntersection(trBox).has_value();
+
+        if (tr.type == 0 && overlap) {
+            // JumpPad
+            player.velocity.y = -tr.power;
+            SoundManager::get().play("jump");
+        } else if (tr.type == 1 && overlap) {
+            // Spikes
+            if (tr.currentCooldown <= 0.0f) {
+                player.takeDamage(tr.power, 0.0f, -200.0f, 0.3f);
+                tr.currentCooldown = 0.8f;
+            }
+        } else if (tr.type == 3) {
+            // LightSwitch
+            float dist = std::hypot(px - (tr.x + 0.5f) * _tileSize, py - (tr.y + 0.5f) * _tileSize);
+            if ((overlap || dist <= 56.0f) && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E)) {
+                if (tr.currentCooldown <= 0.0f) {
+                    std::string act = !tr.action.empty() ? tr.action : ("light:toggle " + (tr.targetTag.empty() ? "all" : tr.targetTag));
+                    executeTriggerAction(act, &player, &tr);
+                    tr.currentCooldown = tr.cooldown > 0.0f ? tr.cooldown : 0.5f;
+                    SoundManager::get().play("hit");
+                }
+            }
+        } else if (tr.type == 2 || tr.type == 4) {
+            // TriggerZone / ScriptZone
+            if (tr.condition == 0) { // ON_ENTER
+                if (overlap && (!tr.triggerOnce || !tr.hasTriggered) && tr.currentCooldown <= 0.0f) {
+                    executeTriggerAction(tr.action, &player, &tr);
+                    tr.hasTriggered = true;
+                    tr.currentCooldown = tr.cooldown > 0.0f ? tr.cooldown : 1.0f;
+                }
+            } else if (tr.condition == 1) { // ON_INTERACT (E)
+                float dist = std::hypot(px - (tr.x + 0.5f) * _tileSize, py - (tr.y + 0.5f) * _tileSize);
+                if ((overlap || dist <= 56.0f) && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E) && tr.currentCooldown <= 0.0f) {
+                    if (!tr.triggerOnce || !tr.hasTriggered) {
+                        executeTriggerAction(tr.action, &player, &tr);
+                        tr.hasTriggered = true;
+                        tr.currentCooldown = tr.cooldown > 0.0f ? tr.cooldown : 0.5f;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void Arena::executeTriggerAction(const std::string& action, Player* player, const ArenaTrigger* tr) {
+    if (action.empty()) return;
+
+    std::istringstream stream(action);
+    std::string cmd;
+    while (std::getline(stream, cmd, ';')) {
+        // Trim whitespace
+        cmd.erase(0, cmd.find_first_not_of(" \t\r\n"));
+        cmd.erase(cmd.find_last_not_of(" \t\r\n") + 1);
+        if (cmd.empty()) continue;
+
+        std::istringstream cmdStream(cmd);
+        std::string verb;
+        cmdStream >> verb;
+
+        if (verb == "light:toggle") {
+            std::string tag = "all";
+            if (cmdStream >> tag) {}
+            toggleLamp(tag);
+        } else if (verb == "light:on") {
+            std::string tag = "all";
+            if (cmdStream >> tag) {}
+            setLampState(tag, true);
+        } else if (verb == "light:off") {
+            std::string tag = "all";
+            if (cmdStream >> tag) {}
+            setLampState(tag, false);
+        } else if (verb == "light:flicker") {
+            std::string tag = "all";
+            std::string val = "1";
+            if (cmdStream >> tag >> val) {
+                setLampFlicker(tag, val != "0" && val != "false");
+            }
+        } else if (verb == "ambient:set") {
+            int r = 26, g = 30, b = 40;
+            if (cmdStream >> r >> g >> b) {
+                _ambientColor = sf::Color(r, g, b);
+            }
+        } else if (verb == "msg:show") {
+            std::string rest;
+            std::getline(cmdStream, rest);
+            rest.erase(0, rest.find_first_not_of(" \t"));
+            std::string msgText = "";
+            float duration = 3.0f;
+            int r = 100, g = 255, b = 180;
+
+            if (!rest.empty() && (rest.front() == '"' || rest.front() == '\'')) {
+                char quote = rest.front();
+                size_t endQ = rest.find(quote, 1);
+                if (endQ != std::string::npos) {
+                    msgText = rest.substr(1, endQ - 1);
+                    std::string after = rest.substr(endQ + 1);
+                    std::istringstream extraStream(after);
+                    if (extraStream >> duration) {
+                        extraStream >> r >> g >> b;
+                    }
+                } else {
+                    msgText = rest.substr(1);
+                }
+            } else {
+                std::istringstream restStream(rest);
+                restStream >> msgText >> duration >> r >> g >> b;
+            }
+            showNotification(msgText, duration, sf::Color(r, g, b));
+        } else if (verb == "sound:play") {
+            std::string snd;
+            if (cmdStream >> snd) {
+                SoundManager::get().play(snd);
+            }
+        } else if (verb == "player:heal") {
+            float amount = 25.0f;
+            if (cmdStream >> amount) {}
+            if (player) {
+                player->hp = std::min(player->maxHp, player->hp + amount);
+                showNotification("+" + std::to_string(static_cast<int>(amount)) + " HP ВОССТАНОВЛЕНО", 1.5f, sf::Color(80, 255, 120));
+            }
+        } else if (verb == "player:damage") {
+            float amount = 10.0f;
+            if (cmdStream >> amount) {}
+            if (player) {
+                player->takeDamage(amount, 0.0f, -150.0f, 0.2f);
+            }
+        } else if (verb == "door:teleport") {
+            std::string roomTarget;
+            if (cmdStream >> roomTarget) {
+                loadRoomByName(roomTarget);
+            }
+        }
+    }
+}
+
+void Arena::scanLamps() {
+    std::unordered_map<std::string, LampLight> oldProps;
+    for (const auto& l : _lamps) {
+        std::string key = std::to_string(l.tileX) + "_" + std::to_string(l.tileY);
+        oldProps[key] = l;
+    }
+
+    _lamps.clear();
+    int lampIndex = 0;
+    for (int y = 0; y < _height; ++y) {
+        for (int x = 0; x < _width; ++x) {
+            if (_map[y][x] == 4) {
+                LampLight lamp;
+                lamp.tileX = x;
+                lamp.tileY = y;
+                lamp.worldPos = {(x + 0.5f) * _tileSize, (y + 0.5f) * _tileSize};
+                lamp.radius = 480.0f;
+                lamp.intensity = 1.0f;
+                lamp.color = sf::Color(220, 240, 255);
+                lamp.enabled = true;
+                lamp.flickering = false;
+                lamp.tag = "lamp_" + std::to_string(lampIndex++);
+
+                std::string key = std::to_string(x) + "_" + std::to_string(y);
+                auto it = oldProps.find(key);
+                if (it != oldProps.end()) {
+                    lamp.enabled = it->second.enabled;
+                    lamp.flickering = it->second.flickering;
+                    if (!it->second.tag.empty()) lamp.tag = it->second.tag;
+                    lamp.color = it->second.color;
+                    lamp.radius = it->second.radius;
+                }
+                _lamps.push_back(lamp);
+            }
+        }
+    }
+}
+
+void Arena::addLamp(int tx, int ty, const std::string& tag, bool flickering) {
+    if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return;
+    _map[ty][tx] = 4;
+    _tilemapDirty = true;
+    LampLight lamp;
+    lamp.tileX = tx;
+    lamp.tileY = ty;
+    lamp.worldPos = {(tx + 0.5f) * _tileSize, (ty + 0.5f) * _tileSize};
+    lamp.radius = 480.0f;
+    lamp.intensity = 1.0f;
+    lamp.color = sf::Color(220, 240, 255);
+    lamp.enabled = true;
+    lamp.flickering = flickering;
+    lamp.tag = tag.empty() ? ("lamp_" + std::to_string(_lamps.size())) : tag;
+    _lamps.push_back(lamp);
+}
+
+void Arena::removeLamp(int tx, int ty) {
+    if (tx >= 0 && tx < _width && ty >= 0 && ty < _height && _map[ty][tx] == 4) {
+        _map[ty][tx] = 0;
+        _tilemapDirty = true;
+    }
+    _lamps.erase(std::remove_if(_lamps.begin(), _lamps.end(), [tx, ty](const LampLight& l) {
+        return l.tileX == tx && l.tileY == ty;
+    }), _lamps.end());
+}
+
+void Arena::setLampState(const std::string& tag, bool enabled) {
+    for (auto& l : _lamps) {
+        if (tag == "all" || l.tag == tag) {
+            l.enabled = enabled;
+        }
+    }
+}
+
+void Arena::toggleLamp(const std::string& tag) {
+    for (auto& l : _lamps) {
+        if (tag == "all" || l.tag == tag) {
+            l.enabled = !l.enabled;
+        }
+    }
+}
+
+void Arena::setLampFlicker(const std::string& tag, bool flicker) {
+    for (auto& l : _lamps) {
+        if (tag == "all" || l.tag == tag) {
+            l.flickering = flicker;
+        }
+    }
+}
+
+void Arena::renderLighting(sf::RenderWindow& window, const sf::View& camera, sf::Vector2f playerPos, bool playerArmed) {
+    if (!_lightingEnabled) return;
+
+    sf::Vector2u winSize = window.getSize();
+    if (winSize.x == 0 || winSize.y == 0) return;
+
+    if (!_lightmapInitialized || _lightmap.getSize() != winSize) {
+        if (!_lightmap.resize(winSize)) {
+            return;
+        }
+        _lightmapInitialized = true;
+    }
+
+    _lightmap.setView(camera);
+    _lightmap.clear(_ambientColor);
+
+    sf::RenderStates addStates;
+    addStates.blendMode = sf::BlendAdd;
+
+    // 1. Освещение от активных флуоресцентных ламп
+    for (const auto& lamp : _lamps) {
+        if (!lamp.enabled) continue;
+
+        float effectiveIntensity = lamp.intensity * std::max(0.05f, 1.0f - lamp.flickerDip);
+        if (effectiveIntensity <= 0.01f) continue;
+
+        sf::Vector2f sourcePos = {lamp.worldPos.x, lamp.worldPos.y + 6.0f};
+        float radX = lamp.radius * 1.1f;
+        float radY = lamp.radius * 1.35f;
+
+        const int segments = 32;
+        sf::VertexArray lightFan(sf::PrimitiveType::TriangleFan);
+
+        sf::Color centerCol(
+            static_cast<uint8_t>(std::clamp(lamp.color.r * effectiveIntensity, 0.0f, 255.0f)),
+            static_cast<uint8_t>(std::clamp(lamp.color.g * effectiveIntensity, 0.0f, 255.0f)),
+            static_cast<uint8_t>(std::clamp(lamp.color.b * effectiveIntensity, 0.0f, 255.0f)),
+            255
+        );
+        lightFan.append({sourcePos, centerCol});
+
+        for (int i = 0; i <= segments; ++i) {
+            float angle = static_cast<float>(i) * (2.0f * 3.14159265f / segments);
+            float dirY = std::sin(angle);
+            float currentRadY = (dirY > 0.0f) ? radY : (radY * 0.45f);
+            float lx = sourcePos.x + std::cos(angle) * radX;
+            float ly = sourcePos.y + dirY * currentRadY;
+            lightFan.append({{lx, ly}, sf::Color(0, 0, 0, 255)});
+        }
+        _lightmap.draw(lightFan, addStates);
+
+        // Яркий точечный фокус вокруг лампы
+        sf::VertexArray coreFan(sf::PrimitiveType::TriangleFan);
+        coreFan.append({sourcePos, sf::Color(255, 255, 255, 255)});
+        float coreRad = 60.0f * effectiveIntensity;
+        for (int i = 0; i <= 16; ++i) {
+            float angle = static_cast<float>(i) * (2.0f * 3.14159265f / 16);
+            coreFan.append({{sourcePos.x + std::cos(angle) * coreRad * 1.8f, 
+                             sourcePos.y + std::sin(angle) * coreRad * 0.8f}, sf::Color(0, 0, 0, 255)});
+        }
+        _lightmap.draw(coreFan, addStates);
+    }
+
+    // 2. Персональная аура игрока (фонарик / костюм / оружие)
+    {
+        float pRadius = playerArmed ? 150.0f : 120.0f;
+        sf::VertexArray playerFan(sf::PrimitiveType::TriangleFan);
+        sf::Color pCol = playerArmed ? sf::Color(70, 110, 150, 255) : sf::Color(50, 60, 85, 255);
+        playerFan.append({playerPos, pCol});
+        const int pSegments = 24;
+        for (int i = 0; i <= pSegments; ++i) {
+            float angle = static_cast<float>(i) * (2.0f * 3.14159265f / pSegments);
+            playerFan.append({{playerPos.x + std::cos(angle) * pRadius,
+                              playerPos.y + std::sin(angle) * pRadius}, sf::Color(0, 0, 0, 255)});
+        }
+        _lightmap.draw(playerFan, addStates);
+    }
+
+    _lightmap.display();
+
+    // 3. Умножение лайтмапа на мир
+    sf::RenderStates mulStates;
+    mulStates.blendMode = sf::BlendMultiply;
+    sf::Sprite lightSprite(_lightmap.getTexture());
+    window.setView(window.getDefaultView());
+    window.draw(lightSprite, mulStates);
+    window.setView(camera);
+}
+
+void Arena::showNotification(const std::string& text, float duration, sf::Color col) {
+    _notificationText = text;
+    _notificationDuration = duration;
+    _notificationTimer = duration;
+    _notificationColor = col;
+}
+
+void Arena::drawNotificationUI(sf::RenderWindow& window, const sf::Font* font) {
+    if (_notificationTimer <= 0.0f || _notificationText.empty() || !font) return;
+
+    sf::Text notifText(*font, toSfString(_notificationText), 14);
+    notifText.setFillColor(_notificationColor);
+    notifText.setStyle(sf::Text::Bold);
+    sf::FloatRect bounds = notifText.getLocalBounds();
+
+    float padX = 24.0f;
+    float padY = 8.0f;
+    float boxW = bounds.size.x + padX * 2.0f;
+    float boxH = bounds.size.y + padY * 2.0f;
+    float winW = static_cast<float>(window.getSize().x);
+    float boxX = (winW - boxW) * 0.5f;
+    float boxY = 45.0f;
+
+    sf::RectangleShape box({boxW, boxH});
+    box.setPosition({boxX, boxY});
+    box.setFillColor(sf::Color(8, 10, 14, 240));
+    box.setOutlineColor(_notificationColor);
+    box.setOutlineThickness(1.5f);
+    window.draw(box);
+
+    // Верхняя неоновая полоса
+    sf::RectangleShape topStrip({boxW, 2.5f});
+    topStrip.setPosition({boxX, boxY});
+    topStrip.setFillColor(_notificationColor);
+    window.draw(topStrip);
+
+    notifText.setPosition({boxX + padX - bounds.position.x, boxY + padY - bounds.position.y});
+    window.draw(notifText);
 }

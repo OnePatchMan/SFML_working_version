@@ -68,6 +68,13 @@ void MapEditor::scanTileSprites() {
     }
     {
         IngameTileSpriteItem item;
+        item.name = "Лампа";
+        item.filename = "04_lamp.png";
+        item.tool = EditorTool::LAMP;
+        _paletteSprites.push_back(std::move(item));
+    }
+    {
+        IngameTileSpriteItem item;
         item.name = "Игрок (P)";
         item.filename = "player_spawn.png";
         item.tool = EditorTool::PLAYER_SPAWN;
@@ -746,6 +753,10 @@ void MapEditor::handleInput(const std::optional<sf::Event>& event, Arena& arena,
             _tool = EditorTool::ERASER;
             _statusMessage = "Инструмент: Ластик (стереть блок / врага)";
             _statusTimer = 2.0f;
+        } else if (kp->code == sf::Keyboard::Key::Num0 || kp->code == sf::Keyboard::Key::Numpad0) {
+            _tool = EditorTool::LAMP;
+            _statusMessage = "Инструмент: Люминесцентная лампа (L - освещение лаборатории)";
+            _statusTimer = 2.0f;
         }
 
         // Кисть и настройка двери
@@ -1230,6 +1241,13 @@ void MapEditor::applyToolAt(int tx, int ty, Arena& arena, Player& player, Enemy&
         _statusTimer = 2.0f;
         return;
     }
+    if (_tool == EditorTool::LAMP) {
+        arena.setTile(tx, ty, 4);
+        arena.scanLamps();
+        _statusMessage = "Люминесцентная лампа установлена на [" + std::to_string(tx) + ", " + std::to_string(ty) + "]";
+        _statusTimer = 2.0f;
+        return;
+    }
 
     int tileVal = (_tool == EditorTool::PLATFORM ? 1 : 2);
     int half = _brushSize / 2;
@@ -1646,6 +1664,11 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             brushRect.setPosition({bX, bY});
             brushRect.setFillColor(sf::Color(180, 30, 30, 60));
             brushRect.setOutlineColor(sf::Color(255, 50, 50, 220));
+        } else if (_tool == EditorTool::LAMP) {
+            brushRect.setSize({ts, ts});
+            brushRect.setPosition({static_cast<float>(_lastHoverTile.x) * ts, static_cast<float>(_lastHoverTile.y) * ts});
+            brushRect.setFillColor(sf::Color(180, 240, 255, 90));
+            brushRect.setOutlineColor(sf::Color(220, 250, 255, 255));
         } else if (_tool == EditorTool::FLOOD_FILL) {
             brushRect.setSize({ts, ts});
             brushRect.setPosition({static_cast<float>(_lastHoverTile.x) * ts, static_cast<float>(_lastHoverTile.y) * ts});
@@ -1676,8 +1699,8 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
     // 1. Верхняя панель инструментов
     sf::RectangleShape bar({winW, 118.0f});
     bar.setPosition({0.0f, 0.0f});
-    bar.setFillColor(sf::Color(16, 20, 28, 245));
-    bar.setOutlineColor(sf::Color(65, 80, 105, 200));
+    bar.setFillColor(sf::Color(10, 11, 14, 250));
+    bar.setOutlineColor(sf::Color(40, 44, 52, 220));
     bar.setOutlineThickness(1.0f);
     window.draw(bar);
 
@@ -1710,6 +1733,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
         toolsStr += (_tool == EditorTool::ENEMY_DUELIST ? ">> [7] Дуэль-Агр <<  " : "[7] Дуэль-Агр  ");
         toolsStr += (_tool == EditorTool::ENEMY_DUELIST_PASSIVE ? ">> [8] Дуэль-Пасс <<  " : "[8] Дуэль-Пасс  ");
         toolsStr += (_tool == EditorTool::ERASER ? ">> [9] Ластик <<  " : "[9] Ластик  ");
+        toolsStr += (_tool == EditorTool::LAMP ? ">> [0] Лампа <<  " : "[0] Лампа  ");
         toolsStr += (_tool == EditorTool::BOX_FILL ? ">> [X] Box <<  " : "[X] Box  ");
         toolsStr += (_tool == EditorTool::LINE ? ">> [L] Линия <<  " : "[L] Линия  ");
         toolsStr += (_tool == EditorTool::FLOOD_FILL ? ">> [G] Ведро <<  " : "[G] Ведро  ");
@@ -1763,8 +1787,8 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
 
     sf::RectangleShape mmBg({mmW, mmH});
     mmBg.setPosition({mmX, mmY});
-    mmBg.setFillColor(sf::Color(12, 16, 24, 235));
-    mmBg.setOutlineColor(sf::Color(70, 85, 115, 220));
+    mmBg.setFillColor(sf::Color(8, 9, 12, 250));
+    mmBg.setOutlineColor(sf::Color(35, 40, 50, 220));
     mmBg.setOutlineThickness(1.5f);
     window.draw(mmBg);
 
@@ -1799,6 +1823,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             if (tile == 1) dot.setFillColor(sf::Color(76, 175, 80));
             else if (tile == 2) dot.setFillColor(sf::Color(90, 110, 140));
             else if (tile == 3) dot.setFillColor(sf::Color(0, 229, 255));
+            else if (tile == 4) dot.setFillColor(sf::Color(180, 240, 255));
 
             window.draw(dot);
         }
@@ -1840,8 +1865,8 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
 
     sf::RectangleShape palBg({palW, palH});
     palBg.setPosition({palX, palY});
-    palBg.setFillColor(sf::Color(15, 20, 28, 245));
-    palBg.setOutlineColor(sf::Color(65, 80, 110, 220));
+    palBg.setFillColor(sf::Color(10, 11, 14, 250));
+    palBg.setOutlineColor(sf::Color(40, 44, 52, 220));
     palBg.setOutlineThickness(1.5f);
     window.draw(palBg);
 
@@ -1963,8 +1988,8 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
         bool isSelected = (_tool == _paletteSprites[i].tool);
         sf::RectangleShape card({cardW, cardH});
         card.setPosition({cardX, cardY});
-        card.setFillColor(isSelected ? sf::Color(35, 55, 80) : sf::Color(20, 26, 36));
-        card.setOutlineColor(isSelected ? sf::Color(255, 215, 0) : sf::Color(60, 75, 100));
+        card.setFillColor(isSelected ? sf::Color(25, 30, 40) : sf::Color(14, 16, 20));
+        card.setOutlineColor(isSelected ? sf::Color(0, 220, 255) : sf::Color(35, 40, 50));
         card.setOutlineThickness(isSelected ? 2.5f : 1.0f);
         window.draw(card);
 
@@ -1979,6 +2004,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) hotkeyStr = "[7]";
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) hotkeyStr = "[8]";
             else if (_paletteSprites[i].tool == EditorTool::ERASER) hotkeyStr = "[9]";
+            else if (_paletteSprites[i].tool == EditorTool::LAMP) hotkeyStr = "[0]";
             else if (_paletteSprites[i].tool == EditorTool::BOX_FILL) hotkeyStr = "[X]";
             else if (_paletteSprites[i].tool == EditorTool::LINE) hotkeyStr = "[L]";
             else if (_paletteSprites[i].tool == EditorTool::FLOOD_FILL) hotkeyStr = "[G]";
@@ -2010,6 +2036,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) colorBox.setFillColor(sf::Color(170, 70, 230));
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) colorBox.setFillColor(sf::Color(45, 185, 245));
             else if (_paletteSprites[i].tool == EditorTool::ERASER) colorBox.setFillColor(sf::Color(60, 60, 60));
+            else if (_paletteSprites[i].tool == EditorTool::LAMP) colorBox.setFillColor(sf::Color(180, 240, 255));
             else if (_paletteSprites[i].tool == EditorTool::BOX_FILL) colorBox.setFillColor(sf::Color(100, 180, 255));
             else if (_paletteSprites[i].tool == EditorTool::LINE) colorBox.setFillColor(sf::Color(80, 220, 160));
             else if (_paletteSprites[i].tool == EditorTool::FLOOD_FILL) colorBox.setFillColor(sf::Color(255, 180, 0));
@@ -2028,6 +2055,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
                 else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) letter = "DP";
                 else if (_paletteSprites[i].tool == EditorTool::DOOR) letter = "D";
                 else if (_paletteSprites[i].tool == EditorTool::ERASER) letter = "X";
+                else if (_paletteSprites[i].tool == EditorTool::LAMP) letter = "L";
                 else if (_paletteSprites[i].tool == EditorTool::BOX_FILL) letter = "[]";
                 else if (_paletteSprites[i].tool == EditorTool::LINE) letter = "/";
                 else if (_paletteSprites[i].tool == EditorTool::FLOOD_FILL) letter = "F";

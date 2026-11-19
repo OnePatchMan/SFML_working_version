@@ -353,6 +353,7 @@ int main() {
         // Обновление состояний
         if (!menuSystem.isInMenu()) {
             arena.update(dt);
+            arena.updateTriggers(dt, player);
             player.update(dt, arena, mouseWorld);
             bool playerIsAttacking = combat.isAttacking() || combat.getCooldown() > 0.0f;
             for (auto& e : enemies) {
@@ -456,11 +457,14 @@ int main() {
             combat.drawWorld(window, player);
             player.draw(window);
 
+            // Динамическое лабораторное освещение (флуоресцентные лампы, полумрак, персональная аура)
+            arena.renderLighting(window, camera, player.position, player.hasWeapon());
+
             // Полное скрытие всех областей за пределами локации (100% черный цвет)
             arena.drawBlackoutMask(window);
         } else {
-            // В главном меню (и окнах настроек/гайда) мир игры не рендерится, заливка 100% сплошная
-            window.clear(sf::Color(13, 17, 26));
+            // В главном меню (и окнах настроек/гайда) мир игры не рендерится, глубокая обсидианово-черная заливка
+            window.clear(sf::Color(8, 9, 12));
         }
 
         // 2. Отрисовка интерфейса
@@ -470,6 +474,7 @@ int main() {
             window.setMouseCursorVisible(menuSystem.isInMenu());
         } else {
             combat.drawUI(window, &player);
+            arena.drawNotificationUI(window, combat.getFont());
 
             // Экран гибели персонажа (Game Over)
             if (player.isDead) {
@@ -500,7 +505,7 @@ int main() {
                 crosshair.Draw(window);
             }
 
-            // Информационная панель режима тренировки (вверху по центру экрана)
+            // Информационная панель режима тренировки (вверху по центру экрана, темный обсидиан)
             if (isTrainingMode && combat.getFont()) {
                 const sf::Font& font = *combat.getFont();
                 float barW = 640.0f;
@@ -510,9 +515,9 @@ int main() {
 
                 sf::RectangleShape banner({barW, barH});
                 banner.setPosition({barX, barY});
-                banner.setFillColor(sf::Color(14, 26, 22, 230));
+                banner.setFillColor(sf::Color(11, 13, 17, 245));
                 banner.setOutlineThickness(1.5f);
-                banner.setOutlineColor(sf::Color(55, 195, 125, 220));
+                banner.setOutlineColor(sf::Color(65, 72, 85, 230));
                 window.draw(banner);
 
                 std::string blockStr = (dummyBlockMode == DummyBlockMode::NONE)      ? "БЕЗ БЛОКА" :

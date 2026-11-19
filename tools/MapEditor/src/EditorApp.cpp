@@ -3782,8 +3782,8 @@ void EditorApp::drawWorldLayoutUI() {
     // 1. Верхняя панель (высота 90px)
     sf::RectangleShape topBar({winW, 90.0f});
     topBar.setPosition({0.0f, 0.0f});
-    topBar.setFillColor(sf::Color(16, 20, 28, 245));
-    topBar.setOutlineColor(sf::Color(65, 80, 105, 200));
+    topBar.setFillColor(sf::Color(10, 11, 14, 250));
+    topBar.setOutlineColor(sf::Color(40, 44, 52, 220));
     topBar.setOutlineThickness(1.0f);
     _window.draw(topBar);
 
@@ -5576,8 +5576,8 @@ void EditorApp::drawUI() {
 
     sf::RectangleShape palBg({palW, palH});
     palBg.setPosition({palX, palY});
-    palBg.setFillColor(sf::Color(15, 20, 28, 245));
-    palBg.setOutlineColor(sf::Color(65, 80, 110, 220));
+    palBg.setFillColor(sf::Color(10, 11, 14, 250));
+    palBg.setOutlineColor(sf::Color(40, 44, 52, 220));
     palBg.setOutlineThickness(1.5f);
     _window.draw(palBg);
 

@@ -503,7 +503,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
                               (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21" ||
                               entry.id == "121" || entry.id == "db1u1" || entry.id == "db1up1" || entry.id == "b1u1" ||
                               entry.id == "dw1jadw1" || entry.id == "dw1adw1");
-        if (player.hasWeapon()) {
+        if (entry.id == "12" || entry.id == "weapon_12") {
+            // Базовый комбо 1-2 (Ground Slam & Pop-Up) разрешен как для рукопашного боя, так и с оружием (начало для 12f1, 12df2, 121)
+        } else if (player.hasWeapon()) {
             if (!isWeaponCombo) {
                 continue; // С оружием в руках рукопашные комбо заблокированы
             }
