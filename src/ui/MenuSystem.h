@@ -55,6 +55,7 @@ public:
 
     // Коллбеки
     void setOnStartGame(std::function<void()> cb) { _onStartGame = std::move(cb); }
+    void setOnStartTraining(std::function<void()> cb) { _onStartTraining = std::move(cb); }
     void setOnResetGame(std::function<void()> cb) { _onResetGame = std::move(cb); }
     void setOnExitGame(std::function<void()> cb) { _onExitGame = std::move(cb); }
     void setOnFpsModeChanged(std::function<void(FpsLimitMode)> cb) { _onFpsModeChanged = std::move(cb); }
@@ -64,6 +65,9 @@ public:
 
     bool getShowFpsCounter() const { return _showFpsCounter; }
     void setShowFpsCounter(bool show) { _showFpsCounter = show; }
+
+    bool isTrainingMode() const { return _isTrainingMode; }
+    void setTrainingMode(bool tm) { _isTrainingMode = tm; }
 
     void openPauseMenu() {
         _appState = AppState::PAUSED;
@@ -121,7 +125,10 @@ private:
     bool _isMuted = false;
     float _preMuteVolume = 50.0f;
 
+    bool _isTrainingMode = false;
+
     std::function<void()> _onStartGame;
+    std::function<void()> _onStartTraining;
     std::function<void()> _onResetGame;
     std::function<void()> _onExitGame;
     std::function<void(FpsLimitMode)> _onFpsModeChanged;

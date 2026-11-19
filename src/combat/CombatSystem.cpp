@@ -1535,6 +1535,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
         if (it->pickupCooldown > 0.0f) it->pickupCooldown -= dt;
 
         float speed = std::hypot(it->velocity.x, it->velocity.y);
+        sf::Vector2f startPos = it->position;
 
         // 1. Полет и физика в пространстве арены
         if (!it->grounded) {
@@ -1581,7 +1582,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 }
             }
 
-            sf::Vector2f startPos = it->position;
+            startPos = it->position;
             sf::Vector2f targetPos = it->position + it->velocity * dt;
             sf::Vector2f hitPoint, hitNormal;
             sf::Vector2i hitTile;
@@ -1592,8 +1593,13 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 it->velocity = (it->velocity - 2.0f * dot * hitNormal) * 0.35f;
                 it->position = hitPoint + hitNormal * 3.0f;
 
+                // При ударе о пол (землю) вертикальный отскок тяжелой булавы сильно гасится:
+                if (hitNormal.y < -0.5f) {
+                    it->velocity.y *= 0.20f;
+                }
+
                 float bounceSpeed = std::hypot(it->velocity.x, it->velocity.y);
-                if (hitNormal.y < -0.5f && bounceSpeed < 90.0f) {
+                if (hitNormal.y < -0.5f && (bounceSpeed < 180.0f || it->velocity.y > -90.0f)) {
                     it->grounded = true;
                     it->velocity = {0.0f, 0.0f};
                     it->angularVelocity = 0.0f;
@@ -1605,25 +1611,37 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
         }
 
         // Обновляем текущую скорость после шага физики
-        speed = std::hypot(it->velocity.x, it->velocity.y);
+            speed = std::hypot(it->velocity.x, it->velocity.y);
 
-        // 2. Столкновение с врагами (Урон от скорости + форса + стан-лок + кровь при летале)
-        // Булава бьет СТРОГО 1 РАЗ за бросок и больше ударить не может (!it->hasHit)
-        bool canHitEnemy = (!it->hasHit) && (it->hitCooldown <= 0.0f) && 
-                           (speed > 80.0f || (it->isUpwardThrow && (it->apexHoverTimer > 0.0f || it->velocity.y > 0.0f)));
-        if (canHitEnemy) {
-            for (Enemy* enemyPtr : enemiesList) {
-                if (!enemyPtr) continue;
-                Enemy& enemy = *enemyPtr;
-                if (enemy.isDead || enemy.hp <= 0.0f) continue;
+            // 2. Столкновение с врагами (Continuous Collision Detection против туннелирования на любой скорости)
+            // Булава бьет СТРОГО 1 РАЗ за бросок и больше ударить не может (!it->hasHit)
+            bool canHitEnemy = (!it->hasHit) && (it->hitCooldown <= 0.0f) && 
+                               (speed > 80.0f || (it->isUpwardThrow && (it->apexHoverTimer > 0.0f || it->velocity.y > 0.0f)));
+            if (canHitEnemy) {
+                for (Enemy* enemyPtr : enemiesList) {
+                    if (!enemyPtr) continue;
+                    Enemy& enemy = *enemyPtr;
+                    if (enemy.isDead || enemy.hp <= 0.0f) continue;
 
-                sf::FloatRect eBounds = enemy.getBounds();
-                float distToEnemy = std::hypot(enemy.position.x - it->position.x, 
-                                               (enemy.position.y - Enemy::HALF_H) - it->position.y);
+                    sf::FloatRect eBounds = enemy.getBounds();
+                    sf::Vector2f enemyCenter = {enemy.position.x, enemy.position.y - Enemy::HALF_H};
+                    float distToEnemy = std::hypot(enemyCenter.x - it->position.x, enemyCenter.y - it->position.y);
 
-                if (eBounds.contains(it->position) || distToEnemy < 38.0f) {
-                    it->hasHit = true; // Булава нанесла удар и больше в этом броске ударить не может!
-                    it->hitCooldown = 999.0f;
+                    // Проверка непрерывной коллизии по отрезку перемещения за кадр
+                    auto distToSeg = [](const sf::Vector2f& p, const sf::Vector2f& a, const sf::Vector2f& b) {
+                        sf::Vector2f ab = b - a;
+                        float lenSq = ab.x * ab.x + ab.y * ab.y;
+                        if (lenSq < 0.0001f) return std::hypot(p.x - a.x, p.y - a.y);
+                        float t = std::clamp(((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / lenSq, 0.0f, 1.0f);
+                        sf::Vector2f proj = a + t * ab;
+                        return std::hypot(p.x - proj.x, p.y - proj.y);
+                    };
+                    float segDist = distToSeg(enemyCenter, startPos, it->position);
+
+                    if (eBounds.contains(it->position) || distToEnemy < 38.0f || segDist < 38.0f) {
+                        it->hasHit = true; // Булава нанесла удар и больше в этом броске ударить не может!
+                        it->hitCooldown = 999.0f;
+                        it->position = enemyCenter; // Позиционируем оружие точно на противнике
                     // Рассчитываем урон пропорционально скорости полета булавы
                     float speedFactor = std::clamp(speed / 950.0f, 0.20f, 1.25f);
                     if (it->isUpwardThrow) speedFactor = std::max(speedFactor, 0.65f);

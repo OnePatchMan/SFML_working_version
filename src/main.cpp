@@ -27,10 +27,23 @@ int main() {
     CombatSystem combat;
 
     bool isSmartAIMode = true;
+    bool isTrainingMode = false;
+    DummyBlockMode dummyBlockMode = DummyBlockMode::NONE;
     std::vector<Enemy> enemies;
 
     auto respawnEnemies = [&]() {
         enemies.clear();
+        if (isTrainingMode) {
+            // Спавн одного бессмертного тренировочного манекена прямо перед спавном игрока
+            float dummyX = arena.getSpawnPosition().x + 220.0f;
+            float dummyY = arena.getSpawnPosition().y;
+            enemies.emplace_back(sf::Vector2f(dummyX, dummyY), EnemyType::DUMMY);
+            enemies.back().setDummyBlockMode(dummyBlockMode);
+            enemies.back().reset();
+            std::cout << "[TRAINING MODE] Тренировочный манекен (Dummy) заспавнен на позиции ["
+                      << dummyX << ", " << dummyY << "]" << std::endl;
+            return;
+        }
         const auto& spawns = arena.getEnemySpawns();
         if (spawns.empty()) {
             enemies.emplace_back(arena.getEnemySpawnPosition(), EnemyType::NORMAL);
@@ -120,9 +133,24 @@ int main() {
     menuSystem.setShowFpsCounter(true);
 
     menuSystem.setOnStartGame([&]() {
+        isTrainingMode = false;
+        menuSystem.setTrainingMode(false);
+        respawnEnemies();
+        window.setMouseCursorVisible(false);
+    });
+    menuSystem.setOnStartTraining([&]() {
+        isTrainingMode = true;
+        menuSystem.setTrainingMode(true);
+        arena.loadRoom(1);
+        player.reset(arena.getSpawnPosition());
+        respawnEnemies();
+        combat.reset();
+        camera.setCenter(player.position);
         window.setMouseCursorVisible(false);
     });
     menuSystem.setOnResetGame([&]() {
+        isTrainingMode = false;
+        menuSystem.setTrainingMode(false);
         arena.loadRoom(1);
         player.reset(arena.getSpawnPosition());
         respawnEnemies();
@@ -149,10 +177,48 @@ int main() {
     float avgCpuMs = 0.4f;
     float avgSwapMs = 6.5f;
 
+    // Мониторинг изменений файлов KV на диске для автоматической горячей перезагрузки (Hot-Reload)
+    sf::Clock kvWatchClock;
+    auto getFileTimeSafe = [](const std::string& p) -> std::filesystem::file_time_type {
+        try {
+            std::string resolved = resolveAssetPath(p);
+            if (std::filesystem::exists(resolved)) {
+                return std::filesystem::last_write_time(resolved);
+            }
+        } catch (...) {}
+        return {};
+    };
+    auto lastCombatTime = getFileTimeSafe("assets/config/combat_balance.kv");
+    auto lastPlayerTime = getFileTimeSafe("assets/config/player.kv");
+    auto lastEnemyTime = getFileTimeSafe("assets/config/enemy.kv");
+
     while (window.isOpen()) {
         sf::Clock frameWorkClock;
         float dt = dtClock.restart().asSeconds();
         if (dt > 0.1f) dt = 0.1f;
+
+        // Автоматическая горячая перезагрузка конфигураций при сохранении KV-файлов (без необходимости F5)
+        if (kvWatchClock.getElapsedTime().asSeconds() >= 0.5f) {
+            kvWatchClock.restart();
+            auto curC = getFileTimeSafe("assets/config/combat_balance.kv");
+            if (curC != std::filesystem::file_time_type{} && curC > lastCombatTime) {
+                lastCombatTime = curC;
+                CombatConfig::reload();
+                std::cout << "[HOT-RELOAD] Файл assets/config/combat_balance.kv был изменен на диске -> баланс комбо и оружия обновлен!" << std::endl;
+            }
+            auto curP = getFileTimeSafe("assets/config/player.kv");
+            if (curP != std::filesystem::file_time_type{} && curP > lastPlayerTime) {
+                lastPlayerTime = curP;
+                PlayerConfig::reload();
+                std::cout << "[HOT-RELOAD] Файл assets/config/player.kv был изменен на диске -> параметры игрока обновлены!" << std::endl;
+            }
+            auto curE = getFileTimeSafe("assets/config/enemy.kv");
+            if (curE != std::filesystem::file_time_type{} && curE > lastEnemyTime) {
+                lastEnemyTime = curE;
+                EnemyConfig::reload();
+                std::cout << "[HOT-RELOAD] Файл assets/config/enemy.kv был изменен на диске -> параметры врагов обновлены!" << std::endl;
+            }
+        }
 
         sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
         sf::Vector2f mouseWorld = window.mapPixelToCoords(mousePixel, camera);
@@ -231,6 +297,24 @@ int main() {
                         respawnEnemies();
                         std::cout << "[F5] Конфиги и комната " << arena.getCurrentRoomIndex() << " перезагружены, "
                                   << enemies.size() << " врагов заспавнены!" << std::endl;
+                    }
+                    // F6 - переключение режима блока манекена в тренировочном режиме
+                    if (keyPressed->code == sf::Keyboard::Key::F6) {
+                        if (isTrainingMode) {
+                            dummyBlockMode = (dummyBlockMode == DummyBlockMode::NONE) ? DummyBlockMode::HIGH :
+                                             (dummyBlockMode == DummyBlockMode::HIGH) ? DummyBlockMode::LOW :
+                                             (dummyBlockMode == DummyBlockMode::LOW)  ? DummyBlockMode::AUTO :
+                                                                                        DummyBlockMode::NONE;
+                            for (auto& e : enemies) {
+                                if (e.getType() == EnemyType::DUMMY) {
+                                    e.setDummyBlockMode(dummyBlockMode);
+                                }
+                            }
+                            const char* bName = (dummyBlockMode == DummyBlockMode::NONE) ? "БЕЗ БЛОКА" :
+                                                (dummyBlockMode == DummyBlockMode::HIGH) ? "ВЕРХНИЙ БЛОК (HIGH)" :
+                                                (dummyBlockMode == DummyBlockMode::LOW)  ? "НИЖНИЙ БЛОК (LOW)" : "АВТО-РЕАКЦИЯ";
+                            std::cout << "[TRAINING] Режим блока манекена: " << bName << std::endl;
+                        }
                     }
                     // Быстрое переключение комнат в бою (PageUp / PageDown)
                     if (keyPressed->code == sf::Keyboard::Key::PageUp) {
@@ -411,6 +495,33 @@ int main() {
                 }
             } else {
                 crosshair.Draw(window);
+            }
+
+            // Информационная панель режима тренировки (вверху по центру экрана)
+            if (isTrainingMode && combat.getFont()) {
+                const sf::Font& font = *combat.getFont();
+                float barW = 580.0f;
+                float barH = 30.0f;
+                float barX = winSize.x * 0.5f - barW * 0.5f;
+                float barY = 12.0f;
+
+                sf::RectangleShape banner({barW, barH});
+                banner.setPosition({barX, barY});
+                banner.setFillColor(sf::Color(14, 26, 22, 230));
+                banner.setOutlineThickness(1.5f);
+                banner.setOutlineColor(sf::Color(55, 195, 125, 220));
+                window.draw(banner);
+
+                std::string blockStr = (dummyBlockMode == DummyBlockMode::NONE) ? "БЕЗ БЛОКА" :
+                                       (dummyBlockMode == DummyBlockMode::HIGH) ? "ВЕРХНИЙ БЛОК" :
+                                       (dummyBlockMode == DummyBlockMode::LOW)  ? "НИЖНИЙ БЛОК" : "АВТО-РЕАКЦИЯ";
+                std::string infoStr = "РЕЖИМ ТРЕНИРОВКИ  |  Манекен: Бессмертный  |  [F6] Блок: " + blockStr + "  |  [Backspace] Сброс";
+                sf::Text bannerText(font, toSfString(infoStr), 13);
+                bannerText.setFillColor(sf::Color(215, 255, 230));
+                sf::FloatRect tb = bannerText.getLocalBounds();
+                bannerText.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
+                bannerText.setPosition(sf::Vector2f(winSize.x * 0.5f, barY + barH * 0.5f));
+                window.draw(bannerText);
             }
         }
 

@@ -124,9 +124,9 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
     }
 
     float btnW = 380.0f;
-    float btnH = 54.0f;
-    float startY = cy - 85.0f;
-    float stepY = 68.0f;
+    float btnH = 50.0f;
+    float startY = cy - 120.0f;
+    float stepY = 60.0f;
 
     bool mouseClicked = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
     static bool prevMouse = false;
@@ -134,70 +134,96 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
     prevMouse = mouseClicked;
 
     if (_appState == AppState::MAIN_MENU) {
-        // 1. ИГРАТЬ
+        // 1. ИГРАТЬ (Обычная игра)
         Button btnPlay{{{cx - btnW * 0.5f, startY}, {btnW, btnH}}, "ИГРАТЬ",
-                       sf::Color(32, 75, 145), sf::Color(50, 115, 225), sf::Color(90, 155, 255), 23};
+                       sf::Color(32, 75, 145), sf::Color(50, 115, 225), sf::Color(90, 155, 255), 22};
         if (drawButton(window, btnPlay, mousePos) && justClicked) {
             SoundManager::get().play("1", 40.0f);
+            _isTrainingMode = false;
             if (_onStartGame) _onStartGame();
             _appState = AppState::IN_GAME;
         }
 
-        // 2. НАСТРОЙКИ
-        Button btnSettings{{{cx - btnW * 0.5f, startY + stepY}, {btnW, btnH}}, "НАСТРОЙКИ",
-                           sf::Color(26, 42, 68), sf::Color(42, 72, 118), sf::Color(75, 115, 180), 21};
+        // 2. ТРЕНИРОВКА (Режим с бессмертным манекеном и комбо-счетчиком)
+        Button btnTrain{{{cx - btnW * 0.5f, startY + stepY}, {btnW, btnH}}, "ТРЕНИРОВКА (МАНЕКЕН)",
+                        sf::Color(36, 75, 60), sf::Color(45, 125, 90), sf::Color(80, 215, 150), 21};
+        if (drawButton(window, btnTrain, mousePos) && justClicked) {
+            SoundManager::get().play("1", 40.0f);
+            _isTrainingMode = true;
+            if (_onStartTraining) _onStartTraining();
+            _appState = AppState::IN_GAME;
+        }
+
+        // 3. НАСТРОЙКИ
+        Button btnSettings{{{cx - btnW * 0.5f, startY + stepY * 2.0f}, {btnW, btnH}}, "НАСТРОЙКИ",
+                           sf::Color(26, 42, 68), sf::Color(42, 72, 118), sf::Color(75, 115, 180), 20};
         if (drawButton(window, btnSettings, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::SETTINGS;
         }
 
-        // 3. ГАЙД
-        Button btnGuide{{{cx - btnW * 0.5f, startY + stepY * 2.0f}, {btnW, btnH}}, "ГАЙД ПО ИГРЕ",
-                        sf::Color(32, 55, 65), sf::Color(48, 92, 108), sf::Color(80, 155, 180), 21};
+        // 4. ГАЙД
+        Button btnGuide{{{cx - btnW * 0.5f, startY + stepY * 3.0f}, {btnW, btnH}}, "ГАЙД ПО ИГРЕ",
+                        sf::Color(32, 55, 65), sf::Color(48, 92, 108), sf::Color(80, 155, 180), 20};
         if (drawButton(window, btnGuide, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::GUIDE;
         }
 
-        // 4. ВЫХОД
-        Button btnExit{{{cx - btnW * 0.5f, startY + stepY * 3.0f}, {btnW, btnH}}, "ВЫХОД",
-                       sf::Color(68, 26, 34), sf::Color(145, 42, 54), sf::Color(220, 75, 88), 21};
+        // 5. ВЫХОД
+        Button btnExit{{{cx - btnW * 0.5f, startY + stepY * 4.0f}, {btnW, btnH}}, "ВЫХОД",
+                       sf::Color(68, 26, 34), sf::Color(145, 42, 54), sf::Color(220, 75, 88), 20};
         if (drawButton(window, btnExit, mousePos) && justClicked) {
             if (_onExitGame) _onExitGame();
         }
     } else {
         // PAUSED STATE
         Button btnResume{{{cx - btnW * 0.5f, startY}, {btnW, btnH}}, "ПРОДОЛЖИТЬ [ESC]",
-                         sf::Color(32, 75, 145), sf::Color(50, 115, 225), sf::Color(90, 155, 255), 22};
+                         sf::Color(32, 75, 145), sf::Color(50, 115, 225), sf::Color(90, 155, 255), 21};
         if (drawButton(window, btnResume, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             resumeGame();
         }
 
-        Button btnSettings{{{cx - btnW * 0.5f, startY + stepY}, {btnW, btnH}}, "НАСТРОЙКИ",
-                           sf::Color(26, 42, 68), sf::Color(42, 72, 118), sf::Color(75, 115, 180), 21};
+        std::string modeToggleLabel = _isTrainingMode ? "ВЫЙТИ ИЗ ТРЕНИРОВКИ" : "РЕЖИМ ТРЕНИРОВКИ";
+        Button btnSwitchMode{{{cx - btnW * 0.5f, startY + stepY}, {btnW, btnH}}, modeToggleLabel,
+                             sf::Color(36, 75, 60), sf::Color(45, 125, 90), sf::Color(80, 215, 150), 19};
+        if (drawButton(window, btnSwitchMode, mousePos) && justClicked) {
+            SoundManager::get().play("1", 40.0f);
+            if (_isTrainingMode) {
+                _isTrainingMode = false;
+                if (_onStartGame) _onStartGame();
+            } else {
+                _isTrainingMode = true;
+                if (_onStartTraining) _onStartTraining();
+            }
+            resumeGame();
+        }
+
+        Button btnSettings{{{cx - btnW * 0.5f, startY + stepY * 2.0f}, {btnW, btnH}}, "НАСТРОЙКИ",
+                           sf::Color(26, 42, 68), sf::Color(42, 72, 118), sf::Color(75, 115, 180), 20};
         if (drawButton(window, btnSettings, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::SETTINGS;
         }
 
-        Button btnGuide{{{cx - btnW * 0.5f, startY + stepY * 2.0f}, {btnW, btnH}}, "ГАЙД ПО ИГРЕ",
-                        sf::Color(32, 55, 65), sf::Color(48, 92, 108), sf::Color(80, 155, 180), 21};
+        Button btnGuide{{{cx - btnW * 0.5f, startY + stepY * 3.0f}, {btnW, btnH}}, "ГАЙД ПО ИГРЕ",
+                        sf::Color(32, 55, 65), sf::Color(48, 92, 108), sf::Color(80, 155, 180), 20};
         if (drawButton(window, btnGuide, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             _currentScreen = MenuScreen::GUIDE;
         }
 
-        Button btnToMenu{{{cx - btnW * 0.5f, startY + stepY * 3.0f}, {btnW, btnH}}, "В ГЛАВНОЕ МЕНЮ",
-                         sf::Color(35, 35, 52), sf::Color(62, 62, 92), sf::Color(110, 110, 155), 20};
+        Button btnToMenu{{{cx - btnW * 0.5f, startY + stepY * 4.0f}, {btnW, btnH}}, "В ГЛАВНОЕ МЕНЮ",
+                         sf::Color(35, 35, 52), sf::Color(62, 62, 92), sf::Color(110, 110, 155), 19};
         if (drawButton(window, btnToMenu, mousePos) && justClicked) {
             SoundManager::get().play("1", 35.0f);
             if (_onResetGame) _onResetGame();
             openMainMenu();
         }
 
-        Button btnExit{{{cx - btnW * 0.5f, startY + stepY * 4.0f}, {btnW, btnH}}, "ВЫЙТИ ИЗ ИГРЫ",
-                       sf::Color(68, 26, 34), sf::Color(145, 42, 54), sf::Color(220, 75, 88), 21};
+        Button btnExit{{{cx - btnW * 0.5f, startY + stepY * 5.0f}, {btnW, btnH}}, "ВЫЙТИ ИЗ ИГРЫ",
+                       sf::Color(68, 26, 34), sf::Color(145, 42, 54), sf::Color(220, 75, 88), 19};
         if (drawButton(window, btnExit, mousePos) && justClicked) {
             if (_onExitGame) _onExitGame();
         }

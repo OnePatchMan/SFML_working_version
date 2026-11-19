@@ -20,9 +20,28 @@ inline std::string resolveAssetPath(const std::string& path) {
     namespace fs = std::filesystem;
     if (path.empty()) return path;
 
-    if (fs::exists(path)) return path;
-    if (fs::exists("../" + path)) return "../" + path;
-    if (fs::exists("../../" + path)) return "../../" + path;
+    // Сравниваем кандидаты путей: если файл существует и в build/, и в корне исходников (../path),
+    // выбираем тот, у которого новее дата изменения (last_write_time), чтобы ручные правки
+    // в исходниках ВСЕГДА немедленно подхватывались игрой!
+    std::string best = "";
+    auto checkCandidate = [&](const std::string& cand) {
+        if (!fs::exists(cand)) return;
+        if (best.empty()) {
+            best = cand;
+        } else {
+            try {
+                if (fs::last_write_time(cand) > fs::last_write_time(best)) {
+                    best = cand;
+                }
+            } catch (...) {}
+        }
+    };
+
+    checkCandidate(path);
+    checkCandidate("../" + path);
+    checkCandidate("../../" + path);
+
+    if (!best.empty()) return best;
 
     fs::path p(path);
     std::string filename = p.filename().string();
@@ -44,11 +63,9 @@ inline std::string resolveAssetPath(const std::string& path) {
     };
 
     for (const auto& candidate : candidates) {
-        if (fs::exists(candidate)) {
-            return candidate;
-        }
+        checkCandidate(candidate);
     }
-    return path;
+    return !best.empty() ? best : path;
 }
 
 // =========================================================================

@@ -104,19 +104,36 @@ if(MAP_EDITOR_DIR)
     )
 endif()
 
-# Копирование ассетов в директорию сборки, чтобы пути всегда работали
+# Копирование или симлинк ассетов в директорию сборки, чтобы пути всегда работали
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
-    add_custom_command(TARGET FightingComboArena POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-        "$<TARGET_FILE_DIR:FightingComboArena>/assets"
-    )
-    if(TARGET MapEditor)
-        add_custom_command(TARGET MapEditor POST_BUILD
+    if(WIN32)
+        add_custom_command(TARGET FightingComboArena POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-            "$<TARGET_FILE_DIR:MapEditor>/assets"
+            "$<TARGET_FILE_DIR:FightingComboArena>/assets"
         )
+        if(TARGET MapEditor)
+            add_custom_command(TARGET MapEditor POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+                "$<TARGET_FILE_DIR:MapEditor>/assets"
+            )
+        endif()
+    else()
+        add_custom_command(TARGET FightingComboArena POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:FightingComboArena>/assets"
+            COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:FightingComboArena>/assets"
+        )
+        if(TARGET MapEditor)
+            add_custom_command(TARGET MapEditor POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:MapEditor>/assets"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+                "$<TARGET_FILE_DIR:MapEditor>/assets"
+            )
+        endif()
     endif()
 endif()
 

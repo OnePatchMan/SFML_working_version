@@ -31,6 +31,13 @@ enum class EnemyType {
     DUMMY             // Манекен: стоит на месте, чувствителен к форсе, бессмертный, трекер урона (5с) и фрейм-гэпа
 };
 
+enum class DummyBlockMode {
+    NONE = 0,         // Манекен без блока (принимает все удары)
+    HIGH = 1,         // Верхний блок: защищает от Mid и Overhead, пробивается Low
+    LOW = 2,          // Нижний блок: защищает от Mid и Low, пробивается Overhead
+    AUTO = 3          // Авто-реакция: анализирует положение игрока и блокирует в его сторону
+};
+
 enum class AIStarterType {
     STARTER_1F2D1,        // 1 -> f2 -> d1 (диагональный выпад и лаунчер)
     STARTER_112,          // 1 -> 1 -> 2 (быстрые джебы и апперкот)
@@ -181,6 +188,24 @@ public:
     }
     float blockStunTimer = 0.0f;
     bool isBlockStunned() const { return blockStunTimer > 0.0f; }
+
+    DummyBlockMode dummyBlockMode = DummyBlockMode::NONE;
+    void setDummyBlockMode(DummyBlockMode mode) {
+        dummyBlockMode = mode;
+        if (enemyType == EnemyType::DUMMY) {
+            if (mode == DummyBlockMode::HIGH) {
+                blockType = BlockType::HIGH;
+                isBlocking = true;
+            } else if (mode == DummyBlockMode::LOW) {
+                blockType = BlockType::LOW;
+                isBlocking = true;
+            } else if (mode == DummyBlockMode::NONE) {
+                blockType = BlockType::NONE;
+                isBlocking = false;
+            }
+        }
+    }
+    DummyBlockMode getDummyBlockMode() const { return dummyBlockMode; }
 
     static constexpr float HALF_W = 16.0f;
     static constexpr float HALF_H = 28.0f;

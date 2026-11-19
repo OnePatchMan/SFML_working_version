@@ -149,6 +149,39 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
             hasWallBounced = false;
         }
 
+        // Проверка блока манекена (для тренировки пробития верхнего/нижнего блока и ударов в спину)
+        bool defenderFacingLeft = isFacingLeft;
+        bool hitFromBehind = isBackHit;
+        if (attackerPos != sf::Vector2f(0.0f, 0.0f)) {
+            if (defenderFacingLeft && attackerPos.x > position.x + 5.0f) {
+                hitFromBehind = true;
+            } else if (!defenderFacingLeft && attackerPos.x < position.x - 5.0f) {
+                hitFromBehind = true;
+            }
+        }
+
+        bool canBlockNow = isOnGround && (isBlocking || blockType != BlockType::NONE) && (hurtTimer <= 0.0f || blockStunTimer > 0.0f);
+        bool blockDefended = false;
+        BlockType curBlock = getBlockType();
+
+        if (canBlockNow && !hitFromBehind) {
+            if (hitLevel == HitLevel::MID) {
+                blockDefended = true; // Нейтральные атаки блокируются и верхним, и нижним блоком
+            } else if (hitLevel == HitLevel::OVERHEAD) {
+                if (curBlock == BlockType::HIGH) blockDefended = true;
+            } else if (hitLevel == HitLevel::LOW) {
+                if (curBlock == BlockType::LOW) blockDefended = true;
+            }
+        }
+
+        float effectiveAmount = blockDefended ? (amount * 0.20f) : amount;
+        float effectiveKnockX = blockDefended ? (knockX * 0.25f) : knockX;
+        float effectiveKnockY = blockDefended ? 0.0f : knockY;
+        float effectiveStun = blockDefended ? 0.14f : (stunTime * stunMultiplier);
+        if (blockDefended) {
+            blockStunTimer = 0.14f;
+        }
+
         // Расчет гэпа между ударами в кадрах (при 60 FPS):
         // Сколько кадров манекен находился вне стана между двумя атаками
         if (dummyHadFirstHit && dummyResetTimer > 0.0f) {
@@ -159,7 +192,7 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
             dummyHadFirstHit = true;
         }
 
-        dummyAccumDamage += amount;
+        dummyAccumDamage += effectiveAmount;
         dummyResetTimer = 5.0f; // сбрасывается каждые 5.0 секунд после прекращения ударов
         dummyOutOfStunTimer = 0.0f;
 
@@ -168,18 +201,24 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
         popup.timer = 1.3f;
         popup.maxTimer = 1.3f;
         popup.offset = {0.0f, -45.0f};
-        if (dummyLastGapFrames == 0) {
-            popup.text = "+" + std::to_string(static_cast<int>(std::round(amount))) + " (0f TRUE COMBO!)";
+        if (blockDefended) {
+            popup.text = "BLOCKED: +" + std::to_string(static_cast<int>(std::round(effectiveAmount * 10.0f)) / 10) +
+                         "." + std::to_string(static_cast<int>(std::round(effectiveAmount * 10.0f)) % 10);
+            popup.color = sf::Color(100, 220, 255);
+        } else if (dummyLastGapFrames == 0) {
+            popup.text = "+" + std::to_string(static_cast<int>(std::round(effectiveAmount * 10.0f)) / 10) +
+                         "." + std::to_string(static_cast<int>(std::round(effectiveAmount * 10.0f)) % 10) + " (0f TRUE COMBO!)";
             popup.color = sf::Color(100, 255, 120);
         } else {
-            popup.text = "+" + std::to_string(static_cast<int>(std::round(amount))) + " (GAP: " + std::to_string(dummyLastGapFrames) + "f)";
+            popup.text = "+" + std::to_string(static_cast<int>(std::round(effectiveAmount * 10.0f)) / 10) +
+                         "." + std::to_string(static_cast<int>(std::round(effectiveAmount * 10.0f)) % 10) + " (GAP: " + std::to_string(dummyLastGapFrames) + "f)";
             popup.color = sf::Color(255, 180, 50);
         }
         dummyPopups.push_back(popup);
 
-        hurtTimer = stunTime * stunMultiplier;
-        velocity.x = knockX * knockMultiplier;
-        velocity.y = knockY * knockMultiplier;
+        hurtTimer = effectiveStun;
+        velocity.x = effectiveKnockX * knockMultiplier;
+        velocity.y = effectiveKnockY * knockMultiplier;
         isDead = false;
         isAirSuspended = false;
         attackState = EnemyAttackState::IDLE;
@@ -547,8 +586,34 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     if (stunPunishCooldown > 0.0f) stunPunishCooldown -= dt;
     if (punishBannerTimer > 0.0f) punishBannerTimer -= dt;
 
-    // Логика тренировочного манекена (Dummy): сброс урона через 5 секунд и вылетающие надписи
+    // Логика тренировочного манекена (Dummy): блок, сброс урона через 5 секунд и вылетающие надписи
     if (enemyType == EnemyType::DUMMY) {
+        if (isOnGround) {
+            if (dummyBlockMode == DummyBlockMode::HIGH) {
+                blockType = BlockType::HIGH;
+                isBlocking = true;
+            } else if (dummyBlockMode == DummyBlockMode::LOW) {
+                blockType = BlockType::LOW;
+                isBlocking = true;
+            } else if (dummyBlockMode == DummyBlockMode::AUTO) {
+                isFacingLeft = (playerPos.x < position.x);
+                if (playerPos.y < position.y - 18.0f) {
+                    blockType = BlockType::HIGH;
+                } else if (playerPos.y > position.y + 15.0f) {
+                    blockType = BlockType::LOW;
+                } else {
+                    blockType = BlockType::HIGH;
+                }
+                isBlocking = true;
+            } else {
+                blockType = BlockType::NONE;
+                isBlocking = false;
+            }
+        } else {
+            blockType = BlockType::NONE;
+            isBlocking = false;
+        }
+
         if (dummyResetTimer > 0.0f) {
             dummyResetTimer -= dt;
             if (dummyResetTimer <= 0.0f) {

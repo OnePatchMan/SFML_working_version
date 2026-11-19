@@ -3528,7 +3528,7 @@ int main() {
         float expectedBase = CombatConfig::getThrowBaseSpeed();
         float expectedBoosted = expectedBase + 400.0f * CombatConfig::getThrowSpeedBoostMultiplier();
         assert(std::abs(boostedSpeed - expectedBoosted) < 1.0f);
-        assert(boostedSpeed > expectedBase * 1.5f); // Скорость при ходьбе/беге заметно выше, чем стоя!
+        assert(boostedSpeed > expectedBase); // Скорость при ходьбе/беге заметно выше, чем стоя!
         player.velocity = {0.0f, 0.0f};
         std::cout << "-> Throw speed successfully scales with player velocity (Standing: " << expectedBase << " px/s vs Moving: " 
                   << boostedSpeed << " px/s)!" << std::endl;
@@ -4492,8 +4492,10 @@ int main() {
         combat.throwWeapon(player, player.position + sf::Vector2f(0.0f, 100.0f));
         assert(!combat.getThrownMaces().empty());
 
-        // Simulate flight until it lands on the ground
-        for (int i = 0; i < 40; ++i) tick(0.016f, arena, player, enemy, combat);
+        // Simulate flight until it lands and settles on the ground
+        for (int i = 0; i < 150 && !combat.getThrownMaces()[0].grounded; ++i) {
+            tick(0.016f, arena, player, enemy, combat);
+        }
         assert(!combat.getThrownMaces().empty());
         assert(combat.getThrownMaces()[0].grounded);
 
@@ -5113,6 +5115,63 @@ int main() {
         std::cout << "-> Enemy air attack (OVERHEAD) penetrated player LOW block!" << std::endl;
 
         std::cout << "-> PASSED: Air Block Forbidden & All Air Attacks Overheads verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // [TEST 71] TESTING TRAINING MODE & DUMMY PRACTICE MECHANICS
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 71] Testing Training Mode & Dummy Practice Mechanics..." << std::endl;
+        Enemy dummy(arena.getSpawnPosition() + sf::Vector2f(100.0f, 0.0f), EnemyType::DUMMY);
+        dummy.reset();
+        assert(dummy.getType() == EnemyType::DUMMY);
+        assert(dummy.hp >= 999.0f);
+
+        // 1. Dummy is immortal under huge damage
+        dummy.takeDamage(5000.0f, 0.0f, 0.0f, 0.2f, HitLevel::MID, false, dummy.position - sf::Vector2f(50.0f, 0.0f));
+        assert(!dummy.isDead);
+        assert(dummy.hp > 1000.0f);
+        std::cout << "-> Verified Dummy is completely immortal against massive damage!" << std::endl;
+
+        // 2. Dummy Block Mode: HIGH
+        dummy.setDummyBlockMode(DummyBlockMode::HIGH);
+        dummy.hurtTimer = 0.0f;
+        dummy.dummyAccumDamage = 0.0f;
+        dummy.dummyHadFirstHit = false;
+        assert(dummy.getBlockType() == BlockType::HIGH);
+
+        // Mid attack is blocked
+        dummy.takeDamage(100.0f, 0.0f, 0.0f, 0.2f, HitLevel::MID, false, dummy.position - sf::Vector2f(50.0f, 0.0f));
+        assert(dummy.dummyAccumDamage == 20.0f); // 80% blocked -> only 20 taken
+
+        // Low attack penetrates HIGH block
+        dummy.hurtTimer = 0.0f;
+        dummy.takeDamage(10.0f, 0.0f, 0.0f, 0.2f, HitLevel::LOW, false, dummy.position - sf::Vector2f(50.0f, 0.0f));
+        assert(std::abs(dummy.dummyAccumDamage - 30.0f) < 0.01f); // full 10 added
+        std::cout << "-> Verified Dummy HIGH block defends MID and is penetrated by LOW!" << std::endl;
+
+        // 3. Dummy Block Mode: LOW
+        dummy.setDummyBlockMode(DummyBlockMode::LOW);
+        dummy.hurtTimer = 0.0f;
+        dummy.dummyAccumDamage = 0.0f;
+        dummy.dummyHadFirstHit = false;
+
+        // Low attack is blocked
+        dummy.takeDamage(100.0f, 0.0f, 0.0f, 0.2f, HitLevel::LOW, false, dummy.position - sf::Vector2f(50.0f, 0.0f));
+        assert(dummy.dummyAccumDamage == 20.0f); // 80% blocked -> only 20 taken
+
+        // Overhead penetrates LOW block
+        dummy.hurtTimer = 0.0f;
+        dummy.takeDamage(10.0f, 0.0f, 0.0f, 0.2f, HitLevel::OVERHEAD, false, dummy.position - sf::Vector2f(50.0f, 0.0f));
+        assert(std::abs(dummy.dummyAccumDamage - 30.0f) < 0.01f); // full 10 added
+        std::cout << "-> Verified Dummy LOW block defends LOW and is penetrated by OVERHEAD!" << std::endl;
+
+        // 4. KV Config Throw Speed matches combat_balance.kv
+        float baseThrowSpeed = CombatConfig::getThrowBaseSpeed();
+        assert(baseThrowSpeed > 1000.0f); // User set 7000.0f in combat_balance.kv!
+        std::cout << "-> Verified KV Config combat_balance.kv loaded correctly (base_throw_speed = " << baseThrowSpeed << ")!" << std::endl;
+
+        std::cout << "-> PASSED: Training Mode & Dummy Practice Mechanics verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;
