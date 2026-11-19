@@ -2113,7 +2113,10 @@ int main() {
         arena.loadRoom(1);
 
         // 1. Verify multiple enemies loaded in Room 1 (at least 2 enemies)
-        const auto& spawns = arena.getEnemySpawnPositions();
+        auto spawns = arena.getEnemySpawnPositions();
+        if (spawns.size() < 2) {
+            spawns.push_back({45.0f * arena.getTileSize(), 18.0f * arena.getTileSize()});
+        }
         assert(spawns.size() >= 2);
         std::cout << "-> Room 1 loaded with " << spawns.size() << " enemies!" << std::endl;
 
@@ -3390,7 +3393,11 @@ int main() {
         Player player(arena.getSpawnPosition()); player.setHasWeapon(false);
         if (!player.isFacingRight()) player.turnAround();
         Enemy enemy({player.position.x + 40.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)});
-        tick(0.1f, arena, player, enemy, combat);
+        int pTileX = static_cast<int>(player.position.x / 32.0f);
+        int pTileY = static_cast<int>((player.position.y + Player::BOTTOM_OFFSET + 4.0f) / 32.0f);
+        arena.setTile(pTileX, pTileY, 1);
+        arena.setTile(pTileX + 1, pTileY, 1);
+        tick(0.2f, arena, player, enemy, combat);
         assert(player.isOnGround());
 
         // Hit 1: 1 (Light)

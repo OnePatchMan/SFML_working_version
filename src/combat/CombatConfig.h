@@ -81,6 +81,8 @@ public:
 
     // Параметры броска булавы и физики полета
     static float getThrowBaseSpeed() { ensureInitialized(); return _throwBaseSpeed; }
+    static float getThrowUpwardSpeed() { ensureInitialized(); return _throwUpwardSpeed; }
+    static float getThrowMaxVerticalBoost() { ensureInitialized(); return _throwMaxVerticalBoost; }
     static float getThrowSpeedBoostMultiplier() { ensureInitialized(); return _throwSpeedBoostMultiplier; }
     static float getThrowStraightGravity() { ensureInitialized(); return _throwStraightGravity; }
     static float getThrowUpwardSpinSpeed() { ensureInitialized(); return _throwUpwardSpinSpeed; }
@@ -235,6 +237,10 @@ public:
                             try { _finisherBloodBaseHp = std::stof(val); } catch (...) {}
                         } else if (key == "base_throw_speed" || key == "basethrowspeed") {
                             try { _throwBaseSpeed = std::stof(val); } catch (...) {}
+                        } else if (key == "upward_throw_speed" || key == "upwardthrowspeed") {
+                            try { _throwUpwardSpeed = std::stof(val); } catch (...) {}
+                        } else if (key == "max_vertical_boost" || key == "maxverticalboost") {
+                            try { _throwMaxVerticalBoost = std::stof(val); } catch (...) {}
                         } else if (key == "speed_boost_multiplier" || key == "speedboostmultiplier") {
                             try { _throwSpeedBoostMultiplier = std::stof(val); } catch (...) {}
                         } else if (key == "straight_gravity" || key == "straightgravity") {
@@ -329,12 +335,14 @@ private:
     inline static float _hitstunDecayMin = 0.30f;
     inline static float _finisherBloodBaseHp = 45.0f;
     inline static float _throwBaseSpeed = 365.0f;
+    inline static float _throwUpwardSpeed = 210.0f;
+    inline static float _throwMaxVerticalBoost = 50.0f;
     inline static float _throwSpeedBoostMultiplier = 1.6f;
     inline static float _throwStraightGravity = 980.0f;
     inline static float _throwUpwardSpinSpeed = 1080.0f;
-    inline static float _throwUpwardApexHoverTime = 0.16f;
-    inline static float _throwUpwardUpGravity = 850.0f;
-    inline static float _throwUpwardFallGravity = 680.0f;
+    inline static float _throwUpwardApexHoverTime = 0.20f;
+    inline static float _throwUpwardUpGravity = 980.0f;
+    inline static float _throwUpwardFallGravity = 650.0f;
     inline static float _wallBounceDamage = 4.5f;
     inline static float _wallBounceForceDamp = 0.28f;
     inline static float _wallBouncePopY = -320.0f;

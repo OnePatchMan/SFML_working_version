@@ -218,11 +218,21 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
 
     // Скорость полета булавы зависит от эффективной скорости игрока (ходьба, бег, дэш):
     float baseThrowSpeed = CombatConfig::getThrowBaseSpeed();
+    if (isUpward && targetPoint == sf::Vector2f(0.0f, 0.0f)) {
+        baseThrowSpeed = CombatConfig::getThrowUpwardSpeed();
+    }
     sf::Vector2f effVel = player.getEffectiveVelocity();
     float currentSpeed = std::hypot(effVel.x, effVel.y);
-    float playerSpeedInDir = effVel.x * throwDir.x + effVel.y * throwDir.y;
-    float boost = std::max(0.0f, playerSpeedInDir * CombatConfig::getThrowSpeedBoostMultiplier());
-    if (boost < 1.0f && currentSpeed > 30.0f) {
+
+    // При броске вверх (для сетапа комбо) вертикальная скорость прыжка (-900 px/s)
+    // не должна умножаться и запускать оружие за пределы экрана:
+    float effVy = isUpward ? std::max(effVel.y, -80.0f) : effVel.y;
+    float playerSpeedInDir = effVel.x * throwDir.x + effVy * throwDir.y;
+    float boostMult = isUpward ? std::min(CombatConfig::getThrowSpeedBoostMultiplier(), 0.5f) : CombatConfig::getThrowSpeedBoostMultiplier();
+    float boost = std::max(0.0f, playerSpeedInDir * boostMult);
+    if (isUpward) {
+        boost = std::min(boost, CombatConfig::getThrowMaxVerticalBoost());
+    } else if (boost < 1.0f && currentSpeed > 30.0f) {
         boost = currentSpeed * 0.5f;
     }
     float totalSpeed = baseThrowSpeed + boost;
@@ -230,6 +240,13 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
     ThrownMace mace;
     mace.position = playerCenter + throwDir * 20.0f;
     mace.velocity = throwDir * totalSpeed;
+    if (isUpward && targetPoint == sf::Vector2f(0.0f, 0.0f)) {
+        // Ограничиваем вертикальную скорость взлета оружия, чтобы оно оставалось в зоне досягаемости комбо
+        float maxVy = -(baseThrowSpeed + CombatConfig::getThrowMaxVerticalBoost());
+        if (mace.velocity.y < maxVy) {
+            mace.velocity.y = maxVy;
+        }
+    }
     mace.isUpwardThrow = isUpward;
     mace.reachedApex = false;
     mace.apexHoverTimer = 0.0f;
@@ -529,16 +546,20 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     } else {
         stats = CombatConfig::getBaseAttack(attackType);
         if (player.hasWeapon() && (attackType == "dw1" || attackType == "ddw1")) {
-            stats.damage = 3.2f;
-            stats.knockX = 15.0f;
-            stats.knockY = -370.0f; // Подброс чуть ниже высоты прыжка (~118px при прыжке 135px)
-            stats.playerRecovery = 0.16f;
-            stats.enemyStun = 0.45f;
-            stats.whiffStun = 0.22f;
-            stats.activeTime = 0.14f;
-            stats.lunge = 2.0f;
-            stats.displayName = "WEAPON STOMP & POP-UP!";
-            stats.color = sf::Color(255, 175, 40);
+            if (CombatConfig::hasAttack("weapon_dw1")) {
+                stats = CombatConfig::getBaseAttack("weapon_dw1");
+            } else {
+                stats.damage = 3.2f;
+                stats.knockX = 15.0f;
+                stats.knockY = -350.0f; // Подброс чуть ниже высоты прыжка (~118px при прыжке 135px)
+                stats.playerRecovery = 0.16f;
+                stats.enemyStun = 0.45f;
+                stats.whiffStun = 0.22f;
+                stats.activeTime = 0.14f;
+                stats.lunge = 2.0f;
+                stats.displayName = "WEAPON STOMP & POP-UP!";
+                stats.color = sf::Color(255, 175, 40);
+            }
         }
     }
 
