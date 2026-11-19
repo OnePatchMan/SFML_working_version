@@ -64,7 +64,9 @@ public:
     void update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld);
     void draw(sf::RenderWindow& window);
     void reset(sf::Vector2f spawnPos, bool withWeapon = true);
-    bool takeDamage(float amount, float knockX, float knockY, float stunTime);
+    bool takeDamage(float amount, float knockX, float knockY, float stunTime, 
+                    HitLevel hitLevel = HitLevel::MID, bool isBackHit = false, 
+                    const sf::Vector2f& attackerPos = {0.0f, 0.0f});
 
     sf::FloatRect getBounds() const {
         return sf::FloatRect({position.x - HALF_W, position.y - TOP_OFFSET}, 
@@ -101,9 +103,11 @@ public:
     bool hasWeapon() const { return _hasWeapon; }
     void setHasWeapon(bool val) { _hasWeapon = val; }
 
-    // Система защиты / блока (снижение урона на 80%, удержание F/E)
-    bool isBlocking() const { return _isBlocking; }
-    void setBlocking(bool b) { _isBlocking = b; }
+    // Система защиты / блока (верхний и нижний блок, снижение урона на 80%, удержание F/E)
+    BlockType getBlockType() const { return _blockType; }
+    void setBlockType(BlockType bt) { _blockType = bt; }
+    bool isBlocking() const { return _blockType != BlockType::NONE; }
+    void setBlocking(bool b) { _blockType = b ? BlockType::HIGH : BlockType::NONE; }
     bool isBlockStunned() const { return _blockStunTimer > 0.0f; }
     float getBlockStunTimer() const { return _blockStunTimer; }
     void triggerBlockStun(float dur = 0.14f) { _blockStunTimer = dur; }
@@ -194,7 +198,7 @@ private:
     float _counterCooldown = 0.0f;
     bool _counterWhiffStunActive = false;
 
-    bool _isBlocking = false;
+    BlockType _blockType = BlockType::NONE;
     float _blockStunTimer = 0.0f;
 
     bool _hasWeapon = true; // С самого начала персонаж появляется с булавой

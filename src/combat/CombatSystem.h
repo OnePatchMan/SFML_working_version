@@ -168,6 +168,8 @@ private:
     float _knockX = 0.0f;
     float _knockY = 0.0f;
     float _enemyStunTime = 0.18f;
+    HitLevel _currentHitLevel = HitLevel::MID;
+    bool _currentIsBackHit = false;
     sf::FloatRect _attackHitbox;
     sf::Color _attackColor{255, 255, 255};
     int _attackDirection = 1; // 1 = право, -1 = лево

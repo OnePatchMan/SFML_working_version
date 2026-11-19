@@ -51,6 +51,21 @@ inline std::string resolveAssetPath(const std::string& path) {
     return path;
 }
 
+// =========================================================================
+// УРОВНИ АТАКИ И ТИПЫ БЛОКА (FIGHTING COMBAT MATRIX)
+// =========================================================================
+enum class HitLevel {
+    MID,       // Нейтральная атака: блокируется и верхним, и нижним блоком
+    LOW,       // Нижняя атака: пробивает верхний блок! Блокируется ТОЛЬКО нижним блоком
+    OVERHEAD   // Оверхэд (атака сверху/в прыжке): пробивает нижний блок! Блокируется ТОЛЬКО верхним блоком
+};
+
+enum class BlockType {
+    NONE,      // Без блока
+    HIGH,      // Верхний блок (стоя)
+    LOW        // Нижний блок (сидя / присед)
+};
+
 #ifndef TO_SF_STRING_DEFINED
 #define TO_SF_STRING_DEFINED
 inline sf::String toSfString(std::string_view str) {

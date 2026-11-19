@@ -138,7 +138,8 @@ sf::FloatRect Enemy::getBounds() const {
                          {halfW * 2.0f, halfH * 2.0f});
 }
 
-bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime) {
+bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
+                       HitLevel hitLevel, bool isBackHit, const sf::Vector2f& attackerPos) {
     if (isDead) return false;
 
     // ОСОБАЯ ЛОГИКА ДЛЯ ТРЕНИРОВОЧНОГО МАНЕКЕНА (DUMMY):
@@ -206,8 +207,38 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime)
     // СИСТЕМА ЗАЩИТЫ / БЛОКА БОТА:
     // Снижает входящий урон на 80% (бот получает только 20% урона)
     // Входящий блок-стан от каждого удара
-    // Блок работает ТОЛЬКО если бот не находится в чистом хитстане от предыдущего удара комбо!
-    if (isBlocking && (hurtTimer <= 0.0f || blockStunTimer > 0.0f)) {
+    // Проверка попадания в спину
+    bool defenderFacingLeft = isFacingLeft;
+    bool hitFromBehind = isBackHit;
+    if (attackerPos != sf::Vector2f(0.0f, 0.0f)) {
+        if (defenderFacingLeft && attackerPos.x > position.x + 5.0f) {
+            hitFromBehind = true;
+        } else if (!defenderFacingLeft && attackerPos.x < position.x - 5.0f) {
+            hitFromBehind = true;
+        }
+    }
+
+    bool canBlockNow = (isBlocking || blockType != BlockType::NONE) && (hurtTimer <= 0.0f || blockStunTimer > 0.0f);
+    bool blockDefended = false;
+    BlockType curBlock = getBlockType();
+
+    if (canBlockNow && !hitFromBehind) {
+        if (hitLevel == HitLevel::MID) {
+            blockDefended = true; // Нейтральные атаки блокируются и верхним, и нижним блоком
+        } else if (hitLevel == HitLevel::OVERHEAD) {
+            // Оверхэды блокируются только верхним блоком! Пробивают нижний блок
+            if (curBlock == BlockType::HIGH) {
+                blockDefended = true;
+            }
+        } else if (hitLevel == HitLevel::LOW) {
+            // Нижние удары блокируются только нижним блоком! Пробивают верхний блок
+            if (curBlock == BlockType::LOW) {
+                blockDefended = true;
+            }
+        }
+    }
+
+    if (blockDefended) {
         amount *= 0.20f;
         hp -= amount;
         velocity.x = knockX * 0.25f * knockMultiplier;
@@ -231,12 +262,14 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime)
     hurtTimer = stunTime * stunMultiplier;
     velocity.x = knockX * knockMultiplier;
     velocity.y = knockY * knockMultiplier;
-    isBlocking = false; // Чистое попадание комбо гарантированно сбрасывает блок
+    isBlocking = false;
+    blockType = BlockType::NONE; // Чистое попадание гарантированно сбрасывает блок
     blockHoldTimer = 0.0f;
     blockStunTimer = 0.0f;
     attackState = EnemyAttackState::IDLE;
     attackStateTimer = 0.0f;
-    attackCooldown = 1.6f;
+    // БЫСТРЫЙ РЕАКТИВНЫЙ КУЛДАУН (БОТЫ НЕ ЗАСТЫВАЮТ И НЕ СТОЯТ КАК ДЕРЕВЯННЫЕ СТОЛБЫ)
+    attackCooldown = (enemyType == EnemyType::DUELIST) ? 0.20f : ((enemyType == EnemyType::TANK) ? 0.40f : 0.30f);
     aiComboState = AIComboState::IDLE;
     currentComboName = "";
     isAirSuspended = false;
@@ -281,6 +314,7 @@ void Enemy::reset() {
     playerIdleTimer = 0.0f;
     spacingTimer = 0.0f;
     blockHoldTimer = 0.0f;
+    blockType = BlockType::NONE;
     diveSlamBounce = false;
     hasWallBounced = false;
     diveSlamDir = 1.0f;
@@ -288,7 +322,7 @@ void Enemy::reset() {
     deathFadeTimer = 0.0f;
     attackState = EnemyAttackState::IDLE;
     attackStateTimer = 0.0f;
-    attackCooldown = 1.8f;
+    attackCooldown = 0.3f;
     attackHasHit = false;
     aiComboState = AIComboState::IDLE;
     aiStateTimer = 0.0f;
@@ -335,6 +369,8 @@ void Enemy::applyAttackStats(const EnemyAttackStats& s, float dirX) {
     currentAttackKnockX = dirX * s.knockX;
     currentAttackKnockY = s.knockY;
     currentAttackStun = s.stun;
+    currentAttackHitLevel = HitLevel::MID;
+    currentAttackIsBackHit = false;
     currentAttackIsDiveSlam = s.isDiveSlam;
     currentHbw = s.hbw * hitboxScale;
     currentHbh = s.hbh * hitboxScale;
@@ -352,6 +388,8 @@ void Enemy::triggerAttack() {
     currentAttackKnockX = isFacingLeft ? -ecfg.stats.dummyKnockX * knockMultiplier : ecfg.stats.dummyKnockX * knockMultiplier;
     currentAttackKnockY = ecfg.stats.dummyKnockY;
     currentAttackStun = ecfg.stats.dummyStun;
+    currentAttackHitLevel = HitLevel::MID;
+    currentAttackIsBackHit = false;
     currentAttackIsDiveSlam = false;
     currentHbw = ecfg.stats.dummyHbw * hitboxScale;
     currentHbh = ecfg.stats.dummyHbh * hitboxScale;
@@ -456,8 +494,8 @@ void Enemy::dropCombo() {
     const auto& ecfg = getEConfig();
     aiComboState = AIComboState::IDLE;
     attackState = EnemyAttackState::RECOVERY;
-    attackStateTimer = ecfg.stats.whiffRecovery; // Увеличенный стан-лок/восстановление при промахе (Whiff Recovery)
-    attackCooldown = (enemyType == EnemyType::DUELIST) ? 0.25f : 0.65f; // Агрессивный дуэлянт восстанавливается быстрее
+    attackStateTimer = ecfg.stats.whiffRecovery; // Стан-лок/восстановление при промахе
+    attackCooldown = (enemyType == EnemyType::DUELIST) ? 0.20f : 0.32f; // Быстрое возвращение в бой
     currentComboName = "";
     isAirSuspended = false;
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
@@ -469,9 +507,11 @@ void Enemy::finishCombo(bool hitConfirmed) {
     attackState = EnemyAttackState::RECOVERY;
     attackStateTimer = hitConfirmed ? ecfg.stats.hitRecovery : ecfg.stats.whiffRecovery;
     if (enemyType == EnemyType::DUELIST) {
-        attackCooldown = hitConfirmed ? 0.20f : 0.35f; // Бешеный напор агрессивного дуэлянта без передышки
+        attackCooldown = hitConfirmed ? 0.18f : 0.28f; // Бешеный напор агрессивного дуэлянта без передышки
+    } else if (enemyType == EnemyType::TANK) {
+        attackCooldown = hitConfirmed ? 0.30f : 0.42f;
     } else {
-        attackCooldown = hitConfirmed ? 0.45f : 0.65f;
+        attackCooldown = hitConfirmed ? 0.24f : 0.32f;
     }
     currentComboName = "";
     isAirSuspended = false;
@@ -574,7 +614,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 float roll = static_cast<float>(rand() % 1000) / 1000.0f;
                 if (roll <= intelligence) {
                     // Бот видит стан игрока и мгновенно срывается в сокрушительный паниш!
-                    isBlocking = false;
+                    blockType = BlockType::NONE;
                     blockHoldTimer = 0.0f;
                     attackCooldown = 0.0f;
                     stunPunishCooldown = 1.6f;
@@ -603,16 +643,18 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             dodgeTimer = 0.0f;
         }
     }
-    if (isBlocking && blockHoldTimer > 0.0f) {
+    if ((isBlocking || blockType != BlockType::NONE) && blockHoldTimer > 0.0f) {
         blockHoldTimer -= dt;
         if (blockHoldTimer <= 0.0f) {
             isBlocking = false;
+            blockType = BlockType::NONE;
             blockHoldTimer = 0.0f;
         }
     }
     if (hurtTimer > 0.0f && blockStunTimer <= 0.0f) {
         // Если бот находится в реальном хитстане (получает удары комбо), блок не может быть активен
         isBlocking = false;
+        blockType = BlockType::NONE;
         blockHoldTimer = 0.0f;
     }
     if (blockStunTimer > 0.0f) {
@@ -762,9 +804,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             } else if (hurtTimer > 0.0f && blockStunTimer <= 0.0f) {
                 // ВРАГ В ХИТСТАНЕ / ПОЛУЧАЕТ УРОН В КОМБО:
                 // Строго запрещено ставить блок, парировать, доджить или управлять движением!
-                isBlocking = false;
+                blockType = BlockType::NONE;
                 blockHoldTimer = 0.0f;
             } else if (aiComboState == AIComboState::IDLE) {
+                if (attackState == EnemyAttackState::RECOVERY) {
+                    attackStateTimer -= dt;
+                    if (attackStateTimer <= 0.0f) {
+                        attackState = EnemyAttackState::IDLE;
+                    }
+                }
                 if (attackCooldown > 0.0f) attackCooldown -= dt;
 
                 // Если игрок обнаружен (CHASE или ALERT)
@@ -865,8 +913,8 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                     velocity.x = 0.0f; // Не спрыгивать спиной с обрыва
                                 }
 
-                                if (canBlock && !isBlocking && blockHoldTimer <= 0.0f) {
-                                    isBlocking = true;
+                                if (canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
+                                    blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
                                     blockHoldTimer = 0.45f;
                                 }
 
@@ -884,8 +932,8 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                             } else {
                                 // Идеальная зона спейсинга (золотая середина): держит стойку, следит за игроком
                                 velocity.x = 0.0f;
-                                if (canBlock && !isBlocking && blockHoldTimer <= 0.0f && (rand() % 100 < 20)) {
-                                    isBlocking = true;
+                                if (canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f && (rand() % 100 < 20)) {
+                                    blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
                                     blockHoldTimer = 0.35f;
                                 }
                             }
@@ -895,14 +943,22 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     // Медленный, тяжелая броня, при близком контакте может закрыться блоком
                     else if (enemyType == EnemyType::TANK) {
                         if (distToPlayer <= 65.0f && vertDist < 50.0f && canBlock && blockHoldTimer <= 0.0f && (nextStarterChoice % 2 == 0)) {
-                            isBlocking = true;
+                            blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
                             blockHoldTimer = 0.45f;
                         }
                         if (distToPlayer > 55.0f) {
                             float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.75f) : baseSpeed;
                             velocity.x = dir * stalkSpeed;
                         } else {
-                            velocity.x = 0.0f;
+                            if (attackCooldown > 0.0f) {
+                                if (canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
+                                    blockType = BlockType::HIGH;
+                                    blockHoldTimer = 0.35f;
+                                }
+                                velocity.x = -dir * (baseSpeed * 0.30f); // Медленно держит дистанцию во время отката
+                            } else {
+                                velocity.x = 0.0f;
+                            }
                         }
                     }
                     // 4. ПОВЕДЕНИЕ ОБЫЧНОГО ВРАГА (NORMAL):
@@ -911,7 +967,11 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                             float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.8f) : baseSpeed;
                             velocity.x = dir * stalkSpeed;
                         } else {
-                            velocity.x = 0.0f;
+                            if (attackCooldown > 0.0f) {
+                                velocity.x = -dir * (baseSpeed * 0.40f); // Маневрирует и отшагивает назад
+                            } else {
+                                velocity.x = 0.0f;
+                            }
                         }
                     }
 
@@ -1414,6 +1474,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 attackStateTimer = ecfg.starter3.hitSweep.activeTime;
                 attackHasHit = false;
                 applyAttackStats(ecfg.starter3.hitSweep, dir);
+                currentAttackHitLevel = HitLevel::LOW;
                 currentAttackKnockX = ecfg.starter3.hitSweep.knockX; // СТРОГО ВЕРТИКАЛЬНЫЙ ПОДЪЕМ!
             }
             break;
@@ -1594,6 +1655,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 velocity.y = 0.0f;
                 velocity.x = 0.0f;
                 applyAttackStats(ecfg.air1.hitA1, isFacingLeft ? -1.0f : 1.0f);
+                currentAttackHitLevel = HitLevel::OVERHEAD;
                 if (currentStarterType == AIStarterType::STARTER_21DB1) currentAttackKnockX = 0.0f;
             }
             break;
@@ -1634,6 +1696,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 velocity.y = 450.0f; // Стремительный удар вниз
                 float curDir = isFacingLeft ? -1.0f : 1.0f;
                 applyAttackStats(ecfg.air1.hitAdw2, curDir);
+                currentAttackHitLevel = HitLevel::OVERHEAD;
                 currentAttackIsDiveSlam = false;
                 if (currentStarterType == AIStarterType::STARTER_21DB1) {
                     velocity.x = 0.0f;
@@ -1738,6 +1801,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 velocity.y = 0.0f;
                 velocity.x = 0.0f;
                 applyAttackStats(ecfg.air2.hitA1_1, isFacingLeft ? -1.0f : 1.0f);
+                currentAttackHitLevel = HitLevel::OVERHEAD;
                 if (currentStarterType == AIStarterType::STARTER_21DB1) currentAttackKnockX = 0.0f;
             }
             break;
@@ -1778,6 +1842,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 velocity.y = 0.0f;
                 velocity.x = 0.0f;
                 applyAttackStats(ecfg.air2.hitA1_2, isFacingLeft ? -1.0f : 1.0f);
+                currentAttackHitLevel = HitLevel::OVERHEAD;
                 if (currentStarterType == AIStarterType::STARTER_21DB1) currentAttackKnockX = 0.0f;
             }
             break;
@@ -1817,6 +1882,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 isAirSuspended = false;
                 float curDir = isFacingLeft ? -1.0f : 1.0f;
                 applyAttackStats(ecfg.air2.hitAdw2, curDir);
+                currentAttackHitLevel = HitLevel::OVERHEAD;
                 if (currentStarterType == AIStarterType::STARTER_21DB1) {
                     currentAttackKnockX = curDir * ecfg.air2.finalKnockXVertical;
                 }
@@ -1847,7 +1913,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             if (aiStateTimer <= 0.0f) {
                 aiComboState = AIComboState::IDLE;
                 attackState = EnemyAttackState::IDLE;
-                attackCooldown = ecfg.stats.attackCooldown; // Высокая агрессивность (~0.75с между сериями)
+                attackCooldown = (enemyType == EnemyType::DUELIST) ? 0.20f : ((enemyType == EnemyType::TANK) ? 0.38f : 0.28f);
                 currentComboName = "";
                 isAirSuspended = false;
                 behaviorState = hasDetectedPlayer ? AIBehaviorState::CHASE : AIBehaviorState::PATROL;
@@ -2213,16 +2279,28 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(pWave);
     }
 
-    // Энергетический щит защиты / блока бота
-    if (isBlocking) {
-        sf::RectangleShape shieldBar({6.0f, halfH * 2.2f});
-        shieldBar.setOrigin({3.0f, halfH * 1.1f});
+    // Энергетический щит защиты / блока бота (Верхний и Нижний блок)
+    if (blockType != BlockType::NONE) {
         float shieldX = isFacingLeft ? (position.x - halfW - 6.0f) : (position.x + halfW + 6.0f);
-        shieldBar.setPosition({shieldX, position.y});
-        shieldBar.setFillColor(sf::Color(80, 200, 255, 190));
-        shieldBar.setOutlineThickness(1.5f);
-        shieldBar.setOutlineColor(sf::Color(255, 255, 255, 230));
-        window.draw(shieldBar);
+        if (blockType == BlockType::HIGH) {
+            // Верхний блок: щит на уровне корпуса и головы
+            sf::RectangleShape shieldBar({6.0f, halfH * 2.0f});
+            shieldBar.setOrigin({3.0f, halfH * 1.0f});
+            shieldBar.setPosition({shieldX, position.y - 4.0f});
+            shieldBar.setFillColor(sf::Color(80, 200, 255, 200));
+            shieldBar.setOutlineThickness(1.5f);
+            shieldBar.setOutlineColor(sf::Color(255, 255, 255, 230));
+            window.draw(shieldBar);
+        } else {
+            // Нижний блок: приземистый щит на уровне ног и пола
+            sf::RectangleShape shieldBar({8.0f, halfH * 1.3f});
+            shieldBar.setOrigin({4.0f, halfH * 0.4f});
+            shieldBar.setPosition({shieldX, position.y + 10.0f});
+            shieldBar.setFillColor(sf::Color(255, 150, 50, 200));
+            shieldBar.setOutlineThickness(1.5f);
+            shieldBar.setOutlineColor(sf::Color(255, 220, 100, 230));
+            window.draw(shieldBar);
+        }
     }
 
     // Мишень / визор на теле

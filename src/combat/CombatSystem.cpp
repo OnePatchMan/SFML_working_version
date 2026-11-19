@@ -498,12 +498,13 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     // ==========================================
     const ComboEntry* matchedCombo = nullptr;
     for (const auto& entry : CombatConfig::getCombos()) {
-        // Разделение комбо: 12f1, b21u2, 121, db1u1, dw1jadw1 — оружие, остальное — руки
-        bool isWeaponCombo = (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21" ||
+        // Разделение комбо: оружие (isWeapon) vs рукопашные
+        bool isWeaponCombo = entry.isWeapon || (entry.id.rfind("weapon_", 0) == 0) || 
+                              (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21" ||
                               entry.id == "121" || entry.id == "db1u1" || entry.id == "db1up1" || entry.id == "b1u1" ||
                               entry.id == "dw1jadw1" || entry.id == "dw1adw1");
         if (player.hasWeapon()) {
-            if (!isWeaponCombo && entry.id != "12") {
+            if (!isWeaponCombo) {
                 continue; // С оружием в руках рукопашные комбо заблокированы
             }
         } else {
@@ -571,6 +572,11 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     _knockX = _attackDirection * stats.knockX;
     _knockY = stats.knockY;
     _enemyStunTime = stats.enemyStun;
+    _currentHitLevel = stats.hitLevel;
+    _currentIsBackHit = stats.isBackHit;
+    if (attackType == "b1" || attackType == "b2") {
+        _currentIsBackHit = true;
+    }
     _attackColor = stats.color;
     _comboDisplayName = stats.displayName;
     _comboDisplayTimer = (matchedCombo && matchedCombo->isUniqueFinisher) ? 1.3f : 0.8f;
@@ -880,8 +886,26 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     // Наносим урон и импульс врагу с проверкой блока и добивания
                     // Враг может заблокировать удар ТОЛЬКО если он уже блокирует или находится в блок-стане, но НЕ в чистом хитстане от ударов комбо!
                     bool targetWasBlocking = enemy.isBlocking && (enemy.hurtTimer <= 0.0f || enemy.blockStunTimer > 0.0f);
+                    bool hitFromBehind = _currentIsBackHit;
+                    if (enemy.isFacingLeft && player.position.x > enemy.position.x + 5.0f) {
+                        hitFromBehind = true;
+                    } else if (!enemy.isFacingLeft && player.position.x < enemy.position.x - 5.0f) {
+                        hitFromBehind = true;
+                    }
+
+                    bool blockSucceeded = false;
+                    if (targetWasBlocking && !hitFromBehind) {
+                        if (_currentHitLevel == HitLevel::MID) {
+                            blockSucceeded = true;
+                        } else if (_currentHitLevel == HitLevel::OVERHEAD) {
+                            if (enemy.getBlockType() == BlockType::HIGH) blockSucceeded = true;
+                        } else if (_currentHitLevel == HitLevel::LOW) {
+                            if (enemy.getBlockType() == BlockType::LOW) blockSucceeded = true;
+                        }
+                    }
+
                     bool targetWasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
-                    enemy.takeDamage(scaledDamage, _knockX, _knockY, scaledStun);
+                    enemy.takeDamage(scaledDamage, _knockX, _knockY, scaledStun, _currentHitLevel, _currentIsBackHit, player.position);
                     bool enemyJustDied = !targetWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f);
 
                     // Особые комбо-маркеры и эффекты при попадании усиленной атаки из идеального уворота
@@ -912,6 +936,21 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                     // 1. СИСТЕМА ЗАЩИТЫ / БЛОКА:
                     if (targetWasBlocking) {
+                        if (hitFromBehind) {
+                            _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -50.0f),
+                                                            "★ BACK HIT! ★", sf::Color(255, 60, 60), 0.85f, 0.85f, 1.25f, 255.0f});
+                        } else if (!blockSucceeded) {
+                            if (_currentHitLevel == HitLevel::LOW) {
+                                _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -50.0f),
+                                                                "★ LOW HIT! ★", sf::Color(255, 160, 40), 0.85f, 0.85f, 1.2f, 255.0f});
+                            } else if (_currentHitLevel == HitLevel::OVERHEAD) {
+                                _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -50.0f),
+                                                                "★ OVERHEAD! ★", sf::Color(220, 80, 255), 0.85f, 0.85f, 1.2f, 255.0f});
+                            }
+                        }
+                    }
+
+                    if (targetWasBlocking && blockSucceeded) {
                         for (int i = 0; i < 14; ++i) {
                             HitParticle p;
                             p.position = enemy.position;
@@ -1328,11 +1367,32 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 _shakeIntensity = 4.0f;
 
                 bool playerWasBlocking = player.isBlocking();
+                HitLevel eHitLevel = enemy.getCurrentAttackHitLevel();
+                bool eIsBack = enemy.getCurrentAttackIsBackHit();
+                bool hitPlayerFromBehind = eIsBack;
+                if (player.isFacingRight() && enemy.position.x < player.position.x - 5.0f) {
+                    hitPlayerFromBehind = true;
+                } else if (!player.isFacingRight() && enemy.position.x > player.position.x + 5.0f) {
+                    hitPlayerFromBehind = true;
+                }
+
+                bool playerBlockSucceeded = false;
+                if (playerWasBlocking && !hitPlayerFromBehind) {
+                    if (eHitLevel == HitLevel::MID) {
+                        playerBlockSucceeded = true;
+                    } else if (eHitLevel == HitLevel::OVERHEAD) {
+                        if (player.getBlockType() == BlockType::HIGH) playerBlockSucceeded = true;
+                    } else if (eHitLevel == HitLevel::LOW) {
+                        if (player.getBlockType() == BlockType::LOW) playerBlockSucceeded = true;
+                    }
+                }
+
                 bool playerWasDead = player.isDead;
                 player.takeDamage(enemy.getCurrentDamage(), 
                                   enemy.getCurrentKnockX(), 
                                   enemy.getCurrentKnockY(), 
-                                  enemy.getCurrentStunTime());
+                                  enemy.getCurrentStunTime(),
+                                  eHitLevel, eIsBack, enemy.position);
                 if (!playerWasDead && player.isDead && Arena::getActive()) {
                     float kLen = std::hypot(enemy.getCurrentKnockX(), enemy.getCurrentKnockY());
                     sf::Vector2f kDir = (kLen > 0.001f) ? sf::Vector2f(enemy.getCurrentKnockX() / kLen, enemy.getCurrentKnockY() / kLen) : sf::Vector2f(0.0f, -1.0f);
@@ -1340,6 +1400,21 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 }
 
                 if (playerWasBlocking) {
+                    if (hitPlayerFromBehind) {
+                        _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -50.0f),
+                                                        "★ BACK HIT! ★", sf::Color(255, 60, 60), 0.85f, 0.85f, 1.25f, 255.0f});
+                    } else if (!playerBlockSucceeded) {
+                        if (eHitLevel == HitLevel::LOW) {
+                            _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -50.0f),
+                                                            "★ LOW HIT! ★", sf::Color(255, 160, 40), 0.85f, 0.85f, 1.2f, 255.0f});
+                        } else if (eHitLevel == HitLevel::OVERHEAD) {
+                            _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -50.0f),
+                                                            "★ OVERHEAD! ★", sf::Color(220, 80, 255), 0.85f, 0.85f, 1.2f, 255.0f});
+                        }
+                    }
+                }
+
+                if (playerWasBlocking && playerBlockSucceeded) {
                     for (int i = 0; i < 12; ++i) {
                         HitParticle p;
                         p.position = player.position;

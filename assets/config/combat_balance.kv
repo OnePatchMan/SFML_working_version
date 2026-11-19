@@ -112,6 +112,7 @@
             "whiff_stun"        "0.18"
             "active_time"       "0.11"
             "lunge"             "0.0"
+            "is_back"           "1"
             "name"              "ATTACK: b1 (Turn Jab)"
             "color"             "245 220 90"
         }
@@ -138,6 +139,7 @@
             "whiff_stun"        "0.18"
             "active_time"       "0.11"
             "lunge"             "10.0"
+            "height"            "low"
             "name"              "ATTACK: dw1 (Low Kick)"
             "color"             "240 210 80"
         }
@@ -151,6 +153,7 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.14"
             "lunge"             "0.0"
+            "height"            "low"
             "name"              "WEAPON ATTACK: dw1 (STOMP & POP-UP)"
             "color"             "255 175 40"
         }
@@ -192,6 +195,7 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.15"
             "lunge"             "0.0"
+            "is_back"           "1"
             "name"              "ATTACK: b2 (Back Swing Pull)"
             "color"             "255 100 50"
         }
@@ -218,6 +222,7 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.15"
             "lunge"             "12.0"
+            "height"            "low"
             "name"              "ATTACK: dw2 (Low Sweep)"
             "color"             "255 120 60"
         }
@@ -246,6 +251,7 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.14"
             "lunge"             "0.0"
+            "height"            "low"
             "name"              "ATTACK: db1 (Reverse Dash Sweep)"
             "color"             "100 240 220"
         }
@@ -276,7 +282,7 @@
             "color"             "255 90 140"
         }
 
-        // --- 1.4. Воздушные атаки ---
+        // --- 1.4. Воздушные атаки (Оверхэды / Overhead) ---
         "a1"
         {
             "damage"            "2.0"
@@ -287,6 +293,7 @@
             "whiff_stun"        "0.18"
             "active_time"       "0.13"
             "lunge"             "6.0"
+            "height"            "overhead"
             "name"              "AIR ATTACK: a1 (Air Juggle)"
             "color"             "80 220 255"
         }
@@ -300,6 +307,7 @@
             "whiff_stun"        "0.24"
             "active_time"       "0.15"
             "lunge"             "0.0"
+            "height"            "overhead"
             "name"              "AIR ATTACK: a2 (Horizontal Air Push)"
             "color"             "240 130 255"
         }
@@ -313,6 +321,7 @@
             "whiff_stun"        "0.20"
             "active_time"       "0.13"
             "lunge"             "0.0"
+            "height"            "overhead"
             "name"              "AIR ATTACK: adw1 (Air Down Hook)"
             "color"             "255 190 60"
         }
@@ -326,6 +335,7 @@
             "whiff_stun"        "0.20"
             "active_time"       "0.16"
             "lunge"             "8.0"
+            "height"            "overhead"
             "name"              "AIR ATTACK: adw2 (Air Down Slam)"
             "color"             "255 90 30"
         }
@@ -339,6 +349,7 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.13"
             "lunge"             "12.0"
+            "height"            "overhead"
             "name"              "AIR DASH ATTACK: ad1"
             "color"             "100 240 220"
         }
@@ -352,15 +363,16 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.16"
             "lunge"             "15.0"
+            "height"            "overhead"
             "name"              "AIR DASH ATTACK: ad2"
             "color"             "255 90 160"
         }
     }
 
     // =====================================================================
-    // 2. РЕЕСТР КОМБО (БАЗОВЫЕ КОМБО И ИХ УНИКАЛЬНЫЕ ВАРИАЦИИ)
+    // 2. РЕЕСТР КОМБО ДЛЯ РУКОПАШНОГО БОЯ (БЕЗ ОРУЖИЯ / COMBOS UNARMED)
     // =====================================================================
-    "Combos"
+    "CombosUnarmed"
     {
         // --- 2.1. Уникальные вариации комбо (финишеры) ---
 
@@ -376,13 +388,14 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.15"
             "lunge"             "15.0"
+            "height"            "mid"
             "name"              "COMBO 1-f2-d1: DIAGONAL LAUNCHER!"
             "color"             "255 170 40"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // 11b2: 2 легких удара, захват и бросок назад на дистанцию прыжка с разворотом
+        // 11b2: 2 легких удара, захват и бросок назад на дистанцию прыжка с разворотом (удар в спину)
         "11b2"
         {
             "sequence"          "1 1 b2"
@@ -394,13 +407,14 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.16"
             "lunge"             "12.0"
+            "is_back"           "1"
             "name"              "COMBO 1-1-b2: GRAB & BACK THROW!"
             "color"             "255 80 80"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // 112: 2 удара и мощный апперкот, подбрасывающий врага высоко вверх на высоту прыжка + 13px (лаунчер)
+        // 112: 2 удара и мощный апперкот, подбрасывающий врага высоко вверх (лаунчер)
         "112"
         {
             "sequence"          "1 1 2"
@@ -412,6 +426,7 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.16"
             "lunge"             "18.0"
+            "height"            "mid"
             "name"              "COMBO 1-1-2: RAPID COMBO LAUNCHER!"
             "color"             "255 60 60"
             "is_unique"         "1"
@@ -430,6 +445,7 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.12"
             "lunge"             "16.0"
+            "height"            "mid"
             "name"              "COMBO 1-1-1: TRIPLE LIGHT STRIKE"
             "color"             "255 240 90"
             "is_unique"         "0"
@@ -448,13 +464,14 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.16"
             "lunge"             "25.0"
+            "height"            "mid"
             "name"              "COMBO 2-2-2: TRIPLE HEAVY STRIKE"
             "color"             "255 95 45"
             "is_unique"         "0"
             "is_finisher"       "1"
         }
 
-        // 21db1: удар 2, удар 1 (толкает < дэша), рывок за спину и разворот с подсечкой db1
+        // 21db1: удар 2, удар 1 (толкает < дэша), рывок за спину и разворот с нижней подсечкой db1
         "21db1"
         {
             "sequence"          "2 1 db1"
@@ -466,13 +483,14 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.15"
             "lunge"             "0.0"
+            "height"            "low"
             "name"              "COMBO 2-1-db1: REVERSE SWEEP LAUNCHER!"
             "color"             "255 140 80"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // a1a1adw2: 2 удара в воздухе + падение вместе с врагом в пол и отскок на длину дэша
+        // a1a1adw2: 2 удара в воздухе + падение вместе с врагом в пол и отскок на длину дэша (оверхэд)
         "a1a1adw2"
         {
             "sequence"          "a1 a1 adw2"
@@ -484,13 +502,14 @@
             "whiff_stun"        "0.24"
             "active_time"       "0.18"
             "lunge"             "10.0"
+            "height"            "overhead"
             "name"              "COMBO a1-a1-adw2: DUAL AIR DIVE SLAM!"
             "color"             "255 75 25"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // a1adw2: удар в воздухе a1 + вбивание в пол adw2 с аккуратным отскоком
+        // a1adw2: удар в воздухе a1 + вбивание в пол adw2 с аккуратным отскоком (оверхэд)
         "a1adw2"
         {
             "sequence"          "a1 adw2"
@@ -502,13 +521,14 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.16"
             "lunge"             "8.0"
+            "height"            "overhead"
             "name"              "COMBO a1-adw2: GROUND BOUNCE SLAM!"
             "color"             "255 90 30"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // a1a2: воздушный джаггл a1 + горизонтальный пуш a2
+        // a1a2: воздушный джаггл a1 + горизонтальный пуш a2 (оверхэд)
         "a1a2"
         {
             "sequence"          "a1 a2"
@@ -520,13 +540,14 @@
             "whiff_stun"        "0.24"
             "active_time"       "0.15"
             "lunge"             "0.0"
+            "height"            "overhead"
             "name"              "COMBO a1-a2: HORIZONTAL AIR PUSH!"
             "color"             "240 130 255"
             "is_unique"         "0"
             "is_finisher"       "1"
         }
 
-        // a2ad1: пуш a2 по прямой + рывок + диагональный подброс ad1
+        // a2ad1: пуш a2 по прямой + рывок + диагональный подброс ad1 (оверхэд)
         "a2ad1"
         {
             "sequence"          "a2 ad1"
@@ -538,13 +559,14 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.16"
             "lunge"             "12.0"
+            "height"            "overhead"
             "name"              "COMBO a2-ad1: AIR DIAGONAL LAUNCH!"
             "color"             "190 85 255"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // 12df2: 2 атаки толкает врага и после дэша дает удар, который толкнет врага только по координате x на 600
+        // 12df2: 2 атаки толкает врага и после дэша дает горизонтальный толчок на 600px
         "12df2"
         {
             "sequence"          "1 2 df2"
@@ -556,13 +578,129 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.15"
             "lunge"             "20.0"
+            "height"            "mid"
             "name"              "COMBO 1-2-df2: HORIZONTAL DASH SMASH!"
             "color"             "255 120 40"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // 12f1: 1 (легкий удар), 2 (удар об землю, враг чуть поднимается), f1 (удар словно битой, враг отлетает далеко по оси X)
+        // --- 2.2. Базовые рукопашные комбо ---
+        "12"
+        {
+            "sequence"          "1 2"
+            "damage"            "3.5"
+            "knock_x"           "320.0"
+            "knock_y"           "-240.0"
+            "player_recovery"   "0.22"
+            "enemy_stun"        "0.30"
+            "whiff_stun"        "0.20"
+            "active_time"       "0.14"
+            "lunge"             "15.0"
+            "height"            "mid"
+            "name"              "COMBO 1-2: GROUND SLAM & POP-UP"
+            "color"             "255 150 50"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        "1f2"
+        {
+            "sequence"          "1 f2"
+            "damage"            "3.5"
+            "knock_x"           "1150.0"
+            "knock_y"           "-45.0"
+            "player_recovery"   "0.22"
+            "enemy_stun"        "0.35"
+            "whiff_stun"        "0.18"
+            "active_time"       "0.14"
+            "lunge"             "15.0"
+            "height"            "mid"
+            "name"              "COMBO 1-f2: PUSH! -> PRESS [SHIFT]"
+            "color"             "255 140 50"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        "11"
+        {
+            "sequence"          "1 1"
+            "damage"            "2.0"
+            "knock_x"           "160.0"
+            "knock_y"           "-25.0"
+            "player_recovery"   "0.14"
+            "enemy_stun"        "0.18"
+            "whiff_stun"        "0.20"
+            "active_time"       "0.11"
+            "lunge"             "14.0"
+            "height"            "mid"
+            "name"              "COMBO 1-1: Light Jab 2"
+            "color"             "255 215 60"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        "21"
+        {
+            "sequence"          "2 1"
+            "damage"            "3.0"
+            "knock_x"           "850.0"
+            "knock_y"           "-35.0"
+            "player_recovery"   "0.20"
+            "enemy_stun"        "0.30"
+            "whiff_stun"        "0.22"
+            "active_time"       "0.13"
+            "lunge"             "16.0"
+            "height"            "mid"
+            "name"              "COMBO 2-1: SETUP FOR DASH BEHIND"
+            "color"             "255 160 60"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        "22"
+        {
+            "sequence"          "2 2"
+            "damage"            "3.5"
+            "knock_x"           "260.0"
+            "knock_y"           "-35.0"
+            "player_recovery"   "0.26"
+            "enemy_stun"        "0.26"
+            "whiff_stun"        "0.24"
+            "active_time"       "0.15"
+            "lunge"             "18.0"
+            "height"            "mid"
+            "name"              "COMBO 2-2: Heavy Strike 2"
+            "color"             "255 120 50"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+
+        "a1a1"
+        {
+            "sequence"          "a1 a1"
+            "damage"            "2.2"
+            "knock_x"           "80.0"
+            "knock_y"           "-35.0"
+            "player_recovery"   "0.16"
+            "enemy_stun"        "0.35"
+            "whiff_stun"        "0.20"
+            "active_time"       "0.13"
+            "lunge"             "8.0"
+            "height"            "overhead"
+            "name"              "COMBO a1-a1: Dual Air Juggle"
+            "color"             "90 230 255"
+            "is_unique"         "0"
+            "is_finisher"       "0"
+        }
+    }
+
+    // =====================================================================
+    // 3. РЕЕСТР КОМБО ДЛЯ ОРУЖИЯ (БУЛАВА / COMBOS WEAPON)
+    // =====================================================================
+    "CombosWeapon"
+    {
+        // 12f1: 1 (легкий удар), 2 (удар об землю), f1 (удар булавой словно битой, враг отлетает по X)
         "12f1"
         {
             "sequence"          "1 2 f1"
@@ -574,13 +712,15 @@
             "whiff_stun"        "0.24"
             "active_time"       "0.15"
             "lunge"             "20.0"
+            "height"            "mid"
+            "is_weapon"         "1"
             "name"              "COMBO 1-2-f1: BAT SWING SMASH!"
             "color"             "255 125 40"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // b21u2: b2 (дальний удар, притягивает к себе), 1 (удар рукояткой, слегка отодвигает), u2 (удар снизу вверх по окружности, подбрасывает высоко вверх)
+        // b21u2: b2 (дальний удар с замахом назад), 1 (удар рукояткой), u2 (удар снизу вверх, подброс)
         "b21u2"
         {
             "sequence"          "b2 1 u2"
@@ -592,13 +732,15 @@
             "whiff_stun"        "0.26"
             "active_time"       "0.16"
             "lunge"             "12.0"
+            "is_back"           "1"
+            "is_weapon"         "1"
             "name"              "COMBO b2-1-u2: CIRCULAR SKY LAUNCHER!"
             "color"             "255 70 120"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // 121: толкает врага по иксу на расстояние чуть меньшее рывка
+        // 121: толкает врага булавой по иксу
         "121"
         {
             "sequence"          "1 2 1"
@@ -610,13 +752,15 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.15"
             "lunge"             "16.0"
+            "height"            "mid"
+            "is_weapon"         "1"
             "name"              "COMBO 1-2-1: TENDERIZER PUSH!"
             "color"             "255 165 45"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // db1u1 / db1up1: бьет за себя с разворотом, затем подбрасывает вверх под диагональный бросок оружия
+        // db1u1: бьет за себя с разворотом, затем подбрасывает вверх под диагональный бросок оружия
         "db1u1"
         {
             "sequence"          "db1 u1"
@@ -628,6 +772,8 @@
             "whiff_stun"        "0.22"
             "active_time"       "0.15"
             "lunge"             "10.0"
+            "height"            "mid"
+            "is_weapon"         "1"
             "name"              "COMBO db1-u1: REVERSE TURN & SKY POP-UP!"
             "color"             "255 110 180"
             "is_unique"         "1"
@@ -646,33 +792,15 @@
             "whiff_stun"        "0.24"
             "active_time"       "0.16"
             "lunge"             "0.0"
+            "height"            "overhead"
+            "is_weapon"         "1"
             "name"              "COMBO dw1-j-adw1: STOMP & SKY HOOK!"
             "color"             "255 160 40"
             "is_unique"         "1"
             "is_finisher"       "1"
         }
 
-        // --- 2.2. Базовые комбо (общее начало для дальнейших уникальных вариаций) ---
-
-        // 12: удар 1 + тяжелый удар 2 (бьет об землю, враг чуть поднимается под f1 или df2)
-        "12"
-        {
-            "sequence"          "1 2"
-            "damage"            "3.5"
-            "knock_x"           "320.0"
-            "knock_y"           "-240.0"
-            "player_recovery"   "0.22"
-            "enemy_stun"        "0.30"
-            "whiff_stun"        "0.20"
-            "active_time"       "0.14"
-            "lunge"             "15.0"
-            "name"              "COMBO 1-2: GROUND SLAM & POP-UP"
-            "color"             "255 150 50"
-            "is_unique"         "0"
-            "is_finisher"       "0"
-        }
-
-        // b21: дальний притягивающий удар b2 + удар рукояткой 1 (слегка отодвигает врага, сетап под u2)
+        // b21: дальний притягивающий удар b2 (удар со спины) + тычок рукояткой 1
         "b21"
         {
             "sequence"          "b2 1"
@@ -684,98 +812,30 @@
             "whiff_stun"        "0.20"
             "active_time"       "0.12"
             "lunge"             "8.0"
+            "is_back"           "1"
+            "is_weapon"         "1"
             "name"              "COMBO b2-1: HILT PUSH -> [W+2]"
             "color"             "255 180 70"
             "is_unique"         "0"
             "is_finisher"       "0"
         }
 
-        // 1f2: удар 1 + тяжелый толчок f2 (сетап под рывок и 1f2d1)
-        "1f2"
+        // 12: базовый удар булавой об землю и подброс
+        "12"
         {
-            "sequence"          "1 f2"
+            "sequence"          "1 2"
             "damage"            "3.5"
-            "knock_x"           "1150.0"
-            "knock_y"           "-45.0"
+            "knock_x"           "320.0"
+            "knock_y"           "-240.0"
             "player_recovery"   "0.22"
-            "enemy_stun"        "0.35"
-            "whiff_stun"        "0.18"
+            "enemy_stun"        "0.30"
+            "whiff_stun"        "0.20"
             "active_time"       "0.14"
             "lunge"             "15.0"
-            "name"              "COMBO 1-f2: PUSH! -> PRESS [SHIFT]"
-            "color"             "255 140 50"
-            "is_unique"         "0"
-            "is_finisher"       "0"
-        }
-
-        // 11: два легких удара (начало для 111, 112, 11b2)
-        "11"
-        {
-            "sequence"          "1 1"
-            "damage"            "2.0"
-            "knock_x"           "160.0"
-            "knock_y"           "-25.0"
-            "player_recovery"   "0.14"
-            "enemy_stun"        "0.18"
-            "whiff_stun"        "0.20"
-            "active_time"       "0.11"
-            "lunge"             "14.0"
-            "name"              "COMBO 1-1: Light Jab 2"
-            "color"             "255 215 60"
-            "is_unique"         "0"
-            "is_finisher"       "0"
-        }
-
-        // 21: удар 2 + удар 1 (бросает на ~85px, сетап для 21db1)
-        "21"
-        {
-            "sequence"          "2 1"
-            "damage"            "3.0"
-            "knock_x"           "850.0"
-            "knock_y"           "-35.0"
-            "player_recovery"   "0.20"
-            "enemy_stun"        "0.30"
-            "whiff_stun"        "0.22"
-            "active_time"       "0.13"
-            "lunge"             "16.0"
-            "name"              "COMBO 2-1: SETUP FOR DASH BEHIND"
-            "color"             "255 160 60"
-            "is_unique"         "0"
-            "is_finisher"       "0"
-        }
-
-        // 22: два тяжелых удара (начало для 222)
-        "22"
-        {
-            "sequence"          "2 2"
-            "damage"            "3.5"
-            "knock_x"           "260.0"
-            "knock_y"           "-35.0"
-            "player_recovery"   "0.26"
-            "enemy_stun"        "0.26"
-            "whiff_stun"        "0.24"
-            "active_time"       "0.15"
-            "lunge"             "18.0"
-            "name"              "COMBO 2-2: Heavy Strike 2"
-            "color"             "255 120 50"
-            "is_unique"         "0"
-            "is_finisher"       "0"
-        }
-
-        // a1a1: два легких удара в воздухе (сетап под финишер a1a1adw2)
-        "a1a1"
-        {
-            "sequence"          "a1 a1"
-            "damage"            "2.2"
-            "knock_x"           "80.0"
-            "knock_y"           "-35.0"
-            "player_recovery"   "0.16"
-            "enemy_stun"        "0.35"
-            "whiff_stun"        "0.20"
-            "active_time"       "0.13"
-            "lunge"             "8.0"
-            "name"              "COMBO a1-a1: Dual Air Juggle"
-            "color"             "90 230 255"
+            "height"            "mid"
+            "is_weapon"         "1"
+            "name"              "COMBO 1-2: GROUND SLAM & POP-UP"
+            "color"             "255 150 50"
             "is_unique"         "0"
             "is_finisher"       "0"
         }

@@ -124,11 +124,41 @@ void Player::reset(sf::Vector2f spawnPos, bool withWeapon) {
     _rollAnimation.setCurrentFrame(0);
 }
 
-bool Player::takeDamage(float amount, float knockX, float knockY, float stunTime) {
+bool Player::takeDamage(float amount, float knockX, float knockY, float stunTime,
+                        HitLevel hitLevel, bool isBackHit, const sf::Vector2f& attackerPos) {
     if (isDead) return false;
 
     // СИСТЕМА ЗАЩИТЫ / БЛОКА (снижение входящего урона на 80%)
-    if (_isBlocking) {
+    // Проверка попадания в спину
+    bool defenderFacingRight = isFacingRight();
+    bool hitFromBehind = isBackHit;
+    if (attackerPos != sf::Vector2f(0.0f, 0.0f)) {
+        if (defenderFacingRight && attackerPos.x < position.x - 5.0f) {
+            hitFromBehind = true;
+        } else if (!defenderFacingRight && attackerPos.x > position.x + 5.0f) {
+            hitFromBehind = true;
+        }
+    }
+
+    // Проверка эффективности блока
+    bool blockDefended = false;
+    if (_blockType != BlockType::NONE && !hitFromBehind) {
+        if (hitLevel == HitLevel::MID) {
+            blockDefended = true; // Нейтральные атаки блокируются и верхним, и нижним блоком
+        } else if (hitLevel == HitLevel::OVERHEAD) {
+            // Оверхэды (атаки сверху) блокируются только верхним блоком! Пробивают нижний блок
+            if (_blockType == BlockType::HIGH) {
+                blockDefended = true;
+            }
+        } else if (hitLevel == HitLevel::LOW) {
+            // Нижние удары блокируются только нижним блоком! Пробивают верхний блок
+            if (_blockType == BlockType::LOW) {
+                blockDefended = true;
+            }
+        }
+    }
+
+    if (blockDefended) {
         amount *= 0.20f;
         hp -= amount;
         if (hp <= 0.0f) {
@@ -349,10 +379,14 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
 
     bool wantsBlock = (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::F) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E));
     if (wantsBlock && _stunTimer <= 0.0f && _dashTimer <= 0.0f && !_isCounterStance && !_isSpotDodging) {
-        _isBlocking = true;
+        if (isHoldingDown()) {
+            _blockType = BlockType::LOW;
+        } else {
+            _blockType = BlockType::HIGH;
+        }
         moveX *= 0.35f; // Замедленное передвижение с поднятым блоком
     } else {
-        _isBlocking = false;
+        _blockType = BlockType::NONE;
     }
 
     if (_isOnGround) {
@@ -755,21 +789,38 @@ void Player::draw(sf::RenderWindow& window) {
         window.draw(parryLine);
     }
 
-    // Отрисовка защитного барьера блока (F / E)
-    if (_isBlocking && !isDead) {
+    // Отрисовка защитного барьера блока (F / E: Верхний и Нижний блок)
+    if (_blockType != BlockType::NONE && !isDead) {
         float dir = isFacingRight() ? 1.0f : -1.0f;
-        sf::RectangleShape shield({8.0f, 52.0f});
-        shield.setOrigin({4.0f, 26.0f});
-        shield.setPosition({position.x + dir * 24.0f, position.y});
-        if (_blockStunTimer > 0.0f) {
-            shield.setFillColor(sf::Color(255, 255, 255, 230));
-            shield.setOutlineColor(sf::Color(0, 230, 255, 255));
+        if (_blockType == BlockType::HIGH) {
+            // ВЕРХНИЙ БЛОК (стоя): щит на уровне корпуса и головы
+            sf::RectangleShape shield({8.0f, 48.0f});
+            shield.setOrigin({4.0f, 24.0f});
+            shield.setPosition({position.x + dir * 24.0f, position.y - 8.0f});
+            if (_blockStunTimer > 0.0f) {
+                shield.setFillColor(sf::Color(255, 255, 255, 230));
+                shield.setOutlineColor(sf::Color(0, 230, 255, 255));
+            } else {
+                shield.setFillColor(sf::Color(0, 200, 255, 150));
+                shield.setOutlineColor(sf::Color(100, 240, 255, 220));
+            }
+            shield.setOutlineThickness(2.0f);
+            window.draw(shield);
         } else {
-            shield.setFillColor(sf::Color(0, 200, 255, 140));
-            shield.setOutlineColor(sf::Color(100, 240, 255, 220));
+            // НИЖНИЙ БЛОК (сидя / держа S): приземистый щит на уровне ног и пола
+            sf::RectangleShape shield({10.0f, 32.0f});
+            shield.setOrigin({5.0f, 16.0f});
+            shield.setPosition({position.x + dir * 24.0f, position.y + 14.0f});
+            if (_blockStunTimer > 0.0f) {
+                shield.setFillColor(sf::Color(255, 255, 255, 230));
+                shield.setOutlineColor(sf::Color(255, 180, 50, 255));
+            } else {
+                shield.setFillColor(sf::Color(255, 140, 40, 150));
+                shield.setOutlineColor(sf::Color(255, 200, 80, 220));
+            }
+            shield.setOutlineThickness(2.0f);
+            window.draw(shield);
         }
-        shield.setOutlineThickness(2.0f);
-        window.draw(shield);
     }
 }
 

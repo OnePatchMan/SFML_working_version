@@ -153,8 +153,12 @@ public:
     float counterStanceTimer = 0.0f;
     float counterCooldownTimer = 0.0f;
 
-    // Система защиты / блока бота (снижает входящий урон на 80%)
+    // Система защиты / блока бота (верхний и нижний блок, снижает входящий урон на 80%)
     bool isBlocking = false;
+    BlockType blockType = BlockType::NONE;
+    BlockType getBlockType() const { return (blockType != BlockType::NONE) ? blockType : (isBlocking ? BlockType::HIGH : BlockType::NONE); }
+    void setBlockType(BlockType bt) { blockType = bt; isBlocking = (bt != BlockType::NONE); }
+    void setBlocking(bool b) { isBlocking = b; blockType = b ? BlockType::HIGH : BlockType::NONE; }
     float blockStunTimer = 0.0f;
     bool isBlockStunned() const { return blockStunTimer > 0.0f; }
 
@@ -170,6 +174,10 @@ public:
     float currentAttackKnockX = 0.0f;
     float currentAttackKnockY = 0.0f;
     float currentAttackStun = 0.18f;
+    HitLevel currentAttackHitLevel = HitLevel::MID;
+    bool currentAttackIsBackHit = false;
+    HitLevel getCurrentAttackHitLevel() const { return currentAttackHitLevel; }
+    bool getCurrentAttackIsBackHit() const { return currentAttackIsBackHit; }
     bool currentAttackIsDiveSlam = false;
     float currentHbw = 55.0f;
     float currentHbh = 42.0f;
@@ -256,7 +264,9 @@ public:
     bool isInvulnerable() const { return isDodging; }
 
     sf::FloatRect getBounds() const;
-    bool takeDamage(float amount, float knockX, float knockY, float stunTime = 0.18f);
+    bool takeDamage(float amount, float knockX, float knockY, float stunTime = 0.18f,
+                    HitLevel hitLevel = HitLevel::MID, bool isBackHit = false,
+                    const sf::Vector2f& attackerPos = {0.0f, 0.0f});
     void triggerStun(float dur) { hurtTimer = std::max(hurtTimer, dur * stunMultiplier); }
     void triggerSpin(float duration = 0.65f, float speed = 900.0f) {
         spinTimer = duration;

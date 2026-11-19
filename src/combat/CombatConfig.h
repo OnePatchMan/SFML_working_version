@@ -29,6 +29,8 @@ struct AttackStats {
     std::string displayName;      // Отображаемое имя приема
     sf::Color color = sf::Color::White; // Цвет спецэффектов и вспышек
     float whiffStun = 0.0f;       // Длинный стан-лок персонажа при промахе по врагу (если 0, рассчитывается автоматически)
+    HitLevel hitLevel = HitLevel::MID; // Уровень удара: MID (нейтральный), LOW (нижний), OVERHEAD (оверхэд)
+    bool isBackHit = false;       // Бьет в спину (пробивает любой блок защищающегося)
 };
 
 struct ComboEntry {
@@ -37,6 +39,7 @@ struct ComboEntry {
     AttackStats stats;                      // Параметры завершающего удара комбо
     bool isUniqueFinisher = false;          // Является ли уникальной вариацией
     bool isFinisher = true;                 // Завершающий удар (false для базовых промежуточных комбо)
+    bool isWeapon = false;                  // Относится ли к комбо с оружием (булавой)
 };
 
 class CombatConfig {
@@ -284,23 +287,40 @@ public:
                                 else if (key == "lunge") st.lunge = std::stof(val);
                                 else if (key == "name" || key == "displayname") st.displayName = val;
                                 else if (key == "color") st.color = parseColor(val);
-                            } else if (section == "Combos") {
+                                else if (key == "height" || key == "hit_level" || key == "hitlevel" || key == "level") {
+                                    std::string v = val;
+                                    std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+                                    if (v == "low") st.hitLevel = HitLevel::LOW;
+                                    else if (v == "overhead" || v == "high") st.hitLevel = HitLevel::OVERHEAD;
+                                    else st.hitLevel = HitLevel::MID;
+                                }
+                                else if (key == "is_back" || key == "is_back_hit" || key == "hits_back" || key == "back_hit") {
+                                    st.isBackHit = (val == "1" || val == "true");
+                                }
+                            } else if (section == "Combos" || section == "CombosUnarmed" || section == "CombosWeapon") {
+                                std::string comboKey = entryId;
+                                if (section == "CombosWeapon" && comboKey.rfind("weapon_", 0) != 0) {
+                                    comboKey = "weapon_" + comboKey;
+                                }
                                 size_t cIdx = 0;
-                                auto it = _comboIndexMap.find(entryId);
+                                auto it = _comboIndexMap.find(comboKey);
                                 if (it == _comboIndexMap.end()) {
                                     ComboEntry ce;
-                                    ce.id = entryId;
+                                    ce.id = comboKey;
+                                    if (section == "CombosWeapon") ce.isWeapon = true;
                                     _combos.push_back(ce);
                                     cIdx = _combos.size() - 1;
-                                    _comboIndexMap[entryId] = cIdx;
+                                    _comboIndexMap[comboKey] = cIdx;
                                 } else {
                                     cIdx = it->second;
+                                    if (section == "CombosWeapon") _combos[cIdx].isWeapon = true;
                                 }
 
                                 ComboEntry& ce = _combos[cIdx];
                                 if (key == "sequence") ce.sequence = splitSequence(val);
                                 else if (key == "is_unique" || key == "isunique") ce.isUniqueFinisher = (val == "1" || val == "true");
                                 else if (key == "is_finisher" || key == "isfinisher") ce.isFinisher = (val == "1" || val == "true");
+                                else if (key == "is_weapon" || key == "isweapon") ce.isWeapon = (val == "1" || val == "true");
                                 else if (key == "damage") ce.stats.damage = std::stof(val);
                                 else if (key == "knock_x" || key == "knockx") ce.stats.knockX = std::stof(val);
                                 else if (key == "knock_y" || key == "knocky") ce.stats.knockY = std::stof(val);
@@ -316,6 +336,16 @@ public:
                                 else if (key == "lunge") ce.stats.lunge = std::stof(val);
                                 else if (key == "name" || key == "displayname") ce.stats.displayName = val;
                                 else if (key == "color") ce.stats.color = parseColor(val);
+                                else if (key == "height" || key == "hit_level" || key == "hitlevel" || key == "level") {
+                                    std::string v = val;
+                                    std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+                                    if (v == "low") ce.stats.hitLevel = HitLevel::LOW;
+                                    else if (v == "overhead" || v == "high") ce.stats.hitLevel = HitLevel::OVERHEAD;
+                                    else ce.stats.hitLevel = HitLevel::MID;
+                                }
+                                else if (key == "is_back" || key == "is_back_hit" || key == "hits_back" || key == "back_hit") {
+                                    ce.stats.isBackHit = (val == "1" || val == "true");
+                                }
                             }
                         }
                     } else {
@@ -377,35 +407,37 @@ private:
 
     static void initDefaultAttacks() {
         // Легкие атаки на земле
-        _attacks["1"]   = {2.0f, 160.0f, -25.0f, 0.14f, 0.18f, 0.11f, 14.0f, "ATTACK: 1 (Light Jab)", sf::Color(255, 235, 90), 0.38f};
-        _attacks["f1"]  = {2.2f, 220.0f, -30.0f, 0.15f, 0.20f, 0.12f, 18.0f, "ATTACK: f1 (Forward Thrust)", sf::Color(255, 240, 110), 0.38f};
-        _attacks["b1"]  = {2.0f, -140.0f, -30.0f, 0.14f, 0.18f, 0.11f, 0.0f, "ATTACK: b1 (Turn Jab)", sf::Color(245, 220, 90), 0.38f};
-        _attacks["u1"]  = {2.2f, 80.0f, -435.0f, 0.16f, 0.40f, 0.12f, 8.0f, "ATTACK: u1 (Anti-Air Poke)", sf::Color(255, 245, 120), 0.40f};
-        _attacks["dw1"] = {2.0f, 180.0f, -20.0f, 0.14f, 0.20f, 0.11f, 10.0f, "ATTACK: dw1 (Low Kick)", sf::Color(240, 210, 80), 0.38f};
+        _attacks["1"]   = {2.0f, 160.0f, -25.0f, 0.14f, 0.18f, 0.11f, 14.0f, "ATTACK: 1 (Light Jab)", sf::Color(255, 235, 90), 0.38f, HitLevel::MID, false};
+        _attacks["f1"]  = {2.2f, 220.0f, -30.0f, 0.15f, 0.20f, 0.12f, 18.0f, "ATTACK: f1 (Forward Thrust)", sf::Color(255, 240, 110), 0.38f, HitLevel::MID, false};
+        _attacks["b1"]  = {2.0f, -140.0f, -30.0f, 0.14f, 0.18f, 0.11f, 0.0f, "ATTACK: b1 (Turn Jab)", sf::Color(245, 220, 90), 0.38f, HitLevel::MID, true};
+        _attacks["u1"]  = {2.2f, 80.0f, -435.0f, 0.16f, 0.40f, 0.12f, 8.0f, "ATTACK: u1 (Anti-Air Poke)", sf::Color(255, 245, 120), 0.40f, HitLevel::MID, false};
+        _attacks["dw1"] = {2.0f, 180.0f, -20.0f, 0.14f, 0.20f, 0.11f, 10.0f, "ATTACK: dw1 (Low Kick)", sf::Color(240, 210, 80), 0.38f, HitLevel::LOW, false};
+        _attacks["weapon_dw1"] = {3.2f, 15.0f, -350.0f, 0.16f, 0.45f, 0.14f, 0.0f, "WEAPON ATTACK: dw1 (STOMP & POP-UP)", sf::Color(255, 175, 40), 0.40f, HitLevel::LOW, false};
 
         // Тяжелые атаки на земле
-        _attacks["2"]   = {3.5f, 350.0f, -40.0f, 0.24f, 0.26f, 0.15f, 16.0f, "ATTACK: 2 (Heavy Strike)", sf::Color(255, 110, 60), 0.55f};
-        _attacks["f2"]  = {3.8f, 1150.0f, -45.0f, 0.22f, 0.35f, 0.14f, 18.0f, "ATTACK: f2 (Forward Smash -> Push)", sf::Color(255, 130, 50), 0.52f};
-        _attacks["b2"]  = {3.5f, -420.0f, -50.0f, 0.24f, 0.28f, 0.15f, 0.0f, "ATTACK: b2 (Back Swing Pull)", sf::Color(255, 100, 50), 0.55f};
-        _attacks["u2"]  = {4.0f, 120.0f, -435.0f, 0.26f, 0.42f, 0.16f, 10.0f, "ATTACK: u2 (Uppercut)", sf::Color(255, 95, 70), 0.60f};
-        _attacks["dw2"] = {3.6f, 260.0f, -30.0f, 0.25f, 0.32f, 0.15f, 12.0f, "ATTACK: dw2 (Low Sweep)", sf::Color(255, 120, 60), 0.58f};
+        _attacks["2"]   = {3.5f, 350.0f, -40.0f, 0.24f, 0.26f, 0.15f, 16.0f, "ATTACK: 2 (Heavy Strike)", sf::Color(255, 110, 60), 0.55f, HitLevel::MID, false};
+        _attacks["f2"]  = {3.8f, 1150.0f, -45.0f, 0.22f, 0.35f, 0.14f, 18.0f, "ATTACK: f2 (Forward Smash -> Push)", sf::Color(255, 130, 50), 0.52f, HitLevel::MID, false};
+        _attacks["b2"]  = {3.5f, -420.0f, -50.0f, 0.24f, 0.28f, 0.15f, 0.0f, "ATTACK: b2 (Back Swing Pull)", sf::Color(255, 100, 50), 0.55f, HitLevel::MID, true};
+        _attacks["u2"]  = {4.0f, 120.0f, -435.0f, 0.26f, 0.42f, 0.16f, 10.0f, "ATTACK: u2 (Uppercut)", sf::Color(255, 95, 70), 0.60f, HitLevel::MID, false};
+        _attacks["dw2"] = {3.6f, 260.0f, -30.0f, 0.25f, 0.32f, 0.15f, 12.0f, "ATTACK: dw2 (Low Sweep)", sf::Color(255, 120, 60), 0.58f, HitLevel::LOW, false};
 
         // Атаки в дэше
-        _attacks["d1"]  = {2.5f, 600.0f, -40.0f, 0.16f, 0.22f, 0.12f, 18.0f, "ATTACK: d1 (Dash Thrust)", sf::Color(90, 220, 255), 0.40f};
+        _attacks["d1"]  = {2.5f, 600.0f, -40.0f, 0.16f, 0.22f, 0.12f, 18.0f, "ATTACK: d1 (Dash Thrust)", sf::Color(90, 220, 255), 0.40f, HitLevel::MID, false};
         _attacks["df1"] = _attacks["d1"];
-        _attacks["db1"] = {3.0f, -220.0f, -435.0f, 0.18f, 0.40f, 0.14f, 0.0f, "ATTACK: db1 (Reverse Dash Sweep)", sf::Color(100, 240, 220), 0.42f};
-        _attacks["d2"]  = {4.0f, 1150.0f, -55.0f, 0.26f, 0.32f, 0.16f, 22.0f, "ATTACK: d2 (Heavy Dash Smash)", sf::Color(255, 80, 110), 0.60f};
+        _attacks["db1"] = {3.0f, -220.0f, -435.0f, 0.18f, 0.40f, 0.14f, 0.0f, "ATTACK: db1 (Reverse Dash Sweep)", sf::Color(100, 240, 220), 0.42f, HitLevel::LOW, false};
+        _attacks["d2"]  = {4.0f, 1150.0f, -55.0f, 0.26f, 0.32f, 0.16f, 22.0f, "ATTACK: d2 (Heavy Dash Smash)", sf::Color(255, 80, 110), 0.60f, HitLevel::MID, false};
         _attacks["df2"] = _attacks["d2"];
-        _attacks["db2"] = {4.0f, -550.0f, -435.0f, 0.28f, 0.42f, 0.16f, 0.0f, "ATTACK: db2 (Reverse Dash Launcher)", sf::Color(255, 90, 140), 0.65f};
+        _attacks["db2"] = {4.0f, -550.0f, -435.0f, 0.28f, 0.42f, 0.16f, 0.0f, "ATTACK: db2 (Reverse Dash Launcher)", sf::Color(255, 90, 140), 0.65f, HitLevel::MID, false};
 
         // Воздушные атаки
-        _attacks["a1"]   = {2.0f, 70.0f, -40.0f, 0.16f, 0.35f, 0.13f, 6.0f, "AIR ATTACK: a1 (Air Juggle)", sf::Color(80, 220, 255), 0.40f};
+        _attacks["a1"]   = {2.0f, 70.0f, -40.0f, 0.16f, 0.35f, 0.13f, 6.0f, "AIR ATTACK: a1 (Air Juggle)", sf::Color(80, 220, 255), 0.40f, HitLevel::OVERHEAD, false};
         _attacks["af1"]  = _attacks["a1"];
-        _attacks["a2"]   = {3.5f, 1250.0f, 0.0f, 0.24f, 0.48f, 0.15f, 0.0f, "AIR ATTACK: a2 (Horizontal Air Push)", sf::Color(240, 130, 255), 0.55f};
+        _attacks["a2"]   = {3.5f, 1250.0f, 0.0f, 0.24f, 0.48f, 0.15f, 0.0f, "AIR ATTACK: a2 (Horizontal Air Push)", sf::Color(240, 130, 255), 0.55f, HitLevel::OVERHEAD, false};
         _attacks["af2"]  = _attacks["a2"];
-        _attacks["adw2"] = {4.0f, 440.0f, 550.0f, 0.28f, 0.40f, 0.16f, 8.0f, "AIR ATTACK: adw2 (Air Down Slam)", sf::Color(255, 90, 30), 0.60f};
-        _attacks["ad1"]  = {2.5f, 160.0f, -60.0f, 0.17f, 0.25f, 0.13f, 12.0f, "AIR DASH ATTACK: ad1", sf::Color(100, 240, 220), 0.40f};
-        _attacks["ad2"]  = {4.0f, 220.0f, 320.0f, 0.28f, 0.28f, 0.16f, 15.0f, "AIR DASH ATTACK: ad2", sf::Color(255, 90, 160), 0.60f};
+        _attacks["adw1"] = {2.8f, 20.0f, -320.0f, 0.18f, 0.35f, 0.13f, 0.0f, "AIR ATTACK: adw1 (Air Down Hook)", sf::Color(255, 190, 60), 0.38f, HitLevel::OVERHEAD, false};
+        _attacks["adw2"] = {4.0f, 440.0f, 550.0f, 0.28f, 0.40f, 0.16f, 8.0f, "AIR ATTACK: adw2 (Air Down Slam)", sf::Color(255, 90, 30), 0.60f, HitLevel::OVERHEAD, false};
+        _attacks["ad1"]  = {2.5f, 160.0f, -60.0f, 0.17f, 0.25f, 0.13f, 12.0f, "AIR DASH ATTACK: ad1", sf::Color(100, 240, 220), 0.40f, HitLevel::OVERHEAD, false};
+        _attacks["ad2"]  = {4.0f, 220.0f, 320.0f, 0.28f, 0.28f, 0.16f, 15.0f, "AIR DASH ATTACK: ad2", sf::Color(255, 90, 160), 0.60f, HitLevel::OVERHEAD, false};
     }
 
     static void addCombo(const ComboEntry& ce) {
@@ -418,156 +450,163 @@ private:
         addCombo({
             "1f2d1",
             {"1", "f2", "d1"},
-            {5.0f, 460.0f, -435.0f, 0.26f, 0.42f, 0.15f, 15.0f, "COMBO 1-f2-d1: DIAGONAL LAUNCHER!", sf::Color(255, 170, 40), 0.60f},
-            true, true
+            {5.0f, 460.0f, -435.0f, 0.26f, 0.42f, 0.15f, 15.0f, "COMBO 1-f2-d1: DIAGONAL LAUNCHER!", sf::Color(255, 170, 40), 0.60f, HitLevel::MID, false},
+            true, true, false
         });
 
         addCombo({
             "11b2",
             {"1", "1", "b2"},
-            {4.5f, -540.0f, -435.0f, 0.30f, 0.45f, 0.16f, 12.0f, "COMBO 1-1-b2: GRAB & BACK THROW!", sf::Color(255, 80, 80), 0.65f},
-            true, true
+            {4.5f, -540.0f, -435.0f, 0.30f, 0.45f, 0.16f, 12.0f, "COMBO 1-1-b2: GRAB & BACK THROW!", sf::Color(255, 80, 80), 0.65f, HitLevel::MID, true},
+            true, true, false
         });
 
         addCombo({
             "112",
             {"1", "1", "2"},
-            {4.5f, 180.0f, -435.0f, 0.28f, 0.42f, 0.16f, 18.0f, "COMBO 1-1-2: RAPID COMBO LAUNCHER!", sf::Color(255, 60, 60), 0.60f},
-            true, true
+            {4.5f, 180.0f, -435.0f, 0.28f, 0.42f, 0.16f, 18.0f, "COMBO 1-1-2: RAPID COMBO LAUNCHER!", sf::Color(255, 60, 60), 0.60f, HitLevel::MID, false},
+            true, true, false
         });
 
         addCombo({
             "111",
             {"1", "1", "1"},
-            {2.5f, 500.0f, -40.0f, 0.15f, 0.22f, 0.12f, 16.0f, "COMBO 1-1-1: TRIPLE LIGHT STRIKE", sf::Color(255, 240, 90), 0.38f},
-            false, true
+            {2.5f, 500.0f, -40.0f, 0.15f, 0.22f, 0.12f, 16.0f, "COMBO 1-1-1: TRIPLE LIGHT STRIKE", sf::Color(255, 240, 90), 0.38f, HitLevel::MID, false},
+            false, true, false
         });
 
         addCombo({
             "222",
             {"2", "2", "2"},
-            {4.0f, 1200.0f, -60.0f, 0.28f, 0.30f, 0.16f, 25.0f, "COMBO 2-2-2: TRIPLE HEAVY STRIKE", sf::Color(255, 95, 45), 0.65f},
-            false, true
+            {4.0f, 1200.0f, -60.0f, 0.28f, 0.30f, 0.16f, 25.0f, "COMBO 2-2-2: TRIPLE HEAVY STRIKE", sf::Color(255, 95, 45), 0.65f, HitLevel::MID, false},
+            false, true, false
         });
 
         addCombo({
             "21db1",
             {"2", "1", "db1"},
-            {4.8f, 220.0f, -435.0f, 0.26f, 0.42f, 0.15f, 0.0f, "COMBO 2-1-db1: REVERSE SWEEP LAUNCHER!", sf::Color(255, 140, 80), 0.60f},
-            true, true
+            {4.8f, 220.0f, -435.0f, 0.26f, 0.42f, 0.15f, 0.0f, "COMBO 2-1-db1: REVERSE SWEEP LAUNCHER!", sf::Color(255, 140, 80), 0.60f, HitLevel::LOW, false},
+            true, true, false
         });
 
         addCombo({
             "a1a1adw2",
             {"a1", "a1", "adw2"},
-            {5.5f, 1150.0f, -280.0f, 0.32f, 0.52f, 0.18f, 10.0f, "COMBO a1-a1-adw2: DUAL AIR DIVE SLAM!", sf::Color(255, 75, 25), 0.65f},
-            true, true
+            {5.5f, 1150.0f, -280.0f, 0.32f, 0.52f, 0.18f, 10.0f, "COMBO a1-a1-adw2: DUAL AIR DIVE SLAM!", sf::Color(255, 75, 25), 0.65f, HitLevel::OVERHEAD, false},
+            true, true, false
         });
 
         addCombo({
             "a1adw2",
             {"a1", "adw2"},
-            {4.5f, 440.0f, 550.0f, 0.28f, 0.40f, 0.16f, 8.0f, "COMBO a1-adw2: GROUND BOUNCE SLAM!", sf::Color(255, 90, 30), 0.60f},
-            true, true
+            {4.5f, 440.0f, 550.0f, 0.28f, 0.40f, 0.16f, 8.0f, "COMBO a1-adw2: GROUND BOUNCE SLAM!", sf::Color(255, 90, 30), 0.60f, HitLevel::OVERHEAD, false},
+            true, true, false
         });
 
         addCombo({
             "a1a2",
             {"a1", "a2"},
-            {3.5f, 1250.0f, 0.0f, 0.24f, 0.45f, 0.15f, 0.0f, "COMBO a1-a2: HORIZONTAL AIR PUSH!", sf::Color(240, 130, 255), 0.55f},
-            false, true
+            {3.5f, 1250.0f, 0.0f, 0.24f, 0.45f, 0.15f, 0.0f, "COMBO a1-a2: HORIZONTAL AIR PUSH!", sf::Color(240, 130, 255), 0.55f, HitLevel::OVERHEAD, false},
+            false, true, false
         });
 
         addCombo({
             "a2ad1",
             {"a2", "ad1"},
-            {4.5f, 460.0f, -435.0f, 0.28f, 0.40f, 0.16f, 12.0f, "COMBO a2-ad1: AIR DIAGONAL LAUNCH!", sf::Color(190, 85, 255), 0.60f},
-            true, true
+            {4.5f, 460.0f, -435.0f, 0.28f, 0.40f, 0.16f, 12.0f, "COMBO a2-ad1: AIR DIAGONAL LAUNCH!", sf::Color(190, 85, 255), 0.60f, HitLevel::OVERHEAD, false},
+            true, true, false
         });
 
         addCombo({
             "12df2",
             {"1", "2", "df2"},
-            {4.5f, 600.0f, 0.0f, 0.24f, 0.35f, 0.15f, 20.0f, "COMBO 1-2-df2: HORIZONTAL DASH SMASH!", sf::Color(255, 120, 40), 0.60f},
-            true, true
+            {4.5f, 600.0f, 0.0f, 0.24f, 0.35f, 0.15f, 20.0f, "COMBO 1-2-df2: HORIZONTAL DASH SMASH!", sf::Color(255, 120, 40), 0.60f, HitLevel::MID, false},
+            true, true, false
         });
 
         addCombo({
             "12f1",
             {"1", "2", "f1"},
-            {5.2f, 950.0f, 0.0f, 0.26f, 0.44f, 0.15f, 20.0f, "COMBO 1-2-f1: BAT SWING SMASH!", sf::Color(255, 125, 40), 0.62f},
-            true, true
+            {5.2f, 950.0f, 0.0f, 0.26f, 0.44f, 0.15f, 20.0f, "COMBO 1-2-f1: BAT SWING SMASH!", sf::Color(255, 125, 40), 0.62f, HitLevel::MID, false},
+            true, true, true
         });
 
         addCombo({
             "b21u2",
             {"b2", "1", "u2"},
-            {5.2f, 40.0f, -520.0f, 0.28f, 0.48f, 0.16f, 12.0f, "COMBO b2-1-u2: CIRCULAR SKY LAUNCHER!", sf::Color(255, 70, 120), 0.62f},
-            true, true
+            {5.2f, 40.0f, -520.0f, 0.28f, 0.48f, 0.16f, 12.0f, "COMBO b2-1-u2: CIRCULAR SKY LAUNCHER!", sf::Color(255, 70, 120), 0.62f, HitLevel::MID, true},
+            true, true, true
         });
 
         addCombo({
             "121",
             {"1", "2", "1"},
-            {4.8f, 480.0f, 0.0f, 0.24f, 0.38f, 0.15f, 16.0f, "COMBO 1-2-1: TENDERIZER PUSH!", sf::Color(255, 165, 45), 0.58f},
-            true, true
+            {4.8f, 480.0f, 0.0f, 0.24f, 0.38f, 0.15f, 16.0f, "COMBO 1-2-1: TENDERIZER PUSH!", sf::Color(255, 165, 45), 0.58f, HitLevel::MID, false},
+            true, true, true
         });
 
         addCombo({
             "db1u1",
             {"db1", "u1"},
-            {4.6f, 140.0f, -480.0f, 0.24f, 0.42f, 0.15f, 10.0f, "COMBO db1-u1: REVERSE TURN & SKY POP-UP!", sf::Color(255, 110, 180), 0.60f},
-            true, true
+            {4.6f, 140.0f, -480.0f, 0.24f, 0.42f, 0.15f, 10.0f, "COMBO db1-u1: REVERSE TURN & SKY POP-UP!", sf::Color(255, 110, 180), 0.60f, HitLevel::MID, false},
+            true, true, true
+        });
+
+        addCombo({
+            "dw1jadw1",
+            {"dw1", "j", "adw1"},
+            {5.5f, 25.0f, -520.0f, 0.26f, 0.50f, 0.16f, 0.0f, "COMBO dw1-j-adw1: STOMP & SKY HOOK!", sf::Color(255, 160, 40), 0.60f, HitLevel::OVERHEAD, false},
+            true, true, true
         });
 
         // --- 2. Базовые комбо (общее начало для дальнейших уникальных вариаций) ---
         addCombo({
             "12",
             {"1", "2"},
-            {3.5f, 320.0f, -240.0f, 0.22f, 0.30f, 0.14f, 15.0f, "COMBO 1-2: GROUND SLAM & POP-UP", sf::Color(255, 150, 50), 0.50f},
-            false, false
+            {3.5f, 320.0f, -240.0f, 0.22f, 0.30f, 0.14f, 15.0f, "COMBO 1-2: GROUND SLAM & POP-UP", sf::Color(255, 150, 50), 0.50f, HitLevel::MID, false},
+            false, false, false
         });
 
         addCombo({
             "b21",
             {"b2", "1"},
-            {2.5f, 220.0f, -30.0f, 0.18f, 0.28f, 0.12f, 8.0f, "COMBO b2-1: HILT PUSH -> [W+2]", sf::Color(255, 180, 70), 0.45f},
-            false, false
+            {2.5f, 220.0f, -30.0f, 0.18f, 0.28f, 0.12f, 8.0f, "COMBO b2-1: HILT PUSH -> [W+2]", sf::Color(255, 180, 70), 0.45f, HitLevel::MID, true},
+            false, false, true
         });
 
         addCombo({
             "1f2",
             {"1", "f2"},
-            {3.5f, 1150.0f, -45.0f, 0.22f, 0.35f, 0.14f, 15.0f, "COMBO 1-f2: PUSH! -> PRESS [SHIFT]", sf::Color(255, 140, 50), 0.52f},
-            false, false
+            {3.5f, 1150.0f, -45.0f, 0.22f, 0.35f, 0.14f, 15.0f, "COMBO 1-f2: PUSH! -> PRESS [SHIFT]", sf::Color(255, 140, 50), 0.52f, HitLevel::MID, false},
+            false, false, false
         });
 
         addCombo({
             "11",
             {"1", "1"},
-            {2.0f, 160.0f, -25.0f, 0.14f, 0.18f, 0.11f, 14.0f, "COMBO 1-1: Light Jab 2", sf::Color(255, 215, 60), 0.38f},
-            false, false
+            {2.0f, 160.0f, -25.0f, 0.14f, 0.18f, 0.11f, 14.0f, "COMBO 1-1: Light Jab 2", sf::Color(255, 215, 60), 0.38f, HitLevel::MID, false},
+            false, false, false
         });
 
         addCombo({
             "21",
             {"2", "1"},
-            {3.0f, 850.0f, -35.0f, 0.20f, 0.30f, 0.13f, 16.0f, "COMBO 2-1: SETUP FOR DASH BEHIND", sf::Color(255, 160, 60), 0.48f},
-            false, false
+            {3.0f, 850.0f, -35.0f, 0.20f, 0.30f, 0.13f, 16.0f, "COMBO 2-1: SETUP FOR DASH BEHIND", sf::Color(255, 160, 60), 0.48f, HitLevel::MID, false},
+            false, false, false
         });
 
         addCombo({
             "22",
             {"2", "2"},
-            {3.5f, 260.0f, -35.0f, 0.26f, 0.26f, 0.15f, 18.0f, "COMBO 2-2: Heavy Strike 2", sf::Color(255, 120, 50), 0.58f},
-            false, false
+            {3.5f, 260.0f, -35.0f, 0.26f, 0.26f, 0.15f, 18.0f, "COMBO 2-2: Heavy Strike 2", sf::Color(255, 120, 50), 0.58f, HitLevel::MID, false},
+            false, false, false
         });
 
         addCombo({
             "a1a1",
             {"a1", "a1"},
-            {2.2f, 80.0f, -35.0f, 0.16f, 0.35f, 0.13f, 8.0f, "COMBO a1-a1: Dual Air Juggle", sf::Color(90, 230, 255), 0.40f},
-            false, false
+            {2.2f, 80.0f, -35.0f, 0.16f, 0.35f, 0.13f, 8.0f, "COMBO a1-a1: Dual Air Juggle", sf::Color(90, 230, 255), 0.40f, HitLevel::OVERHEAD, false},
+            false, false, false
         });
     }
 

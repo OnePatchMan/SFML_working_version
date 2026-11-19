@@ -3015,6 +3015,7 @@ int main() {
         std::cout << "-> Long combo (9 hits) properly floored at min 30% (" << combat.getDamageScaling() * 100.0f << "%)!" << std::endl;
 
         // 4. Test Combo Reset restores scaling and decay back to 100%
+        enemy.position.x = player.position.x + 999.0f; // Keep enemy away so active bot doesn't hit player during wait
         for (int i = 0; i < 35; ++i) tick(0.016f, arena, player, enemy, combat); // > 0.42s
         assert(combat.getComboHitCount() == 0);
         assert(combat.getDamageScaling() == 1.0f);
@@ -4809,6 +4810,223 @@ int main() {
                   << " px/s) and player air suspended!" << std::endl;
 
         std::cout << "-> PASSED: Weapon attack dw1 (Stomp) & Combo dw1jadw1 (Sky Hook) verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 66: HIGH VS LOW BLOCK (OVERHEAD PENETRATES LOW, LOW PENETRATES HIGH)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 66] Testing High vs Low Block Mechanics..." << std::endl;
+        Player player(arena.getSpawnPosition());
+        player.hp = 100.0f;
+        player.maxHp = 100.0f;
+
+        // 1. Player HIGH Block (Standing Guard)
+        player.setBlockType(BlockType::HIGH);
+        assert(player.isBlocking());
+        assert(player.getBlockType() == BlockType::HIGH);
+
+        // Mid attack is blocked
+        player.hp = 100.0f;
+        player.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID);
+        assert(std::abs(player.hp - 96.0f) < 0.01f); // 20 * 0.20 = 4 dmg
+
+        // Overhead attack is blocked by HIGH block
+        player.hp = 100.0f;
+        player.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, HitLevel::OVERHEAD);
+        assert(std::abs(player.hp - 96.0f) < 0.01f); // 20 * 0.20 = 4 dmg
+
+        // Low attack PENETRATES HIGH block (Full Damage!)
+        player.hp = 100.0f;
+        player.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, HitLevel::LOW);
+        assert(std::abs(player.hp - 80.0f) < 0.01f); // Full 20 dmg taken!
+        std::cout << "-> Player HIGH block verified: blocks MID & OVERHEAD, LOW penetrates!" << std::endl;
+
+        // 2. Player LOW Block (Crouching Guard)
+        player.setBlockType(BlockType::LOW);
+        assert(player.isBlocking());
+        assert(player.getBlockType() == BlockType::LOW);
+
+        // Mid attack is blocked
+        player.hp = 100.0f;
+        player.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID);
+        assert(std::abs(player.hp - 96.0f) < 0.01f); // 20 * 0.20 = 4 dmg
+
+        // Low attack is blocked by LOW block
+        player.hp = 100.0f;
+        player.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, HitLevel::LOW);
+        assert(std::abs(player.hp - 96.0f) < 0.01f); // 20 * 0.20 = 4 dmg
+
+        // Overhead attack PENETRATES LOW block (Full Damage!)
+        player.hp = 100.0f;
+        player.takeDamage(20.0f, 0.0f, 0.0f, 0.0f, HitLevel::OVERHEAD);
+        assert(std::abs(player.hp - 80.0f) < 0.01f); // Full 20 dmg taken!
+        std::cout << "-> Player LOW block verified: blocks MID & LOW, OVERHEAD penetrates!" << std::endl;
+
+        // 3. Enemy High & Low Block verification
+        Enemy enemy({player.position.x + 50.0f, player.position.y});
+        enemy.maxHp = 100.0f;
+
+        // Enemy HIGH block
+        enemy.setBlockType(BlockType::HIGH);
+        enemy.hp = 100.0f;
+        enemy.takeDamage(30.0f, 0.0f, 0.0f, 0.0f, HitLevel::OVERHEAD);
+        assert(std::abs(enemy.hp - 94.0f) < 0.01f); // Blocked: 30 * 0.20 = 6 dmg
+
+        enemy.hp = 100.0f;
+        enemy.takeDamage(30.0f, 0.0f, 0.0f, 0.0f, HitLevel::LOW);
+        assert(std::abs(enemy.hp - 70.0f) < 0.01f); // Penetrated: full 30 dmg!
+
+        // Enemy LOW block
+        enemy.setBlockType(BlockType::LOW);
+        enemy.hp = 100.0f;
+        enemy.takeDamage(30.0f, 0.0f, 0.0f, 0.0f, HitLevel::LOW);
+        assert(std::abs(enemy.hp - 94.0f) < 0.01f); // Blocked: 30 * 0.20 = 6 dmg
+
+        enemy.hp = 100.0f;
+        enemy.takeDamage(30.0f, 0.0f, 0.0f, 0.0f, HitLevel::OVERHEAD);
+        assert(std::abs(enemy.hp - 70.0f) < 0.01f); // Penetrated: full 30 dmg!
+
+        std::cout << "-> Enemy HIGH & LOW block resolution verified 100%!" << std::endl;
+        std::cout << "-> PASSED: High vs Low Block Mechanics verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 67: BACK HIT MECHANICS (BYPASSES BLOCK COMPLETELY)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 67] Testing Back Hit Mechanics (Bypasses Block)..." << std::endl;
+        Player player(arena.getSpawnPosition());
+        player.hp = 100.0f;
+        player.maxHp = 100.0f;
+        if (!player.isFacingRight()) player.turnAround();
+        assert(player.isFacingRight());
+
+        // Player blocks HIGH
+        player.setBlockType(BlockType::HIGH);
+
+        // 1. Direct hit from behind (attacker is to the left of player facing right)
+        sf::Vector2f attackerPosBehind = {player.position.x - 30.0f, player.position.y};
+        player.takeDamage(25.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID, false, attackerPosBehind);
+        assert(std::abs(player.hp - 75.0f) < 0.01f); // Full 25 dmg taken because hit is from behind!
+        std::cout << "-> Positional back hit bypassed player block completely!" << std::endl;
+
+        // 2. Explicit back attack (isBackHit = true, e.g. b2, 11b2) even from front
+        player.hp = 100.0f;
+        sf::Vector2f attackerPosFront = {player.position.x + 30.0f, player.position.y};
+        player.takeDamage(25.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID, true, attackerPosFront);
+        assert(std::abs(player.hp - 75.0f) < 0.01f); // Full 25 dmg taken because isBackHit is true!
+        std::cout << "-> Explicit back-hit attack (isBackHit=true) bypassed block from front!" << std::endl;
+
+        // 3. Enemy back hit bypass
+        Enemy enemy({player.position.x + 50.0f, player.position.y});
+        enemy.maxHp = 100.0f;
+        enemy.isFacingLeft = true;
+        enemy.setBlockType(BlockType::HIGH);
+
+        // Attack hitting enemy's back (attacker is to the right of enemy facing left)
+        sf::Vector2f playerPosBehindEnemy = {enemy.position.x + 30.0f, enemy.position.y};
+        enemy.hp = 100.0f;
+        enemy.takeDamage(30.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID, false, playerPosBehindEnemy);
+        assert(std::abs(enemy.hp - 70.0f) < 0.01f); // Full 30 dmg taken, block bypassed!
+        std::cout << "-> Positional back hit bypassed enemy block completely!" << std::endl;
+
+        // Enemy explicit back-hit flag bypass
+        enemy.hp = 100.0f;
+        sf::Vector2f playerPosInFrontOfEnemy = {enemy.position.x - 30.0f, enemy.position.y};
+        enemy.takeDamage(30.0f, 0.0f, 0.0f, 0.0f, HitLevel::MID, true, playerPosInFrontOfEnemy);
+        assert(std::abs(enemy.hp - 70.0f) < 0.01f); // Full 30 dmg taken!
+        std::cout << "-> Explicit back-hit flag bypassed enemy block completely!" << std::endl;
+
+        std::cout << "-> PASSED: Back Hit Mechanics verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 68: KV CONFIG SEPARATION (COMBOS UNARMED VS COMBOS WEAPON)
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 68] Testing KV Config Separation (Unarmed vs Weapon)..." << std::endl;
+        const auto& combos = CombatConfig::getCombos();
+        assert(!combos.empty());
+
+        bool foundUnarmed11b2 = false;
+        bool foundWeaponB21u2 = false;
+        bool foundWeaponDw1jadw1 = false;
+        bool foundLow21db1 = false;
+        bool foundOverheadA1a1adw2 = false;
+
+        for (const auto& c : combos) {
+            if (c.id == "11b2") {
+                foundUnarmed11b2 = true;
+                assert(!c.isWeapon);
+                assert(c.stats.isBackHit);
+            } else if (c.id == "b21u2" || c.id == "weapon_b21u2") {
+                foundWeaponB21u2 = true;
+                assert(c.isWeapon);
+                assert(c.stats.isBackHit);
+            } else if (c.id == "dw1jadw1" || c.id == "weapon_dw1jadw1") {
+                foundWeaponDw1jadw1 = true;
+                assert(c.isWeapon);
+                assert(c.stats.hitLevel == HitLevel::OVERHEAD);
+            } else if (c.id == "21db1") {
+                foundLow21db1 = true;
+                assert(c.stats.hitLevel == HitLevel::LOW);
+            } else if (c.id == "a1a1adw2") {
+                foundOverheadA1a1adw2 = true;
+                assert(c.stats.hitLevel == HitLevel::OVERHEAD);
+            }
+        }
+
+        assert(foundUnarmed11b2);
+        assert(foundWeaponB21u2);
+        assert(foundWeaponDw1jadw1);
+        assert(foundLow21db1);
+        assert(foundOverheadA1a1adw2);
+
+        // Verify base attack stats in CombatConfig
+        assert(CombatConfig::getBaseAttack("b2").isBackHit);
+        assert(CombatConfig::getBaseAttack("b1").isBackHit);
+        assert(CombatConfig::getBaseAttack("dw1").hitLevel == HitLevel::LOW);
+        assert(CombatConfig::getBaseAttack("a1").hitLevel == HitLevel::OVERHEAD);
+        assert(CombatConfig::getBaseAttack("1").hitLevel == HitLevel::MID);
+
+        std::cout << "-> KV CombosUnarmed vs CombosWeapon verified cleanly!" << std::endl;
+        std::cout << "-> Hit levels (MID, LOW, OVERHEAD) and back-hit flags verified!" << std::endl;
+        std::cout << "-> PASSED: KV Config Separation verified 100%!" << std::endl;
+    }
+
+    // =========================================================================
+    // TEST 69: BOT POST-COMBO FREEZE FIX VERIFICATION
+    // =========================================================================
+    {
+        std::cout << "\n[TEST 69] Testing Bot Post-Combo Freeze Fix..." << std::endl;
+        Enemy bot({arena.getSpawnPosition().x + 60.0f, arena.getSpawnPosition().y});
+        bot.enemyType = EnemyType::DUELIST;
+        bot.isSmartAI = true;
+        bot.reset();
+
+        // 1. Verify attackCooldown is responsive (<= 0.40s) rather than statue (1.6f-1.8f)
+        assert(bot.attackCooldown <= 0.40f);
+
+        // 2. Put bot in RECOVERY state with finished combo
+        bot.attackState = EnemyAttackState::RECOVERY;
+        bot.attackStateTimer = 0.08f;
+        bot.aiComboState = AIComboState::IDLE;
+
+        // Tick to let recovery expire
+        bot.update(0.10f, arena, arena.getSpawnPosition(), false, false);
+        assert(bot.attackState == EnemyAttackState::IDLE);
+        std::cout << "-> Bot cleanly transitions from RECOVERY to IDLE without getting stuck!" << std::endl;
+
+        // 3. Verify bot is active during cooldown rather than frozen motionless
+        bot.attackCooldown = 0.30f;
+        bot.spacingTimer = 0.20f;
+        bot.update(0.016f, arena, arena.getSpawnPosition(), false, false);
+        // Duelist repositions/spaces rather than standing frozen with zero velocity
+        assert(bot.velocity.x != 0.0f || bot.isDodging || bot.isBlocking);
+        std::cout << "-> Bot actively maneuvers and repositions instead of standing frozen like a statue!" << std::endl;
+
+        std::cout << "-> PASSED: Bot Post-Combo Freeze Fix verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;
