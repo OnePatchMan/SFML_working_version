@@ -129,10 +129,13 @@ public:
         std::shared_ptr<sf::Texture> texture;
         std::unique_ptr<sf::Sprite> sprite;
         EditorTool tool = EditorTool::PLATFORM;
+        int tileCode = 1;
     };
 
     void scanTileSprites();
     bool handlePaletteClick(const sf::Vector2i& mousePixel, Arena& arena, Player& player, Enemy& enemy, sf::View& camera, float winW, float winH);
+    bool handleLeftToolbarClick(const sf::Vector2i& mousePixel, float winW, float winH);
+    void drawLeftToolbar(sf::RenderWindow& window, const sf::Font* font, float winW, float winH);
 
 private:
     bool _active = false;
@@ -142,6 +145,7 @@ private:
     std::function<void()> _respawnCallback;
 
     EditorTool _tool = EditorTool::PLATFORM;
+    int _currentTileCode = 1;
     int _brushSize = 1; // 1, 2, 3, 5
     int _doorTargetRoom = 2; // Целевая комната для новых дверей (1..10)
     std::vector<IngameTileSpriteItem> _paletteSprites;

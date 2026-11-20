@@ -6,6 +6,22 @@
 #include <set>
 
 namespace {
+struct LeftToolbarButton {
+    std::string icon;
+    std::string label;
+    ToolType tool;
+    sf::Color accent;
+};
+
+static const std::vector<LeftToolbarButton> s_leftButtons = {
+    {"B",  "Кисть / Блок [B]",    ToolType::PLATFORM,             sf::Color(76, 175, 80)},
+    {"X",  "Прямоугольник [X]",   ToolType::BOX_FILL,             sf::Color(100, 180, 255)},
+    {"L",  "Линия [L]",           ToolType::LINE,                 sf::Color(80, 220, 160)},
+    {"G",  "Ведро / Заливка [G]", ToolType::FLOOD_FILL,           sf::Color(255, 180, 0)},
+    {"E",  "Ластик [Del/E]",      ToolType::EDGE_PASSAGE,         sf::Color(255, 100, 100)},
+    {"Q",  "Пипетка [Q]",         ToolType::EYEDROPPER,           sf::Color(200, 100, 255)}
+};
+
 std::vector<sf::Vector2i> getEditorLineTiles(int x0, int y0, int x1, int y1) {
     std::vector<sf::Vector2i> tiles;
     int dx = std::abs(x1 - x0);
@@ -71,7 +87,7 @@ void EditorApp::toggleFullscreen() {
 void EditorApp::scanTileSprites() {
     _paletteSprites.clear();
 
-    // 1. ВКЛАДКА: 🧱 БЛОКИ И ГЕОМЕТРИЯ (BLOCKS)
+    // 1. ВКЛАДКА: 🧱 БЛОКИ И СТЕНЫ (из assets/tiles/blocks/)
     {
         TileSpriteItem item;
         item.name = "Платформа";
@@ -92,150 +108,144 @@ void EditorApp::scanTileSprites() {
     }
     {
         TileSpriteItem item;
-        item.name = "Заливка Box";
-        item.filename = "box_fill.png";
-        item.tileCode = 0;
-        item.tool = ToolType::BOX_FILL;
-        item.tab = PaletteTab::BLOCKS;
-        _paletteSprites.push_back(std::move(item));
-    }
-    {
-        TileSpriteItem item;
-        item.name = "Линия Line";
-        item.filename = "line_tool.png";
-        item.tileCode = 0;
-        item.tool = ToolType::LINE;
-        item.tab = PaletteTab::BLOCKS;
-        _paletteSprites.push_back(std::move(item));
-    }
-    {
-        TileSpriteItem item;
-        item.name = "Ведро Bucket";
-        item.filename = "bucket_fill.png";
-        item.tileCode = 0;
-        item.tool = ToolType::FLOOD_FILL;
-        item.tab = PaletteTab::BLOCKS;
-        _paletteSprites.push_back(std::move(item));
-    }
-    {
-        TileSpriteItem item;
-        item.name = "Ластик [E]";
-        item.filename = "eraser.png";
-        item.tileCode = 0;
-        item.tool = ToolType::EDGE_PASSAGE;
+        item.name = "Ящик (Wood)";
+        item.filename = "06_wood.png";
+        item.tileCode = 5;
+        item.tool = ToolType::WALL;
         item.tab = PaletteTab::BLOCKS;
         _paletteSprites.push_back(std::move(item));
     }
 
-    // Дополнительные декоративные блоки из assets/tiles/
-    std::string tilesDir = getGameTilesDir();
-    if (std::filesystem::exists(tilesDir)) {
-        for (const auto& entry : std::filesystem::directory_iterator(tilesDir)) {
+    // Автоматическое разделение по 32px по оси X спрайтшитов с блоками из assets/tiles/blocks/
+    std::string blocksDir = getGameBlocksDir();
+    int nextCustomCode = 8;
+    if (std::filesystem::exists(blocksDir)) {
+        std::vector<std::filesystem::path> bFiles;
+        for (const auto& entry : std::filesystem::directory_iterator(blocksDir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".png") {
-                std::string fname = entry.path().filename().string();
-                std::string stem = entry.path().stem().string();
+                bFiles.push_back(entry.path());
+            }
+        }
+        std::sort(bFiles.begin(), bFiles.end());
 
-                bool isBase = false;
-                for (const auto& bi : _paletteSprites) {
-                    if (bi.filename == fname) { isBase = true; break; }
-                }
-                if (isBase) continue;
+        for (const auto& fpath : bFiles) {
+            std::string fname = fpath.filename().string();
+            std::string stem = fpath.stem().string();
 
-                TileSpriteItem item;
-                item.filename = fname;
-                item.name = stem;
-                item.tool = ToolType::WALL;
-                item.tab = PaletteTab::BLOCKS;
+            if (fname == "01_platform.png" || fname == "02_wall.png" || fname == "06_wood.png") {
+                continue;
+            }
 
-                if (stem.find("lava") != std::string::npos || stem.find("hazard") != std::string::npos) item.name = "Лава";
-                else if (stem.find("wood") != std::string::npos || stem.find("crate") != std::string::npos) item.name = "Ящик";
-                else if (stem.find("pillar") != std::string::npos) item.name = "Колонна";
+            auto tex = std::make_shared<sf::Texture>();
+            if (tex->loadFromFile(fpath.string())) {
+                unsigned int sheetW = tex->getSize().x;
+                unsigned int sheetH = tex->getSize().y;
+                int numSlices = static_cast<int>(sheetW / 32);
+                if (numSlices <= 0) numSlices = 1;
 
-                auto tex = std::make_shared<sf::Texture>();
-                if (tex->loadFromFile(entry.path().string())) {
+                bool isBlocksTest = (stem.find("BlocksTest") != std::string::npos);
+
+                for (int s = 0; s < numSlices; ++s) {
+                    if (isBlocksTest && (s == 0 || s == 1 || s == 2)) {
+                        continue;
+                    }
+
+                    TileSpriteItem item;
                     item.texture = tex;
-                    item.sprite = std::make_unique<sf::Sprite>(*item.texture);
-                    float sx = 32.0f / static_cast<float>(tex->getSize().x);
-                    float sy = 32.0f / static_cast<float>(tex->getSize().y);
-                    item.sprite->setScale({sx, sy});
+                    item.filename = fname;
+                    item.name = stem + (numSlices > 1 ? (" #" + std::to_string(s + 1)) : "");
+                    item.tileCode = nextCustomCode++;
+                    item.tool = ToolType::WALL;
+                    item.tab = PaletteTab::BLOCKS;
+
+                    item.sprite = std::make_unique<sf::Sprite>(*tex);
+                    item.sprite->setTextureRect(sf::IntRect({s * 32, 0}, {32, static_cast<int>(std::min(32u, sheetH))}));
+                    item.sprite->setScale({1.0f, 1.0f});
                     _paletteSprites.push_back(std::move(item));
                 }
             }
         }
     }
 
-    // 2. ВКЛАДКА: ⚔ СУЩНОСТИ И ВРАГИ (ENTITIES)
+    // 2. ВКЛАДКА: 🎨 ДЕКОР И ОСВЕЩЕНИЕ (из assets/tiles/decor/)
     {
         TileSpriteItem item;
-        item.name = "Игрок (P)";
-        item.filename = "player_spawn.png";
-        item.tileCode = 0;
-        item.tool = ToolType::PLAYER_SPAWN;
-        item.tab = PaletteTab::ENTITIES;
+        item.name = "Лампа [0]";
+        item.filename = "04_lamp.png";
+        item.tileCode = 4;
+        item.tool = ToolType::LAMP;
+        item.tab = PaletteTab::DECOR;
         _paletteSprites.push_back(std::move(item));
     }
     {
         TileSpriteItem item;
-        item.name = "Обычный";
-        item.filename = "enemy_normal.png";
-        item.tileCode = 0;
-        item.tool = ToolType::ENEMY_SPAWN;
-        item.tab = PaletteTab::ENTITIES;
+        item.name = "Колонна";
+        item.filename = "04_pillar.png";
+        item.tileCode = 6;
+        item.tool = ToolType::WALL;
+        item.tab = PaletteTab::DECOR;
         _paletteSprites.push_back(std::move(item));
     }
     {
         TileSpriteItem item;
-        item.name = "Жирный";
-        item.filename = "enemy_tank.png";
-        item.tileCode = 0;
-        item.tool = ToolType::ENEMY_TANK;
-        item.tab = PaletteTab::ENTITIES;
-        _paletteSprites.push_back(std::move(item));
-    }
-    {
-        TileSpriteItem item;
-        item.name = "Дуэлянт Агр";
-        item.filename = "enemy_duelist.png";
-        item.tileCode = 0;
-        item.tool = ToolType::ENEMY_DUELIST;
-        item.tab = PaletteTab::ENTITIES;
-        _paletteSprites.push_back(std::move(item));
-    }
-    {
-        TileSpriteItem item;
-        item.name = "Дуэлянт Пасс";
-        item.filename = "enemy_duelist_passive.png";
-        item.tileCode = 0;
-        item.tool = ToolType::ENEMY_DUELIST_PASSIVE;
-        item.tab = PaletteTab::ENTITIES;
-        _paletteSprites.push_back(std::move(item));
-    }
-    {
-        TileSpriteItem item;
-        item.name = "Манекен (Dummy)";
-        item.filename = "enemy_dummy.png";
-        item.tileCode = 0;
-        item.tool = ToolType::ENEMY_DUMMY;
-        item.tab = PaletteTab::ENTITIES;
+        item.name = "Лава (Hazard)";
+        item.filename = "05_hazard.png";
+        item.tileCode = 7;
+        item.tool = ToolType::WALL;
+        item.tab = PaletteTab::DECOR;
         _paletteSprites.push_back(std::move(item));
     }
 
-    // 3. ВКЛАДКА: ⚡ МЕХАНИКИ И ТРИГГЕРЫ (MECHANICS)
+    std::string decorDir = getGameDecorDir();
+    if (std::filesystem::exists(decorDir)) {
+        std::vector<std::filesystem::path> dFiles;
+        for (const auto& entry : std::filesystem::directory_iterator(decorDir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".png") {
+                dFiles.push_back(entry.path());
+            }
+        }
+        std::sort(dFiles.begin(), dFiles.end());
+
+        for (const auto& fpath : dFiles) {
+            std::string fname = fpath.filename().string();
+            std::string stem = fpath.stem().string();
+
+            if (fname == "04_lamp.png" || fname == "04_pillar.png" || fname == "05_hazard.png") {
+                continue;
+            }
+
+            auto tex = std::make_shared<sf::Texture>();
+            if (tex->loadFromFile(fpath.string())) {
+                unsigned int sheetW = tex->getSize().x;
+                unsigned int sheetH = tex->getSize().y;
+                int numSlices = static_cast<int>(sheetW / 32);
+                if (numSlices <= 0) numSlices = 1;
+
+                for (int s = 0; s < numSlices; ++s) {
+                    TileSpriteItem item;
+                    item.texture = tex;
+                    item.filename = fname;
+                    item.name = stem + (numSlices > 1 ? (" #" + std::to_string(s + 1)) : "");
+                    item.tileCode = nextCustomCode++;
+                    item.tool = ToolType::WALL;
+                    item.tab = PaletteTab::DECOR;
+
+                    item.sprite = std::make_unique<sf::Sprite>(*tex);
+                    item.sprite->setTextureRect(sf::IntRect({s * 32, 0}, {32, static_cast<int>(std::min(32u, sheetH))}));
+                    item.sprite->setScale({1.0f, 1.0f});
+                    _paletteSprites.push_back(std::move(item));
+                }
+            }
+        }
+    }
+
+    // 3. ВКЛАДКА: ⚡ ИНСТРУМЕНТЫ, СПАВНЫ И МЕХАНИКИ (из assets/tiles/tools/ и сущностей)
     {
         TileSpriteItem item;
         item.name = "Дверь (Door)";
         item.filename = "03_door.png";
         item.tileCode = 3;
         item.tool = ToolType::DOOR;
-        item.tab = PaletteTab::MECHANICS;
-        _paletteSprites.push_back(std::move(item));
-    }
-    {
-        TileSpriteItem item;
-        item.name = "Тест Чекпоинт";
-        item.filename = "test_spawn.png";
-        item.tileCode = 0;
-        item.tool = ToolType::TEST_SPAWN;
         item.tab = PaletteTab::MECHANICS;
         _paletteSprites.push_back(std::move(item));
     }
@@ -266,37 +276,95 @@ void EditorApp::scanTileSprites() {
         item.tab = PaletteTab::MECHANICS;
         _paletteSprites.push_back(std::move(item));
     }
+    {
+        TileSpriteItem item;
+        item.name = "Игрок (P)";
+        item.filename = "player_spawn.png";
+        item.tileCode = 0;
+        item.tool = ToolType::PLAYER_SPAWN;
+        item.tab = PaletteTab::MECHANICS;
+        _paletteSprites.push_back(std::move(item));
+    }
+    // Динамическая загрузка всех врагов из папок assets/sprites/enemies/
+    _scannedEnemies = Enemy::scanEnemyFolders(resolveAssetPath("assets/sprites/enemies"));
+    for (const auto& edef : _scannedEnemies) {
+        TileSpriteItem item;
+        item.name = edef.displayName;
+        item.filename = edef.id;
+        item.enemyId = edef.id;
+        item.tileCode = 0;
+        item.tool = (edef.legacyType == 1) ? ToolType::ENEMY_TANK :
+                    (edef.legacyType == 2) ? ToolType::ENEMY_DUELIST :
+                    (edef.legacyType == 3) ? ToolType::ENEMY_DUELIST_PASSIVE :
+                    (edef.legacyType == 4) ? ToolType::ENEMY_DUMMY : ToolType::ENEMY_SPAWN;
+        item.tab = PaletteTab::MECHANICS;
+        if (edef.previewTexture) {
+            item.texture = edef.previewTexture;
+            item.sprite = std::make_unique<sf::Sprite>(*edef.previewTexture);
+            float sx = 32.0f / static_cast<float>(edef.previewTexture->getSize().x);
+            float sy = 32.0f / static_cast<float>(edef.previewTexture->getSize().y);
+            item.sprite->setScale({sx, sy});
+        }
+        _paletteSprites.push_back(std::move(item));
+    }
+    {
+        TileSpriteItem item;
+        item.name = "Тест Чекпоинт";
+        item.filename = "test_spawn.png";
+        item.tileCode = 0;
+        item.tool = ToolType::TEST_SPAWN;
+        item.tab = PaletteTab::MECHANICS;
+        _paletteSprites.push_back(std::move(item));
+    }
 
-    // Подгружаем текстуры для всех базовых
-    if (std::filesystem::exists(tilesDir)) {
-        for (auto& item : _paletteSprites) {
-            if (item.sprite) continue;
-            std::string p = tilesDir + "/" + item.filename;
-            if (std::filesystem::exists(p)) {
-                auto tex = std::make_shared<sf::Texture>();
-                if (tex->loadFromFile(p)) {
-                    item.texture = tex;
-                    item.sprite = std::make_unique<sf::Sprite>(*item.texture);
-                    float sx = 32.0f / static_cast<float>(tex->getSize().x);
-                    float sy = 32.0f / static_cast<float>(tex->getSize().y);
-                    item.sprite->setScale({sx, sy});
-                }
+    // Подгружаем текстуры для всех базовых инструментов
+    std::string toolsDir = getGameToolsDir();
+    std::string tilesDir = getGameTilesDir();
+    for (auto& item : _paletteSprites) {
+        if (item.sprite) continue;
+        std::string p = blocksDir + "/" + item.filename;
+        if (!std::filesystem::exists(p)) p = decorDir + "/" + item.filename;
+        if (!std::filesystem::exists(p)) p = toolsDir + "/" + item.filename;
+        if (!std::filesystem::exists(p)) p = tilesDir + "/" + item.filename;
+        if (std::filesystem::exists(p)) {
+            auto tex = std::make_shared<sf::Texture>();
+            if (tex->loadFromFile(p)) {
+                item.texture = tex;
+                item.sprite = std::make_unique<sf::Sprite>(*item.texture);
+                float sx = 32.0f / static_cast<float>(tex->getSize().x);
+                float sy = 32.0f / static_cast<float>(tex->getSize().y);
+                item.sprite->setScale({sx, sy});
             }
         }
     }
 
-    // Выделенная загрузка текстур для батута и шипов (из assets/sprites/ или assets/tiles/)
+    // Выделенная загрузка текстур для двери, лампы, батута и шипов
+    if (!_texDoor) {
+        _texDoor = std::make_shared<sf::Texture>();
+        std::string p = toolsDir + "/03_door.png";
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/03_door.png");
+        (void)_texDoor->loadFromFile(p);
+    }
+    if (!_texLamp) {
+        _texLamp = std::make_shared<sf::Texture>();
+        std::string p = decorDir + "/04_lamp.png";
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/decor/04_lamp.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/04_lamp.png");
+        (void)_texLamp->loadFromFile(p);
+    }
     if (!_texJumpPad) {
         _texJumpPad = std::make_shared<sf::Texture>();
-        std::string p = resolveAssetPath("assets/sprites/jump_pad.png");
+        std::string p = toolsDir + "/jump_pad.png";
         if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/jump_pad.png");
-        _texJumpPad->loadFromFile(p);
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/sprites/jump_pad.png");
+        (void)_texJumpPad->loadFromFile(p);
     }
     if (!_texSpikes) {
         _texSpikes = std::make_shared<sf::Texture>();
-        std::string p = resolveAssetPath("assets/sprites/spikes.png");
+        std::string p = toolsDir + "/spikes.png";
         if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/spikes.png");
-        _texSpikes->loadFromFile(p);
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/sprites/spikes.png");
+        (void)_texSpikes->loadFromFile(p);
     }
 
     for (auto& item : _paletteSprites) {
@@ -314,6 +382,42 @@ void EditorApp::scanTileSprites() {
             item.sprite->setScale({sx, sy});
         }
     }
+
+    // Заполняем карту спрайтов по коду блока
+    _tileCodeSprites.clear();
+    for (auto& item : _paletteSprites) {
+        if (item.sprite && item.tileCode > 0) {
+            _tileCodeSprites[item.tileCode] = std::make_shared<sf::Sprite>(*item.sprite);
+        }
+    }
+    if (_texDoor && _texDoor->getSize().x > 0) {
+        auto sp = std::make_shared<sf::Sprite>(*_texDoor);
+        float sx = 32.0f / static_cast<float>(_texDoor->getSize().x);
+        float sy = 32.0f / static_cast<float>(_texDoor->getSize().y);
+        sp->setScale({sx, sy});
+        _tileCodeSprites[3] = sp;
+    }
+    if (_texLamp && _texLamp->getSize().x > 0) {
+        auto sp = std::make_shared<sf::Sprite>(*_texLamp);
+        float sx = 32.0f / static_cast<float>(_texLamp->getSize().x);
+        float sy = 32.0f / static_cast<float>(_texLamp->getSize().y);
+        sp->setScale({sx, sy});
+        _tileCodeSprites[4] = sp;
+    }
+}
+
+const EnemyTypeDef* EditorApp::findEnemyDef(const std::string& enemyId, int legacyType) const {
+    if (!enemyId.empty()) {
+        for (const auto& edef : _scannedEnemies) {
+            if (edef.id == enemyId) return &edef;
+        }
+    }
+    if (legacyType >= 0) {
+        for (const auto& edef : _scannedEnemies) {
+            if (edef.legacyType == legacyType) return &edef;
+        }
+    }
+    return nullptr;
 }
 
 void EditorApp::pushUndo() {
@@ -332,6 +436,7 @@ void EditorApp::pushUndo() {
     snap.doors = _doors;
     snap.enemySpawns = _enemySpawns;
     snap.triggers = _triggers;
+    snap.lamps = _lamps;
     snap.playerSpawn = _playerSpawn;
     snap.testSpawn = _testSpawn;
     _undoStack.push_back(std::move(snap));
@@ -357,6 +462,7 @@ bool EditorApp::undo() {
     cur.doors = _doors;
     cur.enemySpawns = _enemySpawns;
     cur.triggers = _triggers;
+    cur.lamps = _lamps;
     cur.playerSpawn = _playerSpawn;
     cur.testSpawn = _testSpawn;
     _redoStack.push_back(std::move(cur));
@@ -375,6 +481,7 @@ bool EditorApp::undo() {
     _doors = snap.doors;
     _enemySpawns = snap.enemySpawns;
     _triggers = snap.triggers;
+    _lamps = snap.lamps;
     _playerSpawn = snap.playerSpawn;
     _testSpawn = snap.testSpawn;
 
@@ -402,6 +509,7 @@ bool EditorApp::redo() {
     cur.doors = _doors;
     cur.enemySpawns = _enemySpawns;
     cur.triggers = _triggers;
+    cur.lamps = _lamps;
     cur.playerSpawn = _playerSpawn;
     cur.testSpawn = _testSpawn;
     _undoStack.push_back(std::move(cur));
@@ -420,6 +528,7 @@ bool EditorApp::redo() {
     _doors = snap.doors;
     _enemySpawns = snap.enemySpawns;
     _triggers = snap.triggers;
+    _lamps = snap.lamps;
     _playerSpawn = snap.playerSpawn;
     _testSpawn = snap.testSpawn;
 
@@ -513,12 +622,28 @@ bool EditorApp::eyedropAt(int tx, int ty) {
     }
 
     int t = _map[ty][tx];
+    _currentTileCode = t;
     if (t == 1) {
         _currentTool = ToolType::PLATFORM;
         _statusMessage = "Пипетка: Платформа (=)";
     } else if (t == 2) {
         _currentTool = ToolType::WALL;
         _statusMessage = "Пипетка: Стена (#)";
+    } else if (t == 4) {
+        _currentTool = ToolType::LAMP;
+        _statusMessage = "Пипетка: Люминесцентная лампа (L)";
+    } else if (t == 5) {
+        _currentTool = ToolType::WALL;
+        _statusMessage = "Пипетка: Ящик / Дерево (W)";
+    } else if (t == 6) {
+        _currentTool = ToolType::WALL;
+        _statusMessage = "Пипетка: Колонна (C)";
+    } else if (t == 7) {
+        _currentTool = ToolType::WALL;
+        _statusMessage = "Пипетка: Лава / Опасность (H)";
+    } else if (t >= 8) {
+        _currentTool = ToolType::WALL;
+        _statusMessage = "Пипетка: Блок #" + std::to_string(t);
     } else {
         _currentTool = ToolType::EDGE_PASSAGE;
         _statusMessage = "Пипетка: Пустота / Ластик";
@@ -648,11 +773,13 @@ void EditorApp::startSimulation(std::optional<sf::Vector2i> startTile) {
     std::vector<EnemySpawnConfig> eConfigs;
     for (const auto& es : _enemySpawns) {
         sf::Vector2f pos(es.x * _tileSize + _tileSize * 0.5f, (es.y + 1) * _tileSize - 14.0f);
-        eConfigs.push_back({pos, es.type});
+        eConfigs.push_back({pos, es.type, es.enemyId});
     }
 
     sf::Vector2f pSpawnPos(_playerSpawn.x * _tileSize + _tileSize * 0.5f, (_playerSpawn.y + 1) * _tileSize - 30.0f);
     _simArena->restoreFromSnapshot(_width, _height, flatTiles, dBlocks, eConfigs, pSpawnPos);
+    _simArena->scanLamps();
+    _simArena->setLightingEnabled(true);
 
     // Определяем точку старта
     sf::Vector2f spawnPos = pSpawnPos;
@@ -674,6 +801,9 @@ void EditorApp::startSimulation(std::optional<sf::Vector2i> startTile) {
                        (cfg.type == 3) ? EnemyType::DUELIST_PASSIVE :
                        (cfg.type == 4) ? EnemyType::DUMMY : EnemyType::NORMAL;
         _simEnemies.emplace_back(cfg.position, et);
+        if (!cfg.enemyId.empty()) {
+            _simEnemies.back().setEnemyId(cfg.enemyId);
+        }
     }
     for (auto& e : _simEnemies) {
         e.setSmartAI(true);
@@ -804,6 +934,13 @@ void EditorApp::scanRooms() {
 
         std::string txtFile = mapsDir + "/" + rName + ".txt";
         std::string kvFile = mapsDir + "/" + rName + ".kv";
+        std::string pngFile = mapsDir + "/" + rName + ".png";
+        if (!std::filesystem::exists(txtFile) && rName == "room_1") {
+            std::string cfgMap = getGameConfigDir() + "/map.txt";
+            if (std::filesystem::exists(cfgMap)) {
+                txtFile = cfgMap;
+            }
+        }
         std::vector<std::string> rows;
         if (std::filesystem::exists(txtFile)) {
             std::ifstream f(txtFile);
@@ -820,6 +957,29 @@ void EditorApp::scanRooms() {
             cr.width = 0;
             for (const auto& r : rows) cr.width = std::max(cr.width, static_cast<int>(r.size()));
             cr.map.assign(cr.height, std::vector<int>(cr.width, 0));
+        } else if (std::filesystem::exists(pngFile)) {
+            sf::Image pimg;
+            if (pimg.loadFromFile(pngFile)) {
+                cr.width = static_cast<int>(pimg.getSize().x);
+                cr.height = static_cast<int>(pimg.getSize().y);
+                cr.map.assign(cr.height, std::vector<int>(cr.width, 0));
+                for (int y = 0; y < cr.height; ++y) {
+                    for (int x = 0; x < cr.width; ++x) {
+                        sf::Color c = pimg.getPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)});
+                        if (c.a < 50 || (c.r == 25 && c.g == 30 && c.b == 42)) {
+                            cr.map[y][x] = 0;
+                        } else if (c.g > 140 && c.g > c.r + 30) {
+                            cr.map[y][x] = 1;
+                        } else if ((c.r < 60 && c.g < 60 && c.b < 60) || (c.r >= 100 && c.r <= 140 && c.g >= 120 && c.g <= 150)) {
+                            cr.map[y][x] = 2;
+                        } else if (c.g > 180 && c.b > 180 && c.r < 30) {
+                            cr.map[y][x] = 3;
+                        } else if (c.r > 230 && c.g > 230 && c.b > 120) {
+                            cr.map[y][x] = 4;
+                        }
+                    }
+                }
+            }
         } else {
             cr.width = 80;
             cr.height = 20;
@@ -947,6 +1107,48 @@ void EditorApp::scanRooms() {
                             }
                         }
                     }
+                } else if (curSec == "platforms") {
+                    size_t q3 = kline.find('\"', kline.find('\"') + 1);
+                    if (q3 != std::string::npos) {
+                        size_t q4 = kline.find('\"', q3 + 1);
+                        if (q4 != std::string::npos) {
+                            std::istringstream iss(kline.substr(q3 + 1, q4 - q3 - 1));
+                            int px = 0, py = 0, plen = 0;
+                            if (iss >> px >> py >> plen) {
+                                for (int i = 0; i < plen; ++i) {
+                                    if (py >= 0 && py < cr.height && (px + i) >= 0 && (px + i) < cr.width) {
+                                        cr.map[py][px + i] = 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (curSec == "lamps") {
+                    size_t q3 = kline.find('\"', kline.find('\"') + 1);
+                    if (q3 != std::string::npos) {
+                        size_t q4 = kline.find('\"', q3 + 1);
+                        if (q4 != std::string::npos) {
+                            std::istringstream iss(kline.substr(q3 + 1, q4 - q3 - 1));
+                            int lx = 0, ly = 0;
+                            if (iss >> lx >> ly) {
+                                if (ly >= 0 && ly < cr.height && lx >= 0 && lx < cr.width) {
+                                    cr.map[ly][lx] = 4;
+                                    EditorLamp lamp;
+                                    lamp.x = lx;
+                                    lamp.y = ly;
+                                    int r = 240, g = 250, b = 255;
+                                    float intens = 1.0f, rad = 980.0f, cone = 130.0f;
+                                    if (iss >> r >> g >> b) {
+                                        lamp.color = sf::Color(r, g, b);
+                                        if (iss >> intens) lamp.intensity = intens;
+                                        if (iss >> rad) lamp.radius = rad;
+                                        if (iss >> cone) lamp.coneAngle = cone;
+                                    }
+                                    cr.lamps.push_back(lamp);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -962,6 +1164,11 @@ void EditorApp::scanRooms() {
                     for (const auto& d : cr.doors) { if (d.x == x && d.y == y) { dfound = true; break; } }
                     if (!dfound) cr.doors.push_back({x, y, -1, -1, -1, ""});
                 }
+                else if (c == 'L') cr.map[y][x] = 4;
+                else if (c == 'W' || c == '5') cr.map[y][x] = 5;
+                else if (c == 'C' || c == '6') cr.map[y][x] = 6;
+                else if (c == 'H' || c == '7') cr.map[y][x] = 7;
+                else if (c >= '8' && c <= '9') cr.map[y][x] = (c - '0');
                 else if (c == 'P') {
                     if (!foundGlobalSpawn) {
                         cr.playerSpawn = {x, y};
@@ -1053,6 +1260,7 @@ void EditorApp::syncCurrentRoomToCanvas() {
             cr.doors = _doors;
             cr.enemySpawns = _enemySpawns;
             cr.triggers = _triggers;
+            cr.lamps = _lamps;
             cr.hasPlayerSpawn = _hasPlayerSpawn;
             cr.playerSpawn = _playerSpawn;
             cr.testSpawn = _testSpawn;
@@ -1074,6 +1282,7 @@ void EditorApp::syncCanvasToCurrentRoom(const std::string& roomName) {
             _doors = cr.doors;
             _enemySpawns = cr.enemySpawns;
             _triggers = cr.triggers;
+            _lamps = cr.lamps;
             _hasPlayerSpawn = cr.hasPlayerSpawn;
             _playerSpawn = cr.playerSpawn;
             _testSpawn = cr.testSpawn;
@@ -1361,8 +1570,9 @@ void EditorApp::createNamedRoom(const std::string& name) {
 bool EditorApp::loadRoomByName(const std::string& name) {
     if (_canvasRooms.empty()) {
         scanRooms();
+    } else if (_currentRoomName != name) {
+        syncCurrentRoomToCanvas();
     }
-    syncCurrentRoomToCanvas();
 
     bool found = false;
     for (const auto& cr : _canvasRooms) {
@@ -1536,6 +1746,11 @@ bool EditorApp::loadRoomByName(const std::string& name) {
             else if (c == 'X' || c == '>') _testSpawn = sf::Vector2i(x, y);
             else if (c == '^' || c == 'J') addTrigger(x, y, 0);
             else if (c == 'S' || c == 'v') addTrigger(x, y, 1);
+            else if (c == 'L') _map[y][x] = 4;
+            else if (c == 'W' || c == '5') _map[y][x] = 5;
+            else if (c == 'C' || c == '6') _map[y][x] = 6;
+            else if (c == 'H' || c == '7') _map[y][x] = 7;
+            else if (c >= '8' && c <= '9') _map[y][x] = (c - '0');
         }
     }
 
@@ -1605,6 +1820,11 @@ bool EditorApp::saveRoomByIndex(int roomIdx) {
             if (tile == 1) row += '=';
             else if (tile == 2) row += '#';
             else if (tile == 3) row += 'D';
+            else if (tile == 4) row += 'L';
+            else if (tile == 5) row += 'W';
+            else if (tile == 6) row += 'C';
+            else if (tile == 7) row += 'H';
+            else if (tile >= 8 && tile <= 9) row += static_cast<char>('0' + tile);
             else row += '.';
         }
         txt << row << "\n";
@@ -1661,6 +1881,67 @@ bool EditorApp::saveRoomByIndex(int roomIdx) {
             kv << "    }\n";
         }
 
+        // Сохраняем платформы в KV
+        std::vector<std::tuple<int, int, int>> plats;
+        for (int y = 0; y < cr.height && y < static_cast<int>(cr.map.size()); ++y) {
+            int curStart = -1;
+            for (int x = 0; x < cr.width && x < static_cast<int>(cr.map[y].size()); ++x) {
+                if (cr.map[y][x] == 1) {
+                    if (curStart < 0) curStart = x;
+                } else {
+                    if (curStart >= 0) {
+                        plats.push_back({curStart, y, x - curStart});
+                        curStart = -1;
+                    }
+                }
+            }
+            if (curStart >= 0) {
+                plats.push_back({curStart, y, cr.width - curStart});
+            }
+        }
+        if (!plats.empty()) {
+            kv << "\n    \"Platforms\"\n    {\n";
+            for (size_t i = 0; i < plats.size(); ++i) {
+                auto [px, py, plen] = plats[i];
+                kv << "        \"plat_" << i << "\"  \"" << px << " " << py << " " << plen << "\"\n";
+            }
+            kv << "    }\n";
+        }
+
+        // Сохраняем люминесцентные лампы в KV
+        std::vector<sf::Vector2i> lampCoords;
+        for (int y = 0; y < cr.height && y < static_cast<int>(cr.map.size()); ++y) {
+            for (int x = 0; x < cr.width && x < static_cast<int>(cr.map[y].size()); ++x) {
+                if (cr.map[y][x] == 4) lampCoords.push_back({x, y});
+            }
+        }
+        if (!lampCoords.empty()) {
+            kv << "\n    \"Lamps\"\n    {\n";
+            for (size_t i = 0; i < lampCoords.size(); ++i) {
+                int lx = lampCoords[i].x;
+                int ly = lampCoords[i].y;
+                const EditorLamp* el = nullptr;
+                for (const auto& l : cr.lamps) {
+                    if (l.x == lx && l.y == ly) { el = &l; break; }
+                }
+                if (!el) {
+                    for (const auto& l : _lamps) {
+                        if (l.x == lx && l.y == ly) { el = &l; break; }
+                    }
+                }
+                if (el) {
+                    kv << "        \"lamp_" << i << "\"  \"" << lx << " " << ly << " "
+                       << static_cast<int>(el->color.r) << " "
+                       << static_cast<int>(el->color.g) << " "
+                       << static_cast<int>(el->color.b) << " "
+                       << el->intensity << " " << el->radius << " " << el->coneAngle << "\"\n";
+                } else {
+                    kv << "        \"lamp_" << i << "\"  \"" << lx << " " << ly << "\"\n";
+                }
+            }
+            kv << "    }\n";
+        }
+
         kv << "}\n";
         kv.close();
     }
@@ -1673,6 +1954,11 @@ bool EditorApp::saveRoomByIndex(int roomIdx) {
             if (t == 1) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(76, 175, 80));
             else if (t == 2) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(120, 135, 160));
             else if (t == 3) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(0, 220, 255));
+            else if (t == 4) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(255, 255, 150));
+            else if (t == 5) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(170, 115, 65));
+            else if (t == 6) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(190, 190, 210));
+            else if (t == 7) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(255, 80, 20));
+            else if (t >= 8) img.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, sf::Color(140, 160, 180));
         }
     }
     for (const auto& tr : cr.triggers) {
@@ -1694,7 +1980,7 @@ bool EditorApp::saveRoomByIndex(int roomIdx) {
         cr.playerSpawn.x >= 0 && cr.playerSpawn.x < cr.width && cr.playerSpawn.y >= 0 && cr.playerSpawn.y < cr.height) {
         img.setPixel({static_cast<unsigned int>(cr.playerSpawn.x), static_cast<unsigned int>(cr.playerSpawn.y)}, sf::Color(0, 230, 118));
     }
-    img.saveToFile(base + ".png");
+    (void)img.saveToFile(base + ".png");
 
     if (cr.name == "room_1") {
         std::ofstream mainTxt(getGameConfigDir() + "/map.txt");
@@ -1710,13 +1996,18 @@ bool EditorApp::saveRoomByIndex(int roomIdx) {
                     if (t == 1) row += '=';
                     else if (t == 2) row += '#';
                     else if (t == 3) row += 'D';
+                    else if (t == 4) row += 'L';
+                    else if (t == 5) row += 'W';
+                    else if (t == 6) row += 'C';
+                    else if (t == 7) row += 'H';
+                    else if (t >= 8 && t <= 9) row += static_cast<char>('0' + t);
                     else row += '.';
                 }
                 mainTxt << row << "\n";
             }
             mainTxt.close();
         }
-        img.saveToFile(getGameConfigDir() + "/map.png");
+        (void)img.saveToFile(getGameConfigDir() + "/map.png");
     }
 
     _statusMessage = "Комната [" + cr.name + "] сохранена!";
@@ -1954,7 +2245,11 @@ void EditorApp::applyToolAt(int tx, int ty) {
                  (_currentTool == ToolType::ENEMY_DUELIST) ? 2 : 
                  (_currentTool == ToolType::ENEMY_DUELIST_PASSIVE) ? 3 : 
                  (_currentTool == ToolType::ENEMY_DUMMY) ? 4 : 0;
-        addEnemySpawn(tx, ty, et);
+        std::string enemyId = "";
+        if (_selectedPaletteIndex >= 0 && _selectedPaletteIndex < static_cast<int>(_paletteSprites.size())) {
+            enemyId = _paletteSprites[_selectedPaletteIndex].enemyId;
+        }
+        addEnemySpawn(tx, ty, et, enemyId);
         return;
     }
     if (_currentTool == ToolType::DOOR) {
@@ -1968,12 +2263,22 @@ void EditorApp::applyToolAt(int tx, int ty) {
         addTrigger(tx, ty, tt);
         return;
     }
+    if (_currentTool == ToolType::LAMP) {
+        _map[ty][tx] = 4;
+        removeDoor(tx, ty);
+        removeTrigger(tx, ty);
+        removeEnemySpawn(tx, ty);
+        findOrCreateLamp(tx, ty);
+        _statusMessage = "Люминесцентная лампа (L) установлена на [" + std::to_string(tx) + ", " + std::to_string(ty) + "]";
+        _statusTimer = 2.0f;
+        return;
+    }
     if (_currentTool == ToolType::EDGE_PASSAGE) {
         eraseAt(tx, ty);
         return;
     }
 
-    int tileVal = (_currentTool == ToolType::PLATFORM ? 1 : 2);
+    int tileVal = (_currentTool == ToolType::PLATFORM ? 1 : (_currentTileCode > 0 ? _currentTileCode : 2));
     int half = _brushSize / 2;
     for (int dy = -half; dy <= half; ++dy) {
         for (int dx = -half; dx <= half; ++dx) {
@@ -1983,9 +2288,11 @@ void EditorApp::applyToolAt(int tx, int ty) {
                 _map[cy][cx] = tileVal;
                 removeDoor(cx, cy);
                 removeTrigger(cx, cy);
+                removeLamp(cx, cy);
             }
         }
     }
+    for (auto& l : _lamps) l.dirty = true;
 }
 
 void EditorApp::eraseAt(int tx, int ty) {
@@ -1999,26 +2306,31 @@ void EditorApp::eraseAt(int tx, int ty) {
                 removeEnemySpawn(cx, cy);
                 removeDoor(cx, cy);
                 removeTrigger(cx, cy);
+                removeLamp(cx, cy);
                 if (_testSpawn && _testSpawn->x == cx && _testSpawn->y == cy) {
                     _testSpawn.reset();
                 }
             }
         }
     }
+    for (auto& l : _lamps) l.dirty = true;
 }
 
-void EditorApp::addEnemySpawn(int tx, int ty, int type) {
+void EditorApp::addEnemySpawn(int tx, int ty, int type, const std::string& enemyId) {
     for (auto& es : _enemySpawns) {
         if (es.x == tx && es.y == ty) {
             es.type = type;
-            std::string tName = (type == 1) ? "Жирный (Tank)" : (type == 2) ? "Дуэлянт Агр" : (type == 3) ? "Дуэлянт Пасс" : "Обычный (Norm)";
+            if (!enemyId.empty()) es.enemyId = enemyId;
+            const EnemyTypeDef* def = findEnemyDef(es.enemyId, es.type);
+            std::string tName = def ? def->displayName : ((type == 1) ? "Жирный (Tank)" : (type == 2) ? "Дуэлянт Агр" : (type == 3) ? "Дуэлянт Пасс" : (type == 4) ? "Манекен" : "Обычный (Norm)");
             _statusMessage = "Враг на [" + std::to_string(tx) + ", " + std::to_string(ty) + "] изменен на " + tName;
             _statusTimer = 1.8f;
             return;
         }
     }
-    _enemySpawns.push_back({tx, ty, type, true});
-    std::string tName = (type == 1) ? "Жирный (Tank)" : (type == 2) ? "Дуэлянт Агр" : (type == 3) ? "Дуэлянт Пасс" : "Обычный (Norm)";
+    _enemySpawns.push_back({tx, ty, type, true, enemyId});
+    const EnemyTypeDef* def = findEnemyDef(enemyId, type);
+    std::string tName = def ? def->displayName : ((type == 1) ? "Жирный (Tank)" : (type == 2) ? "Дуэлянт Агр" : (type == 3) ? "Дуэлянт Пасс" : (type == 4) ? "Манекен" : "Обычный (Norm)");
     _statusMessage = "Враг [" + tName + "] добавлен на [" + std::to_string(tx) + ", " + std::to_string(ty) + "] (Всего: " + std::to_string(_enemySpawns.size()) + ")";
     _statusTimer = 1.8f;
 }
@@ -2091,6 +2403,40 @@ void EditorApp::removeTrigger(int tx, int ty) {
     }
 }
 
+EditorLamp* EditorApp::findOrCreateLamp(int tx, int ty) {
+    for (auto& l : _lamps) {
+        if (l.x == tx && l.y == ty) return &l;
+    }
+    EditorLamp newLamp;
+    newLamp.x = tx;
+    newLamp.y = ty;
+    _lamps.push_back(std::move(newLamp));
+    return &_lamps.back();
+}
+
+EditorLamp* EditorApp::findLamp(int tx, int ty) {
+    for (auto& l : _lamps) {
+        if (l.x == tx && l.y == ty) return &l;
+    }
+    return nullptr;
+}
+
+const EditorLamp* EditorApp::findLamp(int tx, int ty) const {
+    for (const auto& l : _lamps) {
+        if (l.x == tx && l.y == ty) return &l;
+    }
+    return nullptr;
+}
+
+void EditorApp::removeLamp(int tx, int ty) {
+    for (size_t i = 0; i < _lamps.size(); ++i) {
+        if (_lamps[i].x == tx && _lamps[i].y == ty) {
+            _lamps.erase(_lamps.begin() + i);
+            break;
+        }
+    }
+}
+
 bool EditorApp::handleMinimapClick(const sf::Vector2i& mousePixel) {
     if (_minimapRect.contains({static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y)})) {
         float localX = mousePixel.x - _minimapRect.position.x;
@@ -2132,6 +2478,12 @@ bool EditorApp::isMouseOverUI(const sf::Vector2i& mousePixel) const {
     if (my <= 122.0f) {
         return true;
     }
+
+    // Левая вертикальная панель инструментов
+    float tbH = static_cast<float>(s_leftButtons.size()) * 27.0f + 16.0f;
+    if (mx <= 68.0f && my >= 118.0f && my <= 120.0f + tbH) {
+        return true;
+    }
     // Всплывающее сообщение по центру под верхней панелью
     if (!_statusMessage.empty() && _statusTimer > 0.0f && my <= 175.0f) {
         float msgBgW = 550.0f;
@@ -2153,7 +2505,7 @@ bool EditorApp::isMouseOverUI(const sf::Vector2i& mousePixel) const {
     // 4. Модальное окно настроек объекта (на ПКМ)
     if (_modal.active) {
         float mw = 285.0f;
-        float mh = 230.0f;
+        float mh = (_modal.type == SettingsModal::TargetType::LAMP) ? 265.0f : 230.0f;
         sf::FloatRect modalBox({_modal.screenPos.x - 4.0f, _modal.screenPos.y - 4.0f}, {mw, mh});
         if (modalBox.contains({mx, my})) {
             return true;
@@ -2175,42 +2527,58 @@ void EditorApp::openSettingsModal(int tx, int ty, const sf::Vector2f& screenPos)
     _modal.tile = {tx, ty};
     _modal.screenPos = screenPos;
 
-    // Ограничиваем координаты модального окна в пределах экрана
-    float winW = static_cast<float>(_window.getSize().x);
-    float winH = static_cast<float>(_window.getSize().y);
-    if (_modal.screenPos.x + 280.0f > winW) _modal.screenPos.x = winW - 290.0f;
-    if (_modal.screenPos.y + 240.0f > winH) _modal.screenPos.y = winH - 250.0f;
-
     // Определяем тип объекта
     if (_testSpawn && _testSpawn->x == tx && _testSpawn->y == ty) {
         _modal.type = SettingsModal::TargetType::TEST_SPAWN;
         _modal.targetIndex = 0;
-        return;
-    }
-    for (size_t i = 0; i < _doors.size(); ++i) {
-        if (_doors[i].x == tx && _doors[i].y == ty) {
-            _modal.type = SettingsModal::TargetType::DOOR;
-            _modal.targetIndex = static_cast<int>(i);
-            return;
+    } else {
+        bool found = false;
+        for (size_t i = 0; i < _doors.size(); ++i) {
+            if (_doors[i].x == tx && _doors[i].y == ty) {
+                _modal.type = SettingsModal::TargetType::DOOR;
+                _modal.targetIndex = static_cast<int>(i);
+                found = true;
+                break;
+            }
         }
-    }
-    for (size_t i = 0; i < _enemySpawns.size(); ++i) {
-        if (_enemySpawns[i].x == tx && _enemySpawns[i].y == ty) {
-            _modal.type = SettingsModal::TargetType::ENEMY;
-            _modal.targetIndex = static_cast<int>(i);
-            return;
+        if (!found) {
+            for (size_t i = 0; i < _enemySpawns.size(); ++i) {
+                if (_enemySpawns[i].x == tx && _enemySpawns[i].y == ty) {
+                    _modal.type = SettingsModal::TargetType::ENEMY;
+                    _modal.targetIndex = static_cast<int>(i);
+                    found = true;
+                    break;
+                }
+            }
         }
-    }
-    for (size_t i = 0; i < _triggers.size(); ++i) {
-        if (_triggers[i].x == tx && _triggers[i].y == ty) {
-            _modal.type = SettingsModal::TargetType::TRIGGER;
-            _modal.targetIndex = static_cast<int>(i);
-            return;
+        if (!found) {
+            for (size_t i = 0; i < _triggers.size(); ++i) {
+                if (_triggers[i].x == tx && _triggers[i].y == ty) {
+                    _modal.type = SettingsModal::TargetType::TRIGGER;
+                    _modal.targetIndex = static_cast<int>(i);
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found && _map[ty][tx] == 4) {
+            _modal.type = SettingsModal::TargetType::LAMP;
+            _modal.targetIndex = 0;
+            findOrCreateLamp(tx, ty);
+            found = true;
+        }
+        if (!found) {
+            _modal.type = SettingsModal::TargetType::TILE;
+            _modal.targetIndex = _map[ty][tx];
         }
     }
 
-    _modal.type = SettingsModal::TargetType::TILE;
-    _modal.targetIndex = _map[ty][tx];
+    // Ограничиваем координаты модального окна в пределах экрана
+    float winW = static_cast<float>(_window.getSize().x);
+    float winH = static_cast<float>(_window.getSize().y);
+    float modalH = (_modal.type == SettingsModal::TargetType::LAMP) ? 260.0f : 230.0f;
+    if (_modal.screenPos.x + 280.0f > winW) _modal.screenPos.x = winW - 290.0f;
+    if (_modal.screenPos.y + modalH + 10.0f > winH) _modal.screenPos.y = winH - modalH - 20.0f;
 }
 
 void EditorApp::closeSettingsModal() {
@@ -2224,7 +2592,7 @@ bool EditorApp::handleModalClick(const sf::Vector2i& mousePixel) {
     float mx = _modal.screenPos.x;
     float my = _modal.screenPos.y;
     float mw = 280.0f;
-    float mh = 220.0f;
+    float mh = (_modal.type == SettingsModal::TargetType::LAMP) ? 255.0f : 220.0f;
 
     sf::FloatRect modalRect({mx, my}, {mw, mh});
     sf::Vector2f mPos(static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y));
@@ -2394,6 +2762,83 @@ bool EditorApp::handleModalClick(const sf::Vector2i& mousePixel) {
         }
     }
 
+    // 6. НАСТРОЙКИ СВЕТИЛЬНИКА (ЛАМПЫ)
+    if (_modal.type == SettingsModal::TargetType::LAMP) {
+        EditorLamp* lamp = findOrCreateLamp(_modal.tile.x, _modal.tile.y);
+        if (lamp) {
+            // Colors (7 presets)
+            struct ColPreset { sf::Color c; const char* name; };
+            const ColPreset presets[7] = {
+                {sf::Color(240, 250, 255), "Белый"},
+                {sf::Color(255, 230, 180), "Теплый"},
+                {sf::Color(180, 225, 255), "Голубой"},
+                {sf::Color(255, 175, 75),  "Янтарь"},
+                {sf::Color(255, 80, 80),   "Красный"},
+                {sf::Color(90, 255, 120),  "Зеленый"},
+                {sf::Color(200, 120, 255), "Фиолет"}
+            };
+            for (int i = 0; i < 7; ++i) {
+                float bx = mx + 16.0f + i * 35.0f;
+                float by = my + 66.0f;
+                sf::FloatRect cbox({bx, by}, {30.0f, 22.0f});
+                if (cbox.contains(mPos)) {
+                    pushUndo();
+                    lamp->color = presets[i].c;
+                    lamp->dirty = true;
+                    _statusMessage = "Цвет светильника: [" + std::string(presets[i].name) + "]";
+                    _statusTimer = 2.0f;
+                    return true;
+                }
+            }
+
+            // Intensity (6 presets)
+            const float intValues[6] = {0.5f, 0.8f, 1.0f, 1.3f, 1.6f, 2.0f};
+            const char* intLabels[6] = {"0.5x", "0.8x", "1.0x", "1.3x", "1.6x", "2.0x"};
+            for (int i = 0; i < 6; ++i) {
+                float bx = mx + 16.0f + (i % 3) * 83.0f;
+                float by = my + 112.0f + (i / 3) * 26.0f;
+                sf::FloatRect ibox({bx, by}, {77.0f, 22.0f});
+                if (ibox.contains(mPos)) {
+                    pushUndo();
+                    lamp->intensity = intValues[i];
+                    lamp->dirty = true;
+                    _statusMessage = "Сила света светильника: [" + std::string(intLabels[i]) + "]";
+                    _statusTimer = 2.0f;
+                    return true;
+                }
+            }
+
+            // Radius (4 presets)
+            const float radValues[4] = {700.0f, 850.0f, 1000.0f, 1200.0f};
+            const char* radLabels[4] = {"700", "850", "1000", "1200"};
+            for (int i = 0; i < 4; ++i) {
+                float bx = mx + 16.0f + i * 62.0f;
+                float by = my + 186.0f;
+                sf::FloatRect rbox({bx, by}, {56.0f, 22.0f});
+                if (rbox.contains(mPos)) {
+                    pushUndo();
+                    lamp->radius = radValues[i];
+                    lamp->dirty = true;
+                    _statusMessage = "Радиус света: [" + std::string(radLabels[i]) + "px]";
+                    _statusTimer = 2.0f;
+                    return true;
+                }
+            }
+
+            // Delete button
+            sf::FloatRect delBtn({mx + 16.0f, my + 218.0f}, {mw - 32.0f, 26.0f});
+            if (delBtn.contains(mPos)) {
+                pushUndo();
+                removeLamp(_modal.tile.x, _modal.tile.y);
+                _map[_modal.tile.y][_modal.tile.x] = 0;
+                closeSettingsModal();
+                _statusMessage = "Светильник удален.";
+                _statusTimer = 2.0f;
+                return true;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -2402,9 +2847,7 @@ bool EditorApp::handleRoomBrowserClick(const sf::Vector2i& mousePixel) {
     sf::Vector2f mPos(static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y));
 
     float winW = static_cast<float>(_window.getSize().x);
-    float winH = static_cast<float>(_window.getSize().y);
     float panelW = std::min(winW - 60.0f, 960.0f);
-    float panelH = winH - 160.0f;
     float panelX = (winW - panelW) / 2.0f;
     float panelY = 46.0f;
 
@@ -2468,10 +2911,10 @@ bool EditorApp::handlePaletteClick(const sf::Vector2i& mousePixel) {
         _activeTab = PaletteTab::BLOCKS;
         return true;
     }
-    // Вкладка 1: Сущности
+    // Вкладка 1: Декор
     sf::FloatRect tab1Rect({palX + 168.0f, tabY}, {tabW, tabH});
     if (tab1Rect.contains(mPos)) {
-        _activeTab = PaletteTab::ENTITIES;
+        _activeTab = PaletteTab::DECOR;
         return true;
     }
     // Вкладка 2: Механики
@@ -2535,6 +2978,12 @@ bool EditorApp::handlePaletteClick(const sf::Vector2i& mousePixel) {
         if (cardRect.contains(mPos)) {
             _selectedPaletteIndex = static_cast<int>(i);
             _currentTool = _paletteSprites[i].tool;
+            _currentTileCode = _paletteSprites[i].tileCode;
+            if (_currentTileCode == 0) {
+                if (_currentTool == ToolType::PLATFORM) _currentTileCode = 1;
+                else if (_currentTool == ToolType::WALL) _currentTileCode = 2;
+                else if (_currentTool == ToolType::LAMP) _currentTileCode = 4;
+            }
             _statusMessage = "Выбран инструмент: " + _paletteSprites[i].name;
             _statusTimer = 2.0f;
             return true;
@@ -2942,15 +3391,43 @@ void EditorApp::handleEvents() {
             }
 
             // Цифровые инструменты
-            if (kp->code == sf::Keyboard::Key::Num1 || kp->code == sf::Keyboard::Key::Numpad1) _currentTool = ToolType::PLATFORM;
-            else if (kp->code == sf::Keyboard::Key::Num2 || kp->code == sf::Keyboard::Key::Numpad2) _currentTool = ToolType::WALL;
-            else if (kp->code == sf::Keyboard::Key::Num3 || kp->code == sf::Keyboard::Key::Numpad3) _currentTool = ToolType::DOOR;
-            else if (kp->code == sf::Keyboard::Key::Num4 || kp->code == sf::Keyboard::Key::Numpad4) _currentTool = ToolType::PLAYER_SPAWN;
-            else if (kp->code == sf::Keyboard::Key::Num5 || kp->code == sf::Keyboard::Key::Numpad5) _currentTool = ToolType::ENEMY_SPAWN;
-            else if (kp->code == sf::Keyboard::Key::Num6 || kp->code == sf::Keyboard::Key::Numpad6) _currentTool = ToolType::ENEMY_TANK;
-            else if (kp->code == sf::Keyboard::Key::Num7 || kp->code == sf::Keyboard::Key::Numpad7) _currentTool = ToolType::ENEMY_DUELIST;
-            else if (kp->code == sf::Keyboard::Key::Num8 || kp->code == sf::Keyboard::Key::Numpad8) _currentTool = ToolType::ENEMY_DUELIST_PASSIVE;
-            else if (kp->code == sf::Keyboard::Key::Num9 || kp->code == sf::Keyboard::Key::Numpad9) _currentTool = ToolType::ENEMY_DUMMY;
+            auto selectCardForTool = [this](ToolType t, int code) {
+                _currentTool = t;
+                if (code > 0) _currentTileCode = code;
+                for (size_t i = 0; i < _paletteSprites.size(); ++i) {
+                    if (_paletteSprites[i].tool == t && (code <= 0 || _paletteSprites[i].tileCode == code)) {
+                        _selectedPaletteIndex = static_cast<int>(i);
+                        _activeTab = _paletteSprites[i].tab;
+                        break;
+                    }
+                }
+            };
+
+            if (kp->code == sf::Keyboard::Key::Num1 || kp->code == sf::Keyboard::Key::Numpad1) selectCardForTool(ToolType::PLATFORM, 1);
+            else if (kp->code == sf::Keyboard::Key::Num2 || kp->code == sf::Keyboard::Key::Numpad2) selectCardForTool(ToolType::WALL, 2);
+            else if (kp->code == sf::Keyboard::Key::Num3 || kp->code == sf::Keyboard::Key::Numpad3) selectCardForTool(ToolType::DOOR, 3);
+            else if (kp->code == sf::Keyboard::Key::Num4 || kp->code == sf::Keyboard::Key::Numpad4) selectCardForTool(ToolType::PLAYER_SPAWN, 0);
+            else if (kp->code == sf::Keyboard::Key::Num5 || kp->code == sf::Keyboard::Key::Numpad5) selectCardForTool(ToolType::ENEMY_SPAWN, 0);
+            else if (kp->code == sf::Keyboard::Key::Num6 || kp->code == sf::Keyboard::Key::Numpad6) selectCardForTool(ToolType::ENEMY_TANK, 0);
+            else if (kp->code == sf::Keyboard::Key::Num7 || kp->code == sf::Keyboard::Key::Numpad7) selectCardForTool(ToolType::ENEMY_DUELIST, 0);
+            else if (kp->code == sf::Keyboard::Key::Num8 || kp->code == sf::Keyboard::Key::Numpad8) selectCardForTool(ToolType::ENEMY_DUELIST_PASSIVE, 0);
+            else if (kp->code == sf::Keyboard::Key::Num9 || kp->code == sf::Keyboard::Key::Numpad9) selectCardForTool(ToolType::ENEMY_DUMMY, 0);
+            else if (kp->code == sf::Keyboard::Key::Num0 || kp->code == sf::Keyboard::Key::Numpad0) selectCardForTool(ToolType::LAMP, 4);
+            else if (kp->code == sf::Keyboard::Key::Delete) {
+                _currentTool = ToolType::EDGE_PASSAGE;
+                _statusMessage = "Инструмент: Ластик [Delete]";
+                _statusTimer = 2.0f;
+            } else if (kp->code == sf::Keyboard::Key::B && !ctrlHeld) {
+                if (_selectedPaletteIndex >= 0 && _selectedPaletteIndex < static_cast<int>(_paletteSprites.size())) {
+                    _currentTool = _paletteSprites[_selectedPaletteIndex].tool;
+                    _currentTileCode = _paletteSprites[_selectedPaletteIndex].tileCode;
+                } else {
+                    _currentTool = ToolType::PLATFORM;
+                    _currentTileCode = 1;
+                }
+                _statusMessage = "Инструмент: Кисть [B]";
+                _statusTimer = 2.0f;
+            }
 
             if (kp->code == sf::Keyboard::Key::PageUp) nextRoom();
             else if (kp->code == sf::Keyboard::Key::PageDown) prevRoom();
@@ -3075,6 +3552,7 @@ void EditorApp::handleEvents() {
                     if (_activeTab == PaletteTab::ROOMS) {
                         if (handleRoomBrowserClick(mousePixel)) continue;
                     }
+                    if (handleLeftToolbarClick(mousePixel)) continue;
                     if (handlePaletteClick(mousePixel)) continue;
                     if (handleMinimapClick(mousePixel)) continue;
                 }
@@ -3198,7 +3676,8 @@ void EditorApp::handleEvents() {
                 }
 
                 if (_currentTool == ToolType::FLOOD_FILL) {
-                    floodFill(_lastHoverTile.x, _lastHoverTile.y, 1);
+                    int fillTile = (_currentTileCode > 0 ? _currentTileCode : 1);
+                    floodFill(_lastHoverTile.x, _lastHoverTile.y, fillTile);
                     continue;
                 }
 
@@ -3244,7 +3723,7 @@ void EditorApp::handleEvents() {
                     int y1 = std::max(0, std::min(_boxStartTile.y, _boxCurTile.y));
                     int y2 = std::min(_height - 1, std::max(_boxStartTile.y, _boxCurTile.y));
 
-                    int tileVal = (_currentTool == ToolType::WALL ? 2 : 1);
+                    int tileVal = (_currentTool == ToolType::PLATFORM ? 1 : (_currentTileCode > 0 ? _currentTileCode : 2));
                     for (int y = y1; y <= y2; ++y) {
                         for (int x = x1; x <= x2; ++x) {
                             if (_boxIsErase) {
@@ -3267,7 +3746,7 @@ void EditorApp::handleEvents() {
                 if (_lineDragActive) {
                     pushUndo();
                     auto lineTiles = getEditorLineTiles(_lineStartTile.x, _lineStartTile.y, _lineCurTile.x, _lineCurTile.y);
-                    int tileVal = (_currentTool == ToolType::WALL ? 2 : 1);
+                    int tileVal = (_currentTool == ToolType::PLATFORM ? 1 : (_currentTileCode > 0 ? _currentTileCode : 2));
                     for (const auto& pt : lineTiles) {
                         if (pt.x >= 0 && pt.x < _width && pt.y >= 0 && pt.y < _height) {
                             _map[pt.y][pt.x] = tileVal;
@@ -4367,69 +4846,155 @@ void EditorApp::drawWorld() {
             _window.draw(lines);
         }
 
-        // Блоки карты
+        // Блоки карты (отображение реальных спрайтов из палитры и ресурсов)
         const auto& curMap = isActive ? _map : cr.map;
         for (int y = 0; y < cr.height && y < static_cast<int>(curMap.size()); ++y) {
             for (int x = 0; x < cr.width && x < static_cast<int>(curMap[y].size()); ++x) {
                 int tile = curMap[y][x];
                 if (tile == 0) continue;
 
-                sf::RectangleShape r({_tileSize, _tileSize});
-                r.setPosition({rOff.x + x * _tileSize, rOff.y + y * _tileSize});
-                if (tile == 1) {
-                    r.setFillColor(sf::Color(76, 175, 80));
-                    r.setOutlineColor(sf::Color(120, 200, 120));
-                    r.setOutlineThickness(-1.0f);
-                    _window.draw(r);
-                } else if (tile == 2) {
-                    r.setFillColor(sf::Color(70, 85, 110));
-                    r.setOutlineColor(sf::Color(100, 120, 150));
-                    r.setOutlineThickness(-1.0f);
-                    _window.draw(r);
-                } else if (tile == 3) {
-                    r.setFillColor(sf::Color(0, 200, 255, 160));
-                    r.setOutlineColor(sf::Color(0, 255, 255));
-                    r.setOutlineThickness(2.0f);
-                    _window.draw(r);
+                float bx = rOff.x + static_cast<float>(x) * _tileSize;
+                float by = rOff.y + static_cast<float>(y) * _tileSize;
 
-                    if (_fontLoaded) {
-                        int tgtR = -1;
-                        std::string tgtName = "";
-                        int tgtDx = -1, tgtDy = -1;
-                        const auto& dList = isActive ? _doors : cr.doors;
-                        for (const auto& d : dList) {
-                            if (d.x == x && d.y == y) {
-                                tgtR = d.targetRoom;
-                                tgtName = d.targetRoomName;
-                                tgtDx = d.targetDoorX;
-                                tgtDy = d.targetDoorY;
-                                break;
-                            }
-                        }
-                        float bx = rOff.x + static_cast<float>(x) * _tileSize;
-                        float by = rOff.y + static_cast<float>(y) * _tileSize;
+                // 1. Проверяем, есть ли готовый спрайт блока
+                auto it = _tileCodeSprites.find(tile);
+                if (it != _tileCodeSprites.end() && it->second) {
+                    sf::Sprite sp = *(it->second);
+                    sp.setPosition({bx, by});
+                    float tw = static_cast<float>(sp.getTextureRect().size.x > 0 ? sp.getTextureRect().size.x : 32);
+                    float th = static_cast<float>(sp.getTextureRect().size.y > 0 ? sp.getTextureRect().size.y : 32);
+                    sp.setScale({_tileSize / tw, _tileSize / th});
+                    _window.draw(sp);
+                } else if (tile == 4) {
+                    // Флуоресцентная лампа (процедурная отрисовка светильника)
+                    sf::RectangleShape fixture({_tileSize - 6.0f, 14.0f});
+                    fixture.setPosition({bx + 3.0f, by + 2.0f});
+                    fixture.setFillColor(sf::Color(38, 42, 50));
+                    fixture.setOutlineColor(sf::Color(70, 78, 92));
+                    fixture.setOutlineThickness(1.0f);
+                    _window.draw(fixture);
 
-                        sf::RectangleShape badge({_tileSize - 6.0f, 26.0f});
-                        badge.setPosition({bx + 3.0f, by + (_tileSize - 26.0f) / 2.0f});
-                        badge.setFillColor(sf::Color(12, 20, 32, 235));
-                        badge.setOutlineColor(tgtDx >= 0 ? sf::Color(0, 255, 200, 240) : sf::Color(0, 255, 255, 220));
-                        badge.setOutlineThickness(1.0f);
-                        _window.draw(badge);
+                    sf::RectangleShape mountL({4.0f, 6.0f});
+                    mountL.setPosition({bx + 6.0f, by});
+                    mountL.setFillColor(sf::Color(80, 88, 102));
+                    _window.draw(mountL);
 
-                        std::string label = "D->?";
-                        if (!tgtName.empty()) {
-                            std::string shortName = (tgtName.rfind("room_", 0) == 0) ? ("R" + tgtName.substr(5)) : tgtName;
-                            if (shortName.size() > 5) shortName = shortName.substr(0, 4) + ".";
-                            label = "D->" + shortName;
-                        } else if (tgtR > 0) {
-                            label = "D->R" + std::to_string(tgtR);
-                        }
-                        if (tgtDx >= 0) label += "*";
-                        sf::Text dTxt(_font, toSfString(label), 12);
-                        dTxt.setFillColor(tgtDx >= 0 ? sf::Color(100, 255, 220) : sf::Color(0, 255, 240));
-                        dTxt.setPosition({bx + 6.0f, by + (_tileSize - 26.0f) / 2.0f + 3.0f});
-                        _window.draw(dTxt);
+                    sf::RectangleShape mountR({4.0f, 6.0f});
+                    mountR.setPosition({bx + _tileSize - 10.0f, by});
+                    mountR.setFillColor(sf::Color(80, 88, 102));
+                    _window.draw(mountR);
+
+                    sf::RectangleShape tube({_tileSize - 12.0f, 6.0f});
+                    tube.setPosition({bx + 6.0f, by + 6.0f});
+                    tube.setFillColor(sf::Color(230, 245, 255));
+                    tube.setOutlineColor(sf::Color(140, 220, 255, 180));
+                    tube.setOutlineThickness(1.0f);
+                    _window.draw(tube);
+                } else {
+                    // Fallback цветной прямоугольник
+                    sf::RectangleShape r({_tileSize, _tileSize});
+                    r.setPosition({bx, by});
+                    if (tile == 1) {
+                        r.setFillColor(sf::Color(76, 175, 80));
+                        r.setOutlineColor(sf::Color(120, 200, 120));
+                    } else if (tile == 2) {
+                        r.setFillColor(sf::Color(70, 85, 110));
+                        r.setOutlineColor(sf::Color(100, 120, 150));
+                    } else if (tile == 5) {
+                        r.setFillColor(sf::Color(150, 105, 55));
+                        r.setOutlineColor(sf::Color(190, 140, 80));
+                    } else if (tile == 6) {
+                        r.setFillColor(sf::Color(130, 135, 150));
+                        r.setOutlineColor(sf::Color(170, 175, 190));
+                    } else if (tile == 7) {
+                        r.setFillColor(sf::Color(210, 60, 20));
+                        r.setOutlineColor(sf::Color(255, 100, 40));
+                    } else {
+                        r.setFillColor(sf::Color(85, 95, 115));
+                        r.setOutlineColor(sf::Color(115, 125, 145));
                     }
+                    r.setOutlineThickness(-1.0f);
+                    _window.draw(r);
+                }
+
+                // Наглядный конус света люминесцентной лампы вниз (угол раскрытия 130° и мягкий объемный свет как в игре)
+                if (tile == 4) {
+                    const EditorLamp* el = nullptr;
+                    const auto& lList = isActive ? _lamps : cr.lamps;
+                    for (const auto& l : lList) {
+                        if (l.x == x && l.y == y) { el = &l; break; }
+                    }
+                    sf::Color lColor = el ? el->color : sf::Color(240, 250, 255);
+                    float lIntensity = el ? el->intensity : 1.0f;
+                    float lRadius = el ? el->radius : 980.0f;
+                    float lCone = el ? el->coneAngle : 130.0f;
+
+                    auto isSolidLambda = [this, &curMap](float wx, float wy) -> bool {
+                        int tx = static_cast<int>(std::floor(wx / _tileSize));
+                        int ty = static_cast<int>(std::floor(wy / _tileSize));
+                        if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return true;
+                        int t = (ty < static_cast<int>(curMap.size()) && tx < static_cast<int>(curMap[ty].size())) ? curMap[ty][tx] : 0;
+                        return (t == 1 || t == 2 || t >= 5);
+                    };
+                    Arena::renderSmoothLampBeam(_window, bx, by, _tileSize, lRadius, lCone, lColor, lIntensity, false, isSolidLambda,
+                                                el ? &el->bakedTexture : nullptr,
+                                                el ? &el->bakedWorldPos : nullptr,
+                                                el ? &el->bakedScale : nullptr,
+                                                el ? &el->dirty : nullptr);
+
+                    // Свечение трубки светильника
+                    sf::RectangleShape tubeGlow({_tileSize - 16.0f, 6.0f});
+                    tubeGlow.setPosition({bx + 8.0f, by + 5.0f});
+                    tubeGlow.setFillColor(sf::Color(lColor.r, lColor.g, lColor.b, 220));
+                    _window.draw(tubeGlow);
+
+                    // Бейдж параметров в редакторе (сила света)
+                    if (_fontLoaded) {
+                        std::string badge = std::to_string(static_cast<int>(std::round(lIntensity * 100))) + "%";
+                        sf::Text angleTxt(_font, toSfString(badge), 9);
+                        angleTxt.setFillColor(lColor);
+                        angleTxt.setPosition(sf::Vector2f(bx + _tileSize * 0.5f - 12.0f, by - 12.0f));
+                        _window.draw(angleTxt);
+                    }
+                }
+
+                // Оверлей для двери (маркер перехода и целевая комната)
+                if (tile == 3 && _fontLoaded) {
+                    int tgtR = -1;
+                    std::string tgtName = "";
+                    int tgtDx = -1, tgtDy = -1;
+                    (void)tgtDy;
+                    const auto& dList = isActive ? _doors : cr.doors;
+                    for (const auto& d : dList) {
+                        if (d.x == x && d.y == y) {
+                            tgtR = d.targetRoom;
+                            tgtName = d.targetRoomName;
+                            tgtDx = d.targetDoorX;
+                            tgtDy = d.targetDoorY;
+                            break;
+                        }
+                    }
+
+                    sf::RectangleShape badge({_tileSize - 6.0f, 24.0f});
+                    badge.setPosition({bx + 3.0f, by + (_tileSize - 24.0f) / 2.0f});
+                    badge.setFillColor(sf::Color(12, 20, 32, 235));
+                    badge.setOutlineColor(tgtDx >= 0 ? sf::Color(0, 255, 200, 240) : sf::Color(0, 255, 255, 220));
+                    badge.setOutlineThickness(1.0f);
+                    _window.draw(badge);
+
+                    std::string label = "D->?";
+                    if (!tgtName.empty()) {
+                        std::string shortName = (tgtName.rfind("room_", 0) == 0) ? ("R" + tgtName.substr(5)) : tgtName;
+                        if (shortName.size() > 5) shortName = shortName.substr(0, 4) + ".";
+                        label = "D->" + shortName;
+                    } else if (tgtR > 0) {
+                        label = "D->R" + std::to_string(tgtR);
+                    }
+                    if (tgtDx >= 0) label += "*";
+                    sf::Text dTxt(_font, toSfString(label), 11);
+                    dTxt.setFillColor(tgtDx >= 0 ? sf::Color(100, 255, 220) : sf::Color(0, 255, 240));
+                    dTxt.setPosition({bx + 6.0f, by + (_tileSize - 24.0f) / 2.0f + 2.0f});
+                    _window.draw(dTxt);
                 }
             }
         }
@@ -4520,57 +5085,143 @@ void EditorApp::drawWorld() {
             }
         }
 
-        // Спавны врагов
+        // Спавны врагов (полная визуальная идентичность с игровым рендером)
         const auto& curEnemies = isActive ? _enemySpawns : cr.enemySpawns;
         for (size_t i = 0; i < curEnemies.size(); ++i) {
             const auto& es = curEnemies[i];
-            float bw = (es.type == 1) ? _tileSize * 1.5f : _tileSize;
-            float bh = (es.type == 1) ? _tileSize * 1.5f : _tileSize;
-            float bx = (es.type == 1) ? (rOff.x + static_cast<float>(es.x) * _tileSize - _tileSize * 0.25f) : (rOff.x + static_cast<float>(es.x) * _tileSize);
-            float by = (es.type == 1) ? (rOff.y + static_cast<float>(es.y) * _tileSize - _tileSize * 0.5f) : (rOff.y + static_cast<float>(es.y) * _tileSize);
+            float scale = (es.type == 1) ? 1.5f : 1.0f;
+            float halfW = 24.0f * scale;
+            float halfH = 21.0f * scale;
 
-            sf::RectangleShape eBox({bw, bh});
-            eBox.setPosition({bx, by});
+            float centerX = rOff.x + static_cast<float>(es.x) * _tileSize + _tileSize * 0.5f;
+            float floorY = rOff.y + static_cast<float>(es.y + 1) * _tileSize;
+            float centerY = floorY - halfH;
 
-            sf::Color fillCol, outCol, txtCol;
-            std::string typePrefix;
-            if (es.type == 1) {
-                fillCol = sf::Color(220, 40, 40, 75);
-                outCol = sf::Color(255, 60, 60, 240);
-                txtCol = sf::Color(255, 120, 120);
-                typePrefix = "Tank#";
-            } else if (es.type == 2) {
-                fillCol = sf::Color(170, 70, 230, 75);
-                outCol = sf::Color(190, 90, 255, 240);
-                txtCol = sf::Color(220, 150, 255);
-                typePrefix = "D-Agr#";
-            } else if (es.type == 3) {
-                fillCol = sf::Color(35, 150, 225, 75);
-                outCol = sf::Color(45, 185, 245, 240);
-                txtCol = sf::Color(100, 220, 255);
-                typePrefix = "D-Pas#";
-            } else if (es.type == 4) {
-                fillCol = sf::Color(220, 175, 75, 80);
-                outCol = sf::Color(255, 215, 0, 245);
-                txtCol = sf::Color(255, 235, 120);
-                typePrefix = "Dummy#";
-            } else {
-                fillCol = sf::Color(150, 150, 150, 75);
-                outCol = sf::Color(210, 210, 210, 240);
-                txtCol = sf::Color(230, 230, 230);
-                typePrefix = "Norm#";
+            // 1. Овальная тень под ногами врага на полу
+            sf::CircleShape shadow(16.0f * scale);
+            shadow.setScale({1.0f, 0.35f});
+            shadow.setOrigin({16.0f * scale, 16.0f * scale});
+            shadow.setPosition({centerX, floorY - 2.0f});
+            shadow.setFillColor(sf::Color(0, 0, 0, 95));
+            _window.draw(shadow);
+
+            // Если доступен спрайт preview.png из папки врага — отрисовываем его на холсте
+            const EnemyTypeDef* def = findEnemyDef(es.enemyId, es.type);
+            if (def && def->previewTexture) {
+                sf::Sprite spr(*def->previewTexture);
+                float tw = static_cast<float>(def->previewTexture->getSize().x);
+                float th = static_cast<float>(def->previewTexture->getSize().y);
+                spr.setOrigin({tw * 0.5f, th});
+                spr.setPosition({centerX, floorY});
+                float sc = def->scale;
+                if (!es.facingRight) sc = -sc;
+                spr.setScale({sc, def->scale});
+                _window.draw(spr);
+
+                if (_fontLoaded) {
+                    sf::Text tBadge(_font, toSfString(def->displayName + " #" + std::to_string(i + 1)), 10);
+                    tBadge.setFillColor(sf::Color(255, 235, 120));
+                    tBadge.setPosition({centerX - 35.0f, floorY - th * def->scale - 16.0f});
+                    _window.draw(tBadge);
+                }
+                continue;
             }
 
-            eBox.setFillColor(fillCol);
-            eBox.setOutlineColor(outCol);
-            eBox.setOutlineThickness(2.0f);
-            _window.draw(eBox);
+            // 2. Тело врага с точными цветами и контуром из игры
+            sf::RectangleShape body({halfW * 2.0f, halfH * 2.0f});
+            body.setOrigin({halfW, halfH});
+            body.setPosition({centerX, centerY});
+            body.setOutlineThickness(2.0f);
+            body.setOutlineColor(sf::Color(25, 25, 30, 240));
 
+            sf::Color baseColor;
+            std::string typeBadge;
+            sf::Color badgeColor;
+
+            if (es.type == 1) { // ТАНК
+                baseColor = sf::Color(215, 38, 48);
+                typeBadge = "ТАНК #" + std::to_string(i + 1);
+                badgeColor = sf::Color(255, 90, 90);
+            } else if (es.type == 2) { // ДУЭЛЯНТ АГРЕССИВНЫЙ
+                baseColor = sf::Color(155, 45, 225);
+                typeBadge = "ДУЭЛЬ-АГР #" + std::to_string(i + 1);
+                badgeColor = sf::Color(220, 140, 255);
+            } else if (es.type == 3) { // ДУЭЛЯНТ ПАССИВНЫЙ
+                baseColor = sf::Color(45, 185, 245);
+                typeBadge = "ДУЭЛЬ-ПАСС #" + std::to_string(i + 1);
+                badgeColor = sf::Color(100, 220, 255);
+            } else if (es.type == 4) { // МАНЕКЕН
+                baseColor = sf::Color(220, 175, 75);
+                typeBadge = "МАНЕКЕН #" + std::to_string(i + 1);
+                badgeColor = sf::Color(255, 225, 120);
+            } else { // ОБЫЧНЫЙ
+                baseColor = sf::Color(135, 140, 150);
+                typeBadge = "ОБЫЧНЫЙ #" + std::to_string(i + 1);
+                badgeColor = sf::Color(210, 215, 225);
+            }
+
+            body.setFillColor(baseColor);
+            _window.draw(body);
+
+            // 3. Мишень / визор на теле
+            if (es.type == 4) {
+                // Кольца мишени манекена
+                sf::CircleShape ringOuter(10.0f * scale);
+                ringOuter.setOrigin({10.0f * scale, 10.0f * scale});
+                ringOuter.setPosition({centerX, centerY});
+                ringOuter.setFillColor(sf::Color(185, 45, 40));
+                ringOuter.setOutlineThickness(1.5f);
+                ringOuter.setOutlineColor(sf::Color(255, 255, 255, 220));
+                _window.draw(ringOuter);
+
+                sf::CircleShape ringMid(5.0f * scale);
+                ringMid.setOrigin({5.0f * scale, 5.0f * scale});
+                ringMid.setPosition({centerX, centerY});
+                ringMid.setFillColor(sf::Color(255, 255, 255, 240));
+                _window.draw(ringMid);
+
+                sf::CircleShape ringDot(2.0f * scale);
+                ringDot.setOrigin({2.0f * scale, 2.0f * scale});
+                ringDot.setPosition({centerX, centerY});
+                ringDot.setFillColor(sf::Color(185, 45, 40));
+                _window.draw(ringDot);
+            } else {
+                // Внутренний квадрат-мишень на торсе
+                sf::RectangleShape target({14.0f * scale, 14.0f * scale});
+                target.setOrigin({7.0f * scale, 7.0f * scale});
+                target.setPosition({centerX, centerY});
+                target.setFillColor(sf::Color(40, 40, 50, 160));
+                _window.draw(target);
+
+                // Светящийся глаз/визор
+                sf::RectangleShape eye({4.0f * scale, 4.0f * scale});
+                eye.setPosition({centerX + 3.0f * scale, centerY - 14.0f * scale});
+                sf::Color eyeColor = (es.type == 1) ? sf::Color(255, 50, 60) :
+                                     (es.type == 2) ? sf::Color(255, 225, 0) : sf::Color(60, 220, 255);
+                eye.setFillColor(eyeColor);
+                _window.draw(eye);
+            }
+
+            // 4. Текстовый бейдж архетипа над головой с подложкой
             if (_fontLoaded) {
-                sf::Text eT(_font, typePrefix + std::to_string(i + 1), 13);
-                eT.setFillColor(txtCol);
-                eT.setPosition(eBox.getPosition() + sf::Vector2f(6.0f, 10.0f));
-                _window.draw(eT);
+                sf::Text bTxt(_font, toSfString(typeBadge), 10);
+                bTxt.setFillColor(badgeColor);
+                sf::FloatRect tb = bTxt.getLocalBounds();
+
+                float pillW = tb.size.x + 8.0f;
+                float pillH = tb.size.y + 4.0f;
+                float pillX = centerX - pillW * 0.5f;
+                float pillY = centerY - halfH - pillH - 4.0f;
+
+                sf::RectangleShape pill({pillW, pillH});
+                pill.setPosition({pillX, pillY});
+                pill.setFillColor(sf::Color(16, 18, 24, 215));
+                pill.setOutlineColor(sf::Color(badgeColor.r, badgeColor.g, badgeColor.b, 160));
+                pill.setOutlineThickness(1.0f);
+                _window.draw(pill);
+
+                bTxt.setPosition({pillX + 4.0f, pillY + 1.0f});
+                _window.draw(bTxt);
             }
         }
     }
@@ -4746,12 +5397,20 @@ void EditorApp::drawWorld() {
         brushRect.setPosition({bX, bY});
         brushRect.setOutlineThickness(2.0f);
 
-        if (_currentTool == ToolType::PLATFORM) {
-            brushRect.setFillColor(sf::Color(76, 175, 80, 80));
-            brushRect.setOutlineColor(sf::Color(76, 175, 80, 240));
-        } else if (_currentTool == ToolType::WALL) {
-            brushRect.setFillColor(sf::Color(70, 85, 110, 80));
-            brushRect.setOutlineColor(sf::Color(100, 120, 160, 240));
+        if (_currentTool == ToolType::PLATFORM || _currentTool == ToolType::WALL || _currentTool == ToolType::LAMP) {
+            int code = (_currentTool == ToolType::PLATFORM) ? 1 : (_currentTool == ToolType::LAMP) ? 4 : (_currentTileCode > 0 ? _currentTileCode : 2);
+            auto it = _tileCodeSprites.find(code);
+            if (it != _tileCodeSprites.end() && it->second) {
+                sf::Sprite ghost = *(it->second);
+                ghost.setPosition({bX, bY});
+                float tw = static_cast<float>(ghost.getTextureRect().size.x > 0 ? ghost.getTextureRect().size.x : 32);
+                float th = static_cast<float>(ghost.getTextureRect().size.y > 0 ? ghost.getTextureRect().size.y : 32);
+                ghost.setScale({bW / tw, bH / th});
+                ghost.setColor(sf::Color(255, 255, 255, 175));
+                _window.draw(ghost);
+            }
+            brushRect.setFillColor(sf::Color(100, 200, 255, 30));
+            brushRect.setOutlineColor(sf::Color(100, 200, 255, 220));
         } else if (_currentTool == ToolType::DOOR) {
             brushRect.setSize({_tileSize, _tileSize});
             brushRect.setPosition({actOffset.x + static_cast<float>(_lastHoverTile.x) * _tileSize, actOffset.y + static_cast<float>(_lastHoverTile.y) * _tileSize});
@@ -4821,7 +5480,7 @@ void EditorApp::drawModal() {
     float mx = _modal.screenPos.x;
     float my = _modal.screenPos.y;
     float mw = 280.0f;
-    float mh = 220.0f;
+    float mh = (_modal.type == SettingsModal::TargetType::LAMP) ? 255.0f : 220.0f;
 
     sf::RectangleShape bg({mw, mh});
     bg.setPosition({mx, my});
@@ -4842,6 +5501,7 @@ void EditorApp::drawModal() {
         else if (_modal.type == SettingsModal::TargetType::TEST_SPAWN) titleStr = "[▶] ТЕСТОВЫЙ ЧЕКПОИНТ";
         else if (_modal.type == SettingsModal::TargetType::ENEMY) titleStr = "[E] НАСТРОЙКА ВРАГА";
         else if (_modal.type == SettingsModal::TargetType::TRIGGER) titleStr = "[⚡] МЕХАНИКА / ТРИГГЕР";
+        else if (_modal.type == SettingsModal::TargetType::LAMP) titleStr = "[💡] СВЕТИЛЬНИК (ЛАМПА)";
         else if (_modal.type == SettingsModal::TargetType::TILE) titleStr = "[#] НАСТРОЙКА БЛОКА";
 
         sf::Text tText(_font, toSfString(titleStr), 13);
@@ -5079,6 +5739,111 @@ void EditorApp::drawModal() {
             eTxt.setFillColor(sf::Color(255, 120, 120));
             eTxt.setPosition({mx + 60.0f, my + 120.0f});
             _window.draw(eTxt);
+        }
+
+        // 6. СВЕТИЛЬНИК (ЛАМПА)
+        if (_modal.type == SettingsModal::TargetType::LAMP) {
+            EditorLamp* lamp = findOrCreateLamp(_modal.tile.x, _modal.tile.y);
+            sf::Text sub(_font, toSfString("Позиция: (" + std::to_string(_modal.tile.x) + ", " + std::to_string(_modal.tile.y) + ")"), 11);
+            sub.setFillColor(sf::Color(160, 200, 230));
+            sub.setPosition({mx + 16.0f, my + 34.0f});
+            _window.draw(sub);
+
+            // COLOR PALETTE (7 presets)
+            sf::Text colLbl(_font, toSfString("ЦВЕТ СВЕЧЕНИЯ:"), 10);
+            colLbl.setFillColor(sf::Color(220, 220, 240));
+            colLbl.setPosition({mx + 16.0f, my + 50.0f});
+            _window.draw(colLbl);
+
+            struct ColPreset { sf::Color c; const char* name; };
+            const ColPreset presets[7] = {
+                {sf::Color(240, 250, 255), "Белый"},
+                {sf::Color(255, 230, 180), "Теплый"},
+                {sf::Color(180, 225, 255), "Голубой"},
+                {sf::Color(255, 175, 75),  "Янтарь"},
+                {sf::Color(255, 80, 80),   "Красный"},
+                {sf::Color(90, 255, 120),  "Зеленый"},
+                {sf::Color(200, 120, 255), "Фиолет"}
+            };
+
+            for (int i = 0; i < 7; ++i) {
+                float bx = mx + 16.0f + i * 35.0f;
+                float by = my + 66.0f;
+                sf::RectangleShape cbox({30.0f, 22.0f});
+                cbox.setPosition({bx, by});
+                cbox.setFillColor(presets[i].c);
+                bool isSelected = (lamp && lamp->color.r == presets[i].c.r &&
+                                           lamp->color.g == presets[i].c.g &&
+                                           lamp->color.b == presets[i].c.b);
+                cbox.setOutlineColor(isSelected ? sf::Color::White : sf::Color(70, 80, 100));
+                cbox.setOutlineThickness(isSelected ? 2.0f : 1.0f);
+                _window.draw(cbox);
+            }
+
+            // INTENSITY MULTIPLIER (6 options: 0.5x, 0.8x, 1.0x, 1.3x, 1.6x, 2.0x)
+            sf::Text intLbl(_font, toSfString("СИЛА СВЕТА (ЯРКОСТЬ):"), 10);
+            intLbl.setFillColor(sf::Color(220, 220, 240));
+            intLbl.setPosition({mx + 16.0f, my + 96.0f});
+            _window.draw(intLbl);
+
+            const float intValues[6] = {0.5f, 0.8f, 1.0f, 1.3f, 1.6f, 2.0f};
+            const char* intLabels[6] = {"0.5x", "0.8x", "1.0x", "1.3x", "1.6x", "2.0x"};
+
+            for (int i = 0; i < 6; ++i) {
+                float bx = mx + 16.0f + (i % 3) * 83.0f;
+                float by = my + 112.0f + (i / 3) * 26.0f;
+                sf::RectangleShape ibox({77.0f, 22.0f});
+                ibox.setPosition({bx, by});
+
+                bool isCur = (lamp && std::abs(lamp->intensity - intValues[i]) < 0.08f);
+                ibox.setFillColor(isCur ? sf::Color(30, 90, 140) : sf::Color(35, 42, 58));
+                ibox.setOutlineColor(isCur ? sf::Color(0, 230, 255) : sf::Color(70, 80, 100));
+                ibox.setOutlineThickness(isCur ? 1.5f : 1.0f);
+                _window.draw(ibox);
+
+                sf::Text itxt(_font, toSfString(intLabels[i]), 11);
+                itxt.setFillColor(isCur ? sf::Color::White : sf::Color(190, 205, 225));
+                itxt.setPosition({bx + 22.0f, by + 3.0f});
+                _window.draw(itxt);
+            }
+
+            // RADIUS OPTIONS (4 options: 700px, 850px, 1000px, 1200px)
+            sf::Text radLbl(_font, toSfString("РАДИУС (ДАЛЬНОСТЬ):"), 10);
+            radLbl.setFillColor(sf::Color(220, 220, 240));
+            radLbl.setPosition({mx + 16.0f, my + 170.0f});
+            _window.draw(radLbl);
+
+            const float radValues[4] = {700.0f, 850.0f, 1000.0f, 1200.0f};
+            const char* radLabels[4] = {"700", "850", "1000", "1200"};
+            for (int i = 0; i < 4; ++i) {
+                float bx = mx + 16.0f + i * 62.0f;
+                float by = my + 186.0f;
+                sf::RectangleShape rbox({56.0f, 22.0f});
+                rbox.setPosition({bx, by});
+                bool isCur = (lamp && std::abs(lamp->radius - radValues[i]) < 50.0f);
+                rbox.setFillColor(isCur ? sf::Color(40, 100, 60) : sf::Color(35, 42, 58));
+                rbox.setOutlineColor(isCur ? sf::Color(50, 255, 120) : sf::Color(70, 80, 100));
+                rbox.setOutlineThickness(isCur ? 1.5f : 1.0f);
+                _window.draw(rbox);
+
+                sf::Text rtxt(_font, toSfString(radLabels[i]), 11);
+                rtxt.setFillColor(isCur ? sf::Color::White : sf::Color(190, 205, 225));
+                rtxt.setPosition({bx + 14.0f, by + 3.0f});
+                _window.draw(rtxt);
+            }
+
+            // Кнопка [🗑 Удалить светильник]
+            sf::RectangleShape delBtn({mw - 32.0f, 26.0f});
+            delBtn.setPosition({mx + 16.0f, my + 218.0f});
+            delBtn.setFillColor(sf::Color(80, 25, 25));
+            delBtn.setOutlineColor(sf::Color(255, 80, 80));
+            delBtn.setOutlineThickness(1.0f);
+            _window.draw(delBtn);
+
+            sf::Text delTxt(_font, toSfString("🗑 Удалить светильник"), 11);
+            delTxt.setFillColor(sf::Color(255, 140, 140));
+            delTxt.setPosition({mx + 68.0f, my + 223.0f});
+            _window.draw(delTxt);
         }
     }
 }
@@ -5406,6 +6171,102 @@ void EditorApp::drawSimulationHUD() {
     }
 }
 
+void EditorApp::drawLeftToolbar() {
+    float tbW = 54.0f;
+    float startY = 120.0f;
+    float btnH = 24.0f;
+    float btnGap = 3.0f;
+    float totalH = static_cast<float>(s_leftButtons.size()) * (btnH + btnGap) + 8.0f;
+
+    sf::RectangleShape panel({tbW, totalH});
+    panel.setPosition({6.0f, startY});
+    panel.setFillColor(sf::Color(16, 18, 22, 245));
+    panel.setOutlineColor(sf::Color(45, 50, 60));
+    panel.setOutlineThickness(1.0f);
+    _window.draw(panel);
+
+    sf::Vector2i mPixel = sf::Mouse::getPosition(_window);
+    sf::Vector2f mPos(static_cast<float>(mPixel.x), static_cast<float>(mPixel.y));
+
+    for (size_t i = 0; i < s_leftButtons.size(); ++i) {
+        const auto& btn = s_leftButtons[i];
+        float by = startY + 4.0f + i * (btnH + btnGap);
+        sf::FloatRect btnRect({10.0f, by}, {46.0f, btnH});
+
+        bool isActive = false;
+        if (btn.tool == ToolType::PLATFORM) {
+            isActive = (_currentTool != ToolType::BOX_FILL && _currentTool != ToolType::LINE &&
+                        _currentTool != ToolType::FLOOD_FILL && _currentTool != ToolType::EDGE_PASSAGE &&
+                        _currentTool != ToolType::EYEDROPPER);
+        } else {
+            isActive = (_currentTool == btn.tool);
+        }
+        bool isHover = btnRect.contains(mPos);
+
+        sf::RectangleShape bShape({46.0f, btnH});
+        bShape.setPosition({10.0f, by});
+        bShape.setFillColor(isActive ? sf::Color(38, 65, 95) : isHover ? sf::Color(30, 35, 44) : sf::Color(22, 25, 31));
+        bShape.setOutlineColor(isActive ? sf::Color(100, 180, 255) : isHover ? sf::Color(70, 80, 100) : sf::Color(40, 45, 55));
+        bShape.setOutlineThickness(isActive ? 1.5f : 1.0f);
+        _window.draw(bShape);
+
+        if (_fontLoaded) {
+            sf::Text t(_font, toSfString(btn.icon), 11);
+            t.setFillColor(isActive ? sf::Color::White : btn.accent);
+            sf::FloatRect tb = t.getLocalBounds();
+            t.setPosition({10.0f + (46.0f - tb.size.x) * 0.5f, by + (btnH - tb.size.y) * 0.5f - 2.0f});
+            _window.draw(t);
+        }
+
+        if (isHover && _fontLoaded) {
+            sf::Text tip(_font, toSfString(btn.label), 12);
+            tip.setFillColor(sf::Color::White);
+            sf::FloatRect tb = tip.getLocalBounds();
+
+            sf::RectangleShape tipBg({tb.size.x + 14.0f, tb.size.y + 8.0f});
+            tipBg.setPosition({64.0f, by});
+            tipBg.setFillColor(sf::Color(18, 20, 26, 245));
+            tipBg.setOutlineColor(sf::Color(80, 140, 200));
+            tipBg.setOutlineThickness(1.0f);
+
+            tip.setPosition({71.0f, by + 3.0f});
+            _window.draw(tipBg);
+            _window.draw(tip);
+        }
+    }
+}
+
+bool EditorApp::handleLeftToolbarClick(const sf::Vector2i& mousePixel) {
+    float startY = 120.0f;
+    float btnH = 24.0f;
+    float btnGap = 3.0f;
+    sf::Vector2f mPos(static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y));
+
+    for (size_t i = 0; i < s_leftButtons.size(); ++i) {
+        float by = startY + 4.0f + i * (btnH + btnGap);
+        sf::FloatRect btnRect({10.0f, by}, {46.0f, btnH});
+        if (btnRect.contains(mPos)) {
+            ToolType t = s_leftButtons[i].tool;
+            if (t == ToolType::PLATFORM) {
+                // Возврат к установке выбранного в палитре тайла/сущности
+                if (_selectedPaletteIndex >= 0 && _selectedPaletteIndex < static_cast<int>(_paletteSprites.size())) {
+                    _currentTool = _paletteSprites[_selectedPaletteIndex].tool;
+                    _currentTileCode = _paletteSprites[_selectedPaletteIndex].tileCode;
+                } else {
+                    _currentTool = ToolType::PLATFORM;
+                    _currentTileCode = 1;
+                }
+            } else {
+                _currentTool = t;
+            }
+            _statusMessage = "Инструмент: " + s_leftButtons[i].label;
+            _statusTimer = 2.0f;
+            return true;
+        }
+    }
+    return false;
+}
+
 void EditorApp::drawUI() {
     float winW = static_cast<float>(_window.getSize().x);
     float winH = static_cast<float>(_window.getSize().y);
@@ -5595,8 +6456,8 @@ void EditorApp::drawUI() {
     t0Box.setOutlineThickness(tab0Active ? 1.5f : 1.0f);
     _window.draw(t0Box);
 
-    // Вкладка 1: Сущности
-    bool tab1Active = (_activeTab == PaletteTab::ENTITIES);
+    // Вкладка 1: Декор
+    bool tab1Active = (_activeTab == PaletteTab::DECOR);
     sf::RectangleShape t1Box({tabW, tabH});
     t1Box.setPosition({palX + 168.0f, tabY});
     t1Box.setFillColor(tab1Active ? sf::Color(35, 60, 95) : sf::Color(22, 28, 38));
@@ -5604,7 +6465,7 @@ void EditorApp::drawUI() {
     t1Box.setOutlineThickness(tab1Active ? 1.5f : 1.0f);
     _window.draw(t1Box);
 
-    // Вкладка 2: Механики
+    // Вкладка 2: Инструменты, спавны и триггеры
     bool tab2Active = (_activeTab == PaletteTab::MECHANICS);
     sf::RectangleShape t2Box({tabW + 20.0f, tabH});
     t2Box.setPosition({palX + 326.0f, tabY});
@@ -5661,12 +6522,12 @@ void EditorApp::drawUI() {
         t0Txt.setPosition({palX + 22.0f, tabY + 4.0f});
         _window.draw(t0Txt);
 
-        sf::Text t1Txt(_font, toSfString("[E] ВРАГИ И СПАВНЫ"), 11);
+        sf::Text t1Txt(_font, toSfString("[🎨] ДЕКОР И СВЕТ"), 11);
         t1Txt.setFillColor(tab1Active ? sf::Color(255, 215, 0) : sf::Color(160, 185, 210));
         t1Txt.setPosition({palX + 175.0f, tabY + 4.0f});
         _window.draw(t1Txt);
 
-        sf::Text t2Txt(_font, toSfString("[⚡] ТРИГГЕРЫ И МЕХАНИКИ"), 11);
+        sf::Text t2Txt(_font, toSfString("[⚡] ИНСТРУМЕНТЫ / СПАВНЫ"), 11);
         t2Txt.setFillColor(tab2Active ? sf::Color(255, 215, 0) : sf::Color(160, 185, 210));
         t2Txt.setPosition({palX + 332.0f, tabY + 4.0f});
         _window.draw(t2Txt);
@@ -5712,7 +6573,7 @@ void EditorApp::drawUI() {
         slotIdx++;
         if (cardX + cardW > palX + palW) break;
 
-        bool isSelected = (_currentTool == _paletteSprites[i].tool);
+        bool isSelected = (_selectedPaletteIndex == static_cast<int>(i));
         sf::RectangleShape card({cardW, cardH});
         card.setPosition({cardX, cardY});
         card.setFillColor(isSelected ? sf::Color(35, 55, 80) : sf::Color(20, 26, 36));
@@ -5723,20 +6584,17 @@ void EditorApp::drawUI() {
         // Горячая клавиша инструмента
         if (_fontLoaded) {
             std::string hotkeyStr = "";
-            if (_paletteSprites[i].tool == ToolType::PLATFORM) hotkeyStr = "[1/B]";
-            else if (_paletteSprites[i].tool == ToolType::WALL) hotkeyStr = "[2]";
+            if (_paletteSprites[i].tool == ToolType::PLATFORM) hotkeyStr = "[1]";
+            else if (_paletteSprites[i].tool == ToolType::WALL && _paletteSprites[i].tileCode == 2) hotkeyStr = "[2]";
             else if (_paletteSprites[i].tool == ToolType::DOOR) hotkeyStr = "[3]";
             else if (_paletteSprites[i].tool == ToolType::PLAYER_SPAWN) hotkeyStr = "[4]";
             else if (_paletteSprites[i].tool == ToolType::ENEMY_SPAWN) hotkeyStr = "[5]";
             else if (_paletteSprites[i].tool == ToolType::ENEMY_TANK) hotkeyStr = "[6]";
             else if (_paletteSprites[i].tool == ToolType::ENEMY_DUELIST) hotkeyStr = "[7]";
             else if (_paletteSprites[i].tool == ToolType::ENEMY_DUELIST_PASSIVE) hotkeyStr = "[8]";
-            else if (_paletteSprites[i].tool == ToolType::ENEMY_DUMMY) hotkeyStr = "[9]";
-            else if (_paletteSprites[i].tool == ToolType::EDGE_PASSAGE) hotkeyStr = "[E]";
-            else if (_paletteSprites[i].tool == ToolType::BOX_FILL) hotkeyStr = "[X]";
-            else if (_paletteSprites[i].tool == ToolType::LINE) hotkeyStr = "[L]";
-            else if (_paletteSprites[i].tool == ToolType::FLOOD_FILL) hotkeyStr = "[G]";
+            else if (_paletteSprites[i].tool == ToolType::ENEMY_DUMMY) hotkeyStr = "[9/M]";
             else if (_paletteSprites[i].tool == ToolType::TEST_SPAWN) hotkeyStr = "[T]";
+            else if (_paletteSprites[i].tool == ToolType::LAMP) hotkeyStr = "[0]";
 
             if (!hotkeyStr.empty()) {
                 sf::Text hkTxt(_font, hotkeyStr, 10);
@@ -5772,6 +6630,7 @@ void EditorApp::drawUI() {
             else if (_paletteSprites[i].tool == ToolType::JUMP_PAD) colorBox.setFillColor(sf::Color(255, 150, 0));
             else if (_paletteSprites[i].tool == ToolType::SPIKES) colorBox.setFillColor(sf::Color(230, 40, 40));
             else if (_paletteSprites[i].tool == ToolType::TRIGGER_ZONE) colorBox.setFillColor(sf::Color(160, 60, 255));
+            else if (_paletteSprites[i].tool == ToolType::LAMP) colorBox.setFillColor(sf::Color(255, 255, 160));
 
             colorBox.setOutlineColor(sf::Color(200, 220, 240, 150));
             colorBox.setOutlineThickness(1.0f);
@@ -5790,6 +6649,7 @@ void EditorApp::drawUI() {
                 else if (_paletteSprites[i].tool == ToolType::TEST_SPAWN) letter = ">";
                 else if (_paletteSprites[i].tool == ToolType::JUMP_PAD) letter = "^";
                 else if (_paletteSprites[i].tool == ToolType::SPIKES) letter = "!";
+                else if (_paletteSprites[i].tool == ToolType::LAMP) letter = "L";
 
                 if (!letter.empty()) {
                     sf::Text lTxt(_font, letter, 12);
@@ -5810,10 +6670,13 @@ void EditorApp::drawUI() {
         }
     }
 
-    // 6. Отрисовка модального окна настроек (если открыто)
+    // 6. Левая панель инструментов
+    drawLeftToolbar();
+
+    // 7. Отрисовка модального окна настроек (если открыто)
     drawModal();
 
-    // 7. Отрисовка галереи комнат (2 столбца превью + названия)
+    // 8. Отрисовка галереи комнат (2 столбца превью + названия)
     if (_activeTab == PaletteTab::ROOMS) {
         drawRoomBrowser();
     }
@@ -5827,7 +6690,6 @@ void EditorApp::render() {
 
         if (_simArena) {
             _simArena->draw(_window);
-            _simArena->drawBlackoutMask(_window);
         }
         for (auto& e : _simEnemies) {
             e.draw(_window, &_font);
@@ -5839,6 +6701,9 @@ void EditorApp::render() {
             _simPlayer->draw(_window);
         }
         if (_simArena) {
+            _simArena->renderLighting(_window, _camera,
+                _simPlayer ? _simPlayer->position : sf::Vector2f(0.0f, 0.0f),
+                _simPlayer ? _simPlayer->hasWeapon() : false);
             _simArena->drawBlackoutMask(_window);
         }
 
@@ -5849,7 +6714,7 @@ void EditorApp::render() {
         }
         drawSimulationHUD();
     } else {
-        _window.clear(sf::Color(18, 22, 30));
+        _window.clear(sf::Color(10, 10, 12));
         if (_currentScreen == EditorScreen::WORLD_LAYOUT) {
             _window.setView(_camera);
             drawWorldLayout();

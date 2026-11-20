@@ -62,6 +62,7 @@ public:
     float getCooldown() const { return _attackCooldown; }
     float getAttackTimer() const { return _attackTimer; }
     bool isAttacking() const { return _attackTimer > 0.0f; }
+    bool isAirGrabActive() const { return _isAirGrabActive; }
     float getComboResetTimer() const { return _comboResetTimer; }
     float getComboRepeatTimer() const {
         float maxCd = 0.0f;
@@ -124,6 +125,7 @@ public:
 
     const sf::FloatRect& getAttackHitbox() const { return _attackHitbox; }
     const std::vector<std::string>& getComboHistory() const { return _comboHistory; }
+    const std::string& getCurrentAttackType() const { return _currentAttackType; }
     const sf::Font* getFont() const { return _fontLoaded ? &_font : nullptr; }
     bool hasHitThisSwing() const { return _hasHitThisSwing; }
 
@@ -158,6 +160,11 @@ private:
     bool _isAirAttack = false;
     bool _wasGroundedLastFrame = true;
     float _airSuspendedRemaining = 0.0f;
+    bool _isAirGrabActive = false;
+    float _airGrabTimer = 0.0f;
+    float _airGrabTotalDuration = 0.24f;
+    int _airGrabDirection = 1;
+    class Enemy* _grabbedEnemy = nullptr;
     float _attackTimer = 0.0f;
     float _attackCooldown = 0.0f;
     float _currentWhiffStun = 0.40f;

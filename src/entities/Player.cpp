@@ -118,6 +118,7 @@ void Player::reset(sf::Vector2f spawnPos, bool withWeapon) {
     diveSlamBounce = false;
     diveSlamDir = 1.0f;
     _pendingLunge = 0.0f;
+    _isAirGrabLocked = false;
     _dashGhosts.clear();
     cancelAttackAnimation();
     syncAllAnimations(sf::Color::White);
@@ -228,7 +229,7 @@ void Player::endCounterSuccess() {
 
 void Player::handleInput(const std::optional<sf::Event>& event) {
     if (!event || isDead) return;
-    if (isStunned()) return;
+    if (isStunned() || _isAirGrabLocked) return;
 
     if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
         if (keyPressed->code == sf::Keyboard::Key::C) {
@@ -367,10 +368,10 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
     }
 
     float moveX = 0.0f;
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) {
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left) || _simulatedMoveDir < -0.1f) {
         moveX -= 1.0f;
     }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) {
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right) || _simulatedMoveDir > 0.1f) {
         moveX += 1.0f;
     }
 
@@ -381,7 +382,7 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
     }
 
     bool wantsBlock = (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::F) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E));
-    if (_isOnGround && wantsBlock && _stunTimer <= 0.0f && _dashTimer <= 0.0f && !_isCounterStance && !_isSpotDodging) {
+    if (_isOnGround && wantsBlock && _stunTimer <= 0.0f && _dashTimer <= 0.0f && !_isCounterStance && !_isSpotDodging && !_isAirGrabLocked) {
         if (isHoldingDown()) {
             _blockType = BlockType::LOW;
         } else {
@@ -659,7 +660,7 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
         bool wantsTurn = (moveX > 0.0f) != isFacingRight();
         if (wantsTurn) {
             _turnDelayTimer += dt;
-            if (_turnDelayTimer >= 0.07f) {
+            if (_turnDelayTimer >= PlayerConfig::get().turnDelay) {
                 _animation.setFacing(moveX > 0.0f);
                 _rollAnimation.setFacing(moveX > 0.0f);
                 _turnDelayTimer = 0.0f;

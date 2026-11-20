@@ -25,10 +25,17 @@ if(NOT SFML_FOUND)
     FetchContent_MakeAvailable(SFML)
 endif()
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra -Wno-unused-parameter)
+    if(NOT CMAKE_BUILD_TYPE)
+        set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Choose the build type" FORCE)
+    endif()
+endif()
+
 add_executable(FightingComboArena
     src/main.cpp
+    src/core/GameApp.cpp
     src/world/Arena.cpp
-    src/world/MapEditor.cpp
     src/entities/Player.cpp
     src/entities/Enemy.cpp
     src/combat/CombatSystem.cpp
@@ -55,6 +62,8 @@ add_executable(test_directional_combos
     scratch/test_directional_combos.cpp
     src/world/Arena.cpp
     src/world/MapEditor.cpp
+    src/world/MapEditorInput.cpp
+    src/world/MapEditorRender.cpp
     src/entities/Player.cpp
     src/entities/Enemy.cpp
     src/combat/CombatSystem.cpp

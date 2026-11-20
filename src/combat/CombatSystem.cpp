@@ -33,6 +33,9 @@ void CombatSystem::reset() {
     _comboDisplayTimer = 0.0f;
     _isAirAttack = false;
     _airSuspendedRemaining = 0.0f;
+    _isAirGrabActive = false;
+    _airGrabTimer = 0.0f;
+    _grabbedEnemy = nullptr;
     _attackTimer = 0.0f;
     _attackCooldown = 0.0f;
     _currentWhiffStun = 0.40f;
@@ -53,7 +56,7 @@ void CombatSystem::reset() {
 
 void CombatSystem::handleInput(const std::optional<sf::Event>& event, Player& player, const sf::Vector2f& mouseWorld) {
     if (!event || player.isDead) return;
-    if (player.isStunned()) return;
+    if (player.isStunned() || _isAirGrabActive) return;
 
     if (const auto* mbPressed = event->getIf<sf::Event::MouseButtonPressed>()) {
         if (mbPressed->button == sf::Mouse::Button::Left) {
@@ -71,7 +74,7 @@ void CombatSystem::handleInput(const std::optional<sf::Event>& event, Player& pl
     }
 
     // Выброс или подбор оружия на прокрутку колесика мыши
-    if (const auto* mwScroll = event->getIf<sf::Event::MouseWheelScrolled>()) {
+    if (event->getIf<sf::Event::MouseWheelScrolled>()) {
         if (player.hasWeapon()) {
             throwWeapon(player);
         } else {
@@ -107,7 +110,8 @@ void CombatSystem::registerJump() {
 }
 
 AttackAnimType CombatSystem::resolveAttackAnimType(const std::string& attackType, const std::string& comboName) {
-    if (comboName.find("1-1-b2") != std::string::npos || comboName.find("THROW") != std::string::npos) {
+    if (comboName.find("1-1-b2") != std::string::npos || comboName.find("THROW") != std::string::npos ||
+        comboName.find("dw1-j-adu2") != std::string::npos || comboName.find("METEOR SLAM") != std::string::npos) {
         return AttackAnimType::THROW;
     }
     if (comboName.find("b2-1-u2") != std::string::npos || comboName.find("SKY LAUNCHER") != std::string::npos ||
@@ -131,12 +135,12 @@ AttackAnimType CombatSystem::resolveAttackAnimType(const std::string& attackType
     }
     if (comboName.find("DIVE SLAM") != std::string::npos || comboName.find("GROUND BOUNCE SLAM") != std::string::npos || 
         comboName.find("dw1-j-adw1") != std::string::npos || comboName.find("SKY HOOK") != std::string::npos ||
-        attackType == "adw1" || attackType == "adw2" || attackType == "addw2") {
+        attackType == "adw1" || attackType == "adw2" || attackType == "addw2" || attackType == "adu2") {
         return AttackAnimType::DIVE_SLAM;
     }
     if (comboName.find("AIR PUSH") != std::string::npos || comboName.find("AIR JUGGLE") != std::string::npos || 
         attackType == "a1" || attackType == "a2" || attackType == "af1" || attackType == "af2" || 
-        attackType == "ad1" || attackType == "ad2") {
+        attackType == "ad1" || attackType == "ad2" || attackType == "adu2") {
         return AttackAnimType::AIR_ATTACK;
     }
     if (attackType == "b1" || attackType == "b2" || attackType == "db2" || 
@@ -151,7 +155,7 @@ AttackAnimType CombatSystem::resolveAttackAnimType(const std::string& attackType
 }
 
 bool CombatSystem::tryRetrieveWeapon(Player& player) {
-    if (player.hasWeapon() || player.isDead || player.isStunned()) return false;
+    if (player.hasWeapon() || player.isDead || player.isStunned() || _isAirGrabActive) return false;
 
     // Ищем ближайшую упавшую булаву
     float minDist = 110.0f; // Радиус подбора по нажатию кнопки
@@ -179,7 +183,7 @@ bool CombatSystem::tryRetrieveWeapon(Player& player) {
 }
 
 void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) {
-    if (!player.hasWeapon() || player.isDead || player.isStunned() || player.isBlocking()) return;
+    if (!player.hasWeapon() || player.isDead || player.isStunned() || player.isBlocking() || _isAirGrabActive) return;
 
     sf::Vector2f playerCenter = player.position + sf::Vector2f(0.0f, -Player::HALF_H);
 
@@ -282,7 +286,7 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
 }
 
 void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld) {
-    if (player.isStunned() || player.isBlocking()) return;
+    if (player.isStunned() || player.isBlocking() || _isAirGrabActive) return;
 
     // Комбо-отмена (Combo Cancel / Gatling):
     // Если игрок успевает нажать следующий удар в окне комбо (_comboResetTimer > 0)
@@ -345,13 +349,17 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
             // Нижняя атака в воздухе (Dive Slam adw2 / adw1) — не дублирует префикс дэша
             attackType = "adw" + attackNum;
         } else if (isDash) {
-            if (dir.empty() || dir == "f" || dir == "u") {
+            if (dir == "u") {
+                attackType = "adu" + attackNum;
+            } else if (dir.empty() || dir == "f") {
                 attackType = "ad" + attackNum;
             } else {
                 attackType = "ad" + dir + attackNum;
             }
         } else {
-            if (dir.empty() || dir == "u") {
+            if (dir == "u") {
+                attackType = "adu" + attackNum;
+            } else if (dir.empty()) {
                 attackType = "a" + attackNum;
             } else {
                 attackType = "a" + dir + attackNum;
@@ -431,8 +439,12 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     }
     _comboHistory.push_back(attackType);
     _comboResetTimer = 0.42f; // Короткое окно продолжения комбо цепочки
-    if (player.hasWeapon() && (attackType == "dw1" || attackType == "ddw1")) {
-        _comboResetTimer = 0.85f; // Больше времени для прыжка и продолжения серии в воздухе
+    if (player.hasWeapon()) {
+        if (attackType == "dw1" || attackType == "ddw1") {
+            _comboResetTimer = 1.05f; // Больше времени для прыжка и продолжения серии в воздухе
+        } else if (attackType == "2" || attackType == "df2" || attackType == "f2") {
+            _comboResetTimer = 0.65f; // Комфортное окно для продолжения комбо 1-2 -> f1
+        }
     }
 
     auto tokenMatches = [](const std::string& actual, const std::string& expected) -> bool {
@@ -449,6 +461,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         if (actual == "f1" && expected == "1") return true;
         if ((actual == "addw2" && expected == "adw2") || (actual == "adw2" && expected == "addw2")) return true;
         if ((actual == "addw1" && expected == "adw1") || (actual == "adw1" && expected == "addw1")) return true;
+        if ((actual == "adu2" && expected == "ad2") || (actual == "ad2" && expected == "adu2")) return true;
+        if ((actual == "adu2" && expected == "u2") || (actual == "u2" && expected == "adu2")) return true;
+        if (actual == "a2" && expected == "adu2") return true;
         if ((actual == "dw1" || actual == "ddw1") && (expected == "db1" || expected == "dw1" || expected == "ddw1")) return true;
         if (actual == "db1" && (expected == "dw1" || expected == "ddw1")) return true;
         if ((actual == "u1" && (expected == "up1" || expected == "u1")) || (actual == "up1" && (expected == "u1" || expected == "up1"))) return true;
@@ -502,7 +517,8 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         bool isWeaponCombo = entry.isWeapon || (entry.id.rfind("weapon_", 0) == 0) || 
                               (entry.id == "12f1" || entry.id == "b21u2" || entry.id == "b21" ||
                               entry.id == "121" || entry.id == "db1u1" || entry.id == "db1up1" || entry.id == "b1u1" ||
-                              entry.id == "dw1jadw1" || entry.id == "dw1adw1");
+                              entry.id == "dw1jadw1" || entry.id == "dw1adw1" ||
+                              entry.id == "dw1jadu2" || entry.id == "dw1adu2");
         if (entry.id == "12" || entry.id == "weapon_12") {
             // Базовый комбо 1-2 (Ground Slam & Pop-Up) разрешен как для рукопашного боя, так и с оружием (начало для 12f1, 12df2, 121)
         } else if (player.hasWeapon()) {
@@ -650,9 +666,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
         _lastStunReason = StunReason::NONE;
     }
 
-    // Блокируем смену взгляда персонажа от клавиш движения во время активной атаки или серии комбо,
-    // чтобы ввод направления назад (A при взгляде вправо) не приводил к случайному развороту персонажа!
-    player.setFacingLocked(_attackTimer > 0.0f || (_comboResetTimer > 0.0f && !_comboHistory.empty()));
+    // Блокируем смену взгляда персонажа от клавиш движения ТОЛЬКО во время активного замаха атаки (_attackTimer > 0.0f).
+    // Между ударами (в окне комбо) разворот свободен с коротким буфером (turnDelay ~1-2 кадра),
+    // чтобы игрок мог мгновенно развернуться и атаковать врага сзади без залипания и ложной задней атаки!
+    player.setFacingLocked(_attackTimer > 0.0f);
 
     // Обработка буферизированного ввода следующего удара комбо
     if (_bufferedInputTimer > 0.0f) {
@@ -725,8 +742,80 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             player.setAirSuspended(false);
             _airSuspendedRemaining = 0.0f;
         }
-    } else {
+    } else if (!_isAirGrabActive) {
         player.setAirSuspended(false);
+    }
+
+    player.setAirGrabLocked(_isAirGrabActive);
+    if (_isAirGrabActive) {
+        _bufferedAttackInput.reset();
+        _bufferedInputTimer = 0.0f;
+    }
+
+    // Обработка удержания в воздухе и последующего швырка об пол (Air Grab & Meteor Slam)
+    if (_isAirGrabActive && _grabbedEnemy) {
+        if (_grabbedEnemy->isDead) {
+            _isAirGrabActive = false;
+            _grabbedEnemy = nullptr;
+        } else {
+            _airGrabTimer -= dt;
+            if (_airGrabTimer > 0.0f) {
+                // ФАЗА 1: УДЕРЖАНИЕ В ЗАХВАТЕ БУЛАВОЙ И ПЛАВНЫЙ ПОДЪЕМ В ВОЗДУХЕ
+                _grabbedEnemy->position.x = player.position.x + _airGrabDirection * 18.0f;
+                _grabbedEnemy->position.y = player.position.y - 14.0f;
+                _grabbedEnemy->velocity = {0.0f, 0.0f};
+                _grabbedEnemy->triggerStun(0.75f);
+
+                // Мягкий подъем игрока вверх
+                player.velocity.y = std::min(player.velocity.y + 350.0f * dt, -50.0f);
+                player.setAirSuspended(true);
+
+                // Искры удержания булавой
+                if (_rng() % 3 == 0) {
+                    HitParticle p;
+                    p.position = _grabbedEnemy->position + sf::Vector2f(static_cast<float>(_rng() % 24 - 12), static_cast<float>(_rng() % 24 - 12));
+                    p.velocity = {static_cast<float>(_rng() % 100 - 50), static_cast<float>(_rng() % 100 - 50)};
+                    p.color = sf::Color(255, 160, 40);
+                    p.size = 2.6f;
+                    p.lifetime = 0.20f;
+                    _hitParticles.push_back(p);
+                }
+            } else {
+                // ФАЗА 2: МОЩНЫЙ БРОСОК ВРАГА ОБ ПОЛ (METEOR SLAM RELEASE)
+                _isAirGrabActive = false;
+                _airGrabTimer = 0.0f;
+
+                _grabbedEnemy->velocity.x = _airGrabDirection * 75.0f; // легкий сдвиг по X
+                _grabbedEnemy->velocity.y = 880.0f;                   // вертикально об пол
+                _grabbedEnemy->triggerStun(0.65f);
+                _grabbedEnemy->diveSlamBounce = true;
+                _grabbedEnemy->diveSlamDir = static_cast<float>(_airGrabDirection);
+
+                // Игрок зависает в воздухе в пиковой точке после швырка
+                player.velocity.y = -70.0f;
+                player.setAirSuspended(true);
+                _airSuspendedRemaining = 0.30f;
+
+                SoundManager::get().playAttack("2", "", true);
+
+                _empoweredShockwaves.push_back({_grabbedEnemy->position, 14.0f, 95.0f, 0.35f, 0.35f, sf::Color(255, 95, 35)});
+                for (int i = 0; i < 24; ++i) {
+                    HitParticle p;
+                    p.position = _grabbedEnemy->position;
+                    float angle = (90.0f + static_cast<float>(_rng() % 80) - 40.0f) * 3.14159f / 180.0f;
+                    float spd = 280.0f + static_cast<float>(_rng() % 200);
+                    p.velocity = {std::cos(angle) * spd, std::sin(angle) * spd};
+                    p.color = sf::Color(255, 120, 40);
+                    p.size = 3.5f;
+                    p.lifetime = 0.38f;
+                    _hitParticles.push_back(p);
+                }
+
+                _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -55.0f),
+                                                "★ AIR GRAB METEOR SLAM! ★", sf::Color(255, 110, 40), 0.85f, 0.85f, 1.3f, 255.0f});
+                _grabbedEnemy = nullptr;
+            }
+        }
     }
 
     // Обработка активной фазы удара и хитбокса
@@ -748,10 +837,16 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             hbh = 70.0f;
             hby = player.position.y - 42.0f;
         } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || _comboDisplayName.find("SKY HOOK") != std::string::npos || _currentAttackType == "adw1") {
-            // Удар ровно под себя с зацепом в воздухе (adw1 / dw1jadw1)
-            hbw = 64.0f;
-            hbh = 70.0f;
+            // Удар с зацепом в воздухе (adw1 / dw1jadw1 / dw1adw1):
+            // Хитбокс компактный и строго под игроком
+            hbw = 54.0f;
+            hbh = 65.0f;
             hby = player.position.y + 5.0f;
+        } else if (_comboDisplayName.find("dw1-j-adu2") != std::string::npos || _comboDisplayName.find("METEOR SLAM") != std::string::npos || _currentAttackType == "adu2") {
+            // Захват врага над игроком или в игроке (dw1-j-adu2):
+            hbw = 90.0f;
+            hbh = 100.0f;
+            hby = player.position.y - 50.0f;
         } else if (player.hasWeapon() && (_currentAttackType == "dw1" || _comboDisplayName.find("STOMP") != std::string::npos)) {
             // Топот булавой по земле
             hbw = 90.0f;
@@ -766,9 +861,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             hbh = 58.0f;
             hby = player.position.y - 28.0f;
         } else if (_comboDisplayName.find("1-2-f1") != std::string::npos || _comboDisplayName.find("BAT SWING") != std::string::npos) {
-            hbw = 95.0f;
-            hbh = 55.0f;
-            hby = player.position.y - 22.0f;
+            // 1-2-f1 (удар булавой словно битой) - широкий размашистый хитбокс
+            hbw = 140.0f;
+            hbh = 65.0f;
+            hby = player.position.y - 25.0f;
         } else if (_comboDisplayName.find("b2-1-u2") != std::string::npos || _comboDisplayName.find("SKY LAUNCHER") != std::string::npos) {
             hbw = 85.0f;
             hbh = 75.0f;
@@ -786,8 +882,14 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             // гарантируя поимку отлетевшего от форсы врага
             hbx = (_attackDirection > 0) ? (player.position.x - 10.0f) : (player.position.x + 10.0f - hbw);
         } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || _comboDisplayName.find("SKY HOOK") != std::string::npos || _currentAttackType == "adw1") {
-            // adw1 бьет ровно под себя (центрирован по координате X персонажа)
+            // adw1 центрирован строго ровно под игроком
             hbx = player.position.x - hbw * 0.5f;
+        } else if (_comboDisplayName.find("dw1-j-adu2") != std::string::npos || _comboDisplayName.find("METEOR SLAM") != std::string::npos || _currentAttackType == "adu2") {
+            // adu2 центрирован вокруг и над игроком
+            hbx = player.position.x - hbw * 0.5f;
+        } else if (_comboDisplayName.find("1-2-f1") != std::string::npos || _comboDisplayName.find("BAT SWING") != std::string::npos) {
+            // 12f1 охватывает от тела игрока (-15px) далеко вперед (+125px)
+            hbx = (_attackDirection > 0) ? (player.position.x - 15.0f) : (player.position.x + 15.0f - hbw);
         } else if (_currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos) {
             // b2 бьет далеко вперед и охватывает пространство вокруг персонажа (-30px позади до +110px впереди)
             hbx = (_attackDirection > 0) ? (player.position.x - 30.0f) : (player.position.x + 30.0f - hbw);
@@ -1033,6 +1135,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                                 _comboDisplayName.find("SKY POP-UP") != std::string::npos ||
                                                 _comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
                                                 _comboDisplayName.find("SKY HOOK") != std::string::npos ||
+                                                _comboDisplayName.find("dw1-j-adu2") != std::string::npos ||
+                                                _comboDisplayName.find("METEOR SLAM") != std::string::npos ||
                                                 _comboDisplayName.find("UNIQUE") != std::string::npos;
                         if (isUniqueFinisher) {
                             if (Arena::getActive()) {
@@ -1046,6 +1150,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                     _comboDisplayName.find("DIVE SLAM") != std::string::npos) {
                                     // a1a1adw2 / a1adw2 (a1s2) бьет вниз по диагонали вперед прямо в пол
                                     finisherForceDir = sf::Vector2f(dirX * 0.707f, 0.707f);
+                                } else if (_comboDisplayName.find("dw1-j-adu2") != std::string::npos || 
+                                           _comboDisplayName.find("METEOR SLAM") != std::string::npos) {
+                                    // dw1-j-adu2 вертикальный слэм вниз об пол
+                                    finisherForceDir = sf::Vector2f(dirX * 0.12f, 0.99f);
                                 } else if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos || 
                                            _comboDisplayName.find("SKY HOOK") != std::string::npos) {
                                     // dw1-j-adw1 подброс булавой строго вверх в небо
@@ -1121,9 +1229,12 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                 // Задерживаем в воздухе ТОЛЬКО ПРИ ПОПАДАНИИ по врагу!
                 if (!player.isOnGround()) {
-                    _airSuspendedRemaining = 0.22f;
-                    player.setAirSuspended(true);
-                    player.velocity.y = 0.0f;
+                    if (_comboDisplayName.find("dw1-j-adu2") == std::string::npos &&
+                        _comboDisplayName.find("METEOR SLAM") == std::string::npos) {
+                        _airSuspendedRemaining = 0.22f;
+                        player.setAirSuspended(true);
+                        player.velocity.y = 0.0f;
+                    }
                 }
 
                 // Особая логика комбо 11b2 (захват и бросок назад на дистанцию прыжка + разворот):
@@ -1189,6 +1300,29 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     }
                     _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -55.0f),
                                                     "★ SKY HOOK LAUNCH! ★", sf::Color(255, 185, 45), 0.85f, 0.85f, 1.3f, 255.0f});
+                }
+
+                // Особая логика комбо dw1jadu2 (захват врага булавой, подъем в воздухе и слэм в пол):
+                if (_comboDisplayName.find("dw1-j-adu2") != std::string::npos ||
+                    _comboDisplayName.find("METEOR SLAM") != std::string::npos) {
+                    _isAirGrabActive = true;
+                    _airGrabTimer = 0.24f;
+                    _airGrabTotalDuration = 0.24f;
+                    _airGrabDirection = _attackDirection;
+                    _grabbedEnemy = &enemy;
+
+                    // Хватаем врага и прижимаем прямо перед/над игроком на булаве
+                    enemy.position.x = player.position.x + _attackDirection * 18.0f;
+                    enemy.position.y = player.position.y - 14.0f;
+                    enemy.velocity = {0.0f, 0.0f};
+                    enemy.triggerStun(0.75f);
+
+                    // Игрок слегка поднимается в воздух
+                    player.velocity.y = -220.0f;
+                    player.setAirSuspended(true);
+                    _airSuspendedRemaining = 0.0f;
+
+                    _empoweredShockwaves.push_back({enemy.position, 10.0f, 65.0f, 0.25f, 0.25f, sf::Color(255, 140, 40)});
                 }
 
                 // Особая логика импульсов комбо: берется строго из KV таблицы баланса (_knockX, _knockY)

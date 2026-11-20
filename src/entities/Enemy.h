@@ -23,6 +23,33 @@ enum class AIBehaviorState {
     COMBAT      // Бой / комбо-серия (проведение ударов)
 };
 
+// 3 Базовых архетипа противников (+ тренировочный манекен)
+enum class EnemyArchetype {
+    NORMAL = 0,   // Обычный: сбалансированный боец
+    HEAVY = 1,    // Тяжелый / Танк: увеличенные габариты, много здоровья, броня, тяжелые удары
+    DUELIST = 2,  // Дуэлянт: скорость, длинные зацепы, увороты, парирование
+    DUMMY = 3     // Манекен для отработки комбо
+};
+
+// Ранги / категории противников
+enum class EnemyRank {
+    STANDARD = 0, // Обычный рядовой враг
+    ELITE = 1,    // Элитный враг (повышенное здоровье, усиленный напор)
+    BOSS = 2      // Босс (уникальная категория)
+};
+
+// Описание конкретной модели / типа врага, загружаемой из assets/sprites/enemies/<id>/
+struct EnemyTypeDef {
+    std::string id;            // Имя папки (например "duelist_aggressive", "tank", "normal")
+    std::string displayName;   // Человекочитаемое имя ("Дуэлянт (Агр)", "Танк" и т.д.)
+    EnemyArchetype archetype = EnemyArchetype::NORMAL;
+    EnemyRank rank = EnemyRank::STANDARD;
+    int legacyType = 0;        // 0=Normal, 1=Tank, 2=Duelist, 3=DuelistPassive, 4=Dummy
+    float scale = 1.0f;
+    float maxHp = 45.0f;
+    std::shared_ptr<sf::Texture> previewTexture;
+};
+
 enum class EnemyType {
     NORMAL,           // Обычный: серый цвет, малое ХП (45), легкая броня, средняя скорость, дает 1 комбо, нет контратаки
     TANK,             // Жирный: красный цвет, больше в 1.5 раза, много ХП (110), тяжелая броня, бьет дальше и больнее, медленный
@@ -122,6 +149,8 @@ public:
     sf::Vector2f spawnPosition;
 
     EnemyType enemyType = EnemyType::NORMAL;
+    std::string enemyId = ""; // Идентификатор папки конкретного врага ("normal", "tank", "duelist_aggressive" и т.д.)
+    std::shared_ptr<sf::Texture> previewTexture = nullptr;
     float scale = 1.0f;
     float halfW = 16.0f;
     float halfH = 28.0f;
@@ -278,7 +307,7 @@ public:
 
     // Тренировочный Манекен (Dummy)
     float dummyAccumDamage = 0.0f;
-    float dummyResetTimer = 0.0f;       // Сброс накопленного урона через 5.0с
+    float dummyResetTimer = 0.0f;       // Сброс накопленного урона через 2.0с
     float dummyOutOfStunTimer = 0.0f;   // Таймер времени вне стана между двумя атаками
     int dummyLastGapFrames = 0;         // Количество кадров вне стана между атаками (при 60 FPS)
     bool dummyHadFirstHit = false;
@@ -314,6 +343,9 @@ public:
 
     void setType(EnemyType type);
     EnemyType getType() const { return enemyType; }
+    void setEnemyId(const std::string& id) { enemyId = id; }
+    const std::string& getEnemyId() const { return enemyId; }
+    static std::vector<EnemyTypeDef> scanEnemyFolders(const std::string& baseDir = "assets/sprites/enemies");
     void triggerDodge(float dir = 0.0f);
     bool isInvulnerable() const { return isDodging; }
 

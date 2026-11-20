@@ -22,6 +22,9 @@ inline sf::String toSfString(std::string_view str) {
 
 inline std::string getGameMapsDir() {
     std::vector<std::string> candidates = {
+        "assets/maps",
+        "../assets/maps",
+        "../../assets/maps",
         "/home/dagai/Projects/SFML_working_version/assets/maps",
         "../SFML_working_version/assets/maps",
         "../../SFML_working_version/assets/maps"
@@ -31,11 +34,14 @@ inline std::string getGameMapsDir() {
             return std::filesystem::canonical(path).string();
         }
     }
-    return "/home/dagai/Projects/SFML_working_version/assets/maps";
+    return "assets/maps";
 }
 
 inline std::string getGameConfigDir() {
     std::vector<std::string> candidates = {
+        "assets/config",
+        "../assets/config",
+        "../../assets/config",
         "/home/dagai/Projects/SFML_working_version/assets/config",
         "../SFML_working_version/assets/config",
         "../../SFML_working_version/assets/config"
@@ -45,22 +51,75 @@ inline std::string getGameConfigDir() {
             return std::filesystem::canonical(path).string();
         }
     }
-    return "/home/dagai/Projects/SFML_working_version/assets/config";
+    return "assets/config";
 }
 
 inline std::string getGameTilesDir() {
     std::vector<std::string> candidates = {
+        "assets/tiles",
+        "../assets/tiles",
+        "../../assets/tiles",
         "/home/dagai/Projects/SFML_working_version/assets/tiles",
         "../SFML_working_version/assets/tiles",
-        "../../SFML_working_version/assets/tiles",
-        "assets/tiles"
+        "../../SFML_working_version/assets/tiles"
     };
     for (const auto& path : candidates) {
         if (std::filesystem::exists(path)) {
             return std::filesystem::canonical(path).string();
         }
     }
-    return "/home/dagai/Projects/SFML_working_version/assets/tiles";
+    return "assets/tiles";
+}
+
+inline std::string getGameBlocksDir() {
+    std::vector<std::string> candidates = {
+        "assets/tiles/blocks",
+        "../assets/tiles/blocks",
+        "../../assets/tiles/blocks",
+        "/home/dagai/Projects/SFML_working_version/assets/tiles/blocks",
+        "../SFML_working_version/assets/tiles/blocks",
+        "../../SFML_working_version/assets/tiles/blocks"
+    };
+    for (const auto& path : candidates) {
+        if (std::filesystem::exists(path)) {
+            return std::filesystem::canonical(path).string();
+        }
+    }
+    return "assets/tiles/blocks";
+}
+
+inline std::string getGameDecorDir() {
+    std::vector<std::string> candidates = {
+        "assets/tiles/decor",
+        "../assets/tiles/decor",
+        "../../assets/tiles/decor",
+        "/home/dagai/Projects/SFML_working_version/assets/tiles/decor",
+        "../SFML_working_version/assets/tiles/decor",
+        "../../SFML_working_version/assets/tiles/decor"
+    };
+    for (const auto& path : candidates) {
+        if (std::filesystem::exists(path)) {
+            return std::filesystem::canonical(path).string();
+        }
+    }
+    return "assets/tiles/decor";
+}
+
+inline std::string getGameToolsDir() {
+    std::vector<std::string> candidates = {
+        "assets/tiles/tools",
+        "../assets/tiles/tools",
+        "../../assets/tiles/tools",
+        "/home/dagai/Projects/SFML_working_version/assets/tiles/tools",
+        "../SFML_working_version/assets/tiles/tools",
+        "../../SFML_working_version/assets/tiles/tools"
+    };
+    for (const auto& path : candidates) {
+        if (std::filesystem::exists(path)) {
+            return std::filesystem::canonical(path).string();
+        }
+    }
+    return "assets/tiles/tools";
 }
 
 inline std::string resolveEditorFont() {

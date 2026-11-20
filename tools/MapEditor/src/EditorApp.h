@@ -26,7 +26,8 @@ enum class ToolType {
     JUMP_PAD = 15,             // '▲' Батут / Джамп-пад
     SPIKES = 16,               // '▲▲▲' Шипы / Ловушка
     TRIGGER_ZONE = 17,         // '⚡' Триггерная зона
-    ENEMY_DUMMY = 18           // 'M' Спавн манекена (Dummy)
+    ENEMY_DUMMY = 18,          // 'M' Спавн манекена (Dummy)
+    LAMP = 19                  // 'L' Тайл 4 (Люминесцентная лампа)
 };
 
 enum class EditorScreen {
@@ -35,10 +36,10 @@ enum class EditorScreen {
 };
 
 enum class PaletteTab {
-    BLOCKS = 0,    // 🧱 Блоки и Геометрия
-    ENTITIES = 1,  // ⚔ Сущности и Враги
-    MECHANICS = 2, // ⚡ Механики и Триггеры
-    ROOMS = 3      // 📁 Комнаты (Галерея 2 столбца)
+    BLOCKS = 0,    // 🧱 Блоки и Стены (из assets/tiles/blocks/)
+    DECOR = 1,     // 🎨 Декор и Лампы (из assets/tiles/decor/)
+    MECHANICS = 2, // ⚡ Инструменты, Спавны и Триггеры (из assets/tiles/tools/ и сущностей)
+    ROOMS = 3      // 📁 Комнаты
 };
 
 struct RoomMeta {
@@ -64,6 +65,7 @@ struct EditorEnemySpawn {
     int y = 0;
     int type = 0; // 0 = Normal, 1 = Tank, 2 = Duelist Aggressive, 3 = Duelist Passive, 4 = Dummy
     bool facingRight = true;
+    std::string enemyId = ""; // Имя папки в assets/sprites/enemies (например "duelist_aggressive")
 };
 
 struct EditorTrigger {
@@ -72,6 +74,21 @@ struct EditorTrigger {
     int type = 0; // 0 = JumpPad, 1 = Spikes, 2 = TriggerZone
     float power = 1000.0f;
     std::string tag = "";
+};
+
+struct EditorLamp {
+    int x = 0;
+    int y = 0;
+    sf::Color color{240, 250, 255};
+    float intensity = 1.0f;
+    float radius = 980.0f;
+    float coneAngle = 130.0f;
+
+    // Сверхбыстрый GPU-кэш для стабильных 1000+ FPS в редакторе:
+    mutable std::shared_ptr<sf::Texture> bakedTexture;
+    mutable sf::Vector2f bakedWorldPos{0.0f, 0.0f};
+    mutable sf::Vector2f bakedScale{1.0f, 1.0f};
+    mutable bool dirty = true;
 };
 
 struct CanvasRoom {
@@ -85,6 +102,7 @@ struct CanvasRoom {
     std::vector<EditorDoor> doors;
     std::vector<EditorEnemySpawn> enemySpawns;
     std::vector<EditorTrigger> triggers;
+    std::vector<EditorLamp> lamps;
     bool hasPlayerSpawn = false;
     sf::Vector2i playerSpawn{6, 14};
     std::optional<sf::Vector2i> testSpawn;
@@ -99,6 +117,7 @@ struct TileSpriteItem {
     int tileCode = 1;
     ToolType tool = ToolType::PLATFORM;
     PaletteTab tab = PaletteTab::BLOCKS;
+    std::string enemyId = "";
 };
 
 struct StandaloneSnapshot {
@@ -108,6 +127,7 @@ struct StandaloneSnapshot {
     std::vector<EditorDoor> doors;
     std::vector<EditorEnemySpawn> enemySpawns;
     std::vector<EditorTrigger> triggers;
+    std::vector<EditorLamp> lamps;
     sf::Vector2i playerSpawn;
     std::optional<sf::Vector2i> testSpawn;
 };
@@ -131,7 +151,7 @@ struct SettingsModal {
     bool active = false;
     sf::Vector2f screenPos;
     sf::Vector2i tile{-1, -1};
-    enum class TargetType { NONE, DOOR, ENEMY, TEST_SPAWN, TRIGGER, TILE } type = TargetType::NONE;
+    enum class TargetType { NONE, DOOR, ENEMY, TEST_SPAWN, TRIGGER, TILE, LAMP } type = TargetType::NONE;
     int targetIndex = -1;
 };
 
@@ -162,12 +182,16 @@ private:
     std::vector<EditorEnemySpawn> _enemySpawns;
     std::vector<EditorDoor> _doors;
     std::vector<EditorTrigger> _triggers;
+    std::vector<EditorLamp> _lamps;
     int _doorTargetRoom = 2;
 
     // Вкладки палитры
     PaletteTab _activeTab = PaletteTab::BLOCKS;
     std::vector<TileSpriteItem> _paletteSprites;
+    std::vector<EnemyTypeDef> _scannedEnemies;
     int _selectedPaletteIndex = 0;
+
+    const EnemyTypeDef* findEnemyDef(const std::string& enemyId, int legacyType = -1) const;
 
     int _currentRoomIndex = 1;
     int _totalRooms = 10;
@@ -183,9 +207,15 @@ private:
     // Текстуры для батута и шипов
     std::shared_ptr<sf::Texture> _texJumpPad;
     std::shared_ptr<sf::Texture> _texSpikes;
+    std::shared_ptr<sf::Texture> _texDoor;
+    std::shared_ptr<sf::Texture> _texLamp;
 
     ToolType _currentTool = ToolType::PLATFORM;
+    int _currentTileCode = 1;
     int _brushSize = 1;
+
+    // Кешированные спрайты блоков по коду тайла (1=платформа, 2=стена, 3=дверь, 4=лампа, 5=ящик, 6=колонна, 7=лава...)
+    std::unordered_map<int, std::shared_ptr<sf::Sprite>> _tileCodeSprites;
 
     // Навигация и мышь
     bool _isPanning = false;
@@ -286,13 +316,17 @@ private:
 
     void applyToolAt(int tx, int ty);
     void eraseAt(int tx, int ty);
-    void addEnemySpawn(int tx, int ty, int type = 0);
+    void addEnemySpawn(int tx, int ty, int type = 0, const std::string& enemyId = "");
     void removeEnemySpawn(int tx, int ty);
     void setDoor(int tx, int ty, int targetRoom, int targetDoorX = -1, int targetDoorY = -1);
     void removeDoor(int tx, int ty);
     int getDoorTargetRoom(int tx, int ty) const;
     void addTrigger(int tx, int ty, int type);
     void removeTrigger(int tx, int ty);
+    EditorLamp* findOrCreateLamp(int tx, int ty);
+    EditorLamp* findLamp(int tx, int ty);
+    const EditorLamp* findLamp(int tx, int ty) const;
+    void removeLamp(int tx, int ty);
     bool handleMinimapClick(const sf::Vector2i& mousePixel);
 
     // Мульти-комнатный единый холст и связывание дверей
@@ -347,6 +381,8 @@ private:
 
     void drawWorld();
     void drawUI();
+    void drawLeftToolbar();
+    bool handleLeftToolbarClick(const sf::Vector2i& mousePixel);
     void drawModal();
     void drawNamingModal();
     void drawJumpArc();

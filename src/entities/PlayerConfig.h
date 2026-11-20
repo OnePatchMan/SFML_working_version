@@ -13,6 +13,7 @@ struct PlayerStatsConfig {
     float gravity = 3000.0f;
     float jumpSpeed = 900.0f;
     float maxFallSpeed = 1800.0f;
+    float turnDelay = 0.020f; // Окно буфера задней атаки перед разворотом (~1 кадр при 60 FPS, 0.020s)
 
     float dashSpeed = 1250.0f;
     float dashDuration = 0.09f;
@@ -96,6 +97,7 @@ public:
                                 else if (key == "gravity") _config.gravity = std::stof(val);
                                 else if (key == "jump_speed" || key == "jumpspeed") _config.jumpSpeed = std::stof(val);
                                 else if (key == "max_fall_speed" || key == "maxfallspeed") _config.maxFallSpeed = std::stof(val);
+                                else if (key == "turn_delay" || key == "turndelay") _config.turnDelay = std::stof(val);
                             } else if (section == "Dash") {
                                 if (key == "dash_speed" || key == "dashspeed") _config.dashSpeed = std::stof(val);
                                 else if (key == "dash_duration" || key == "dashduration") _config.dashDuration = std::stof(val);

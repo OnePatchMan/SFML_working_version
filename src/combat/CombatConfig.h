@@ -146,16 +146,27 @@ public:
         if (it != _comboIndexMap.end() && it->second < _combos.size()) {
             return &_combos[it->second];
         }
+        if (id.rfind("weapon_", 0) != 0) {
+            auto itW = _comboIndexMap.find("weapon_" + id);
+            if (itW != _comboIndexMap.end() && itW->second < _combos.size()) {
+                return &_combos[itW->second];
+            }
+        }
         if (id == "21dw1" || id == "21ddw1") return getCombo("21db1");
         if (id == "db1up1" || id == "b1u1" || id == "b1up1") return getCombo("db1u1");
+        if (id == "dw1adw1") return getCombo("dw1jadw1");
+        if (id == "dw1adu2" || id == "dw1ad2") return getCombo("dw1jadu2");
         return nullptr;
     }
 
     // Проверка наличия комбо в КВ реестре
     static bool hasCombo(const std::string& id) {
         ensureInitialized();
+        if (id.rfind("weapon_", 0) != 0 && _comboIndexMap.find("weapon_" + id) != _comboIndexMap.end()) return true;
         if (id == "21dw1" || id == "21ddw1") return hasCombo("21db1");
         if (id == "db1up1" || id == "b1u1" || id == "b1up1") return hasCombo("db1u1");
+        if (id == "dw1adw1") return hasCombo("dw1jadw1");
+        if (id == "dw1adu2" || id == "dw1ad2") return hasCombo("dw1jadu2");
         return _comboIndexMap.find(id) != _comboIndexMap.end();
     }
 
@@ -438,6 +449,7 @@ private:
         _attacks["adw2"] = {4.0f, 440.0f, 550.0f, 0.28f, 0.40f, 0.16f, 8.0f, "AIR ATTACK: adw2 (Air Down Slam)", sf::Color(255, 90, 30), 0.60f, HitLevel::OVERHEAD, false};
         _attacks["ad1"]  = {2.5f, 160.0f, -60.0f, 0.17f, 0.25f, 0.13f, 12.0f, "AIR DASH ATTACK: ad1", sf::Color(100, 240, 220), 0.40f, HitLevel::OVERHEAD, false};
         _attacks["ad2"]  = {4.0f, 220.0f, 320.0f, 0.28f, 0.28f, 0.16f, 15.0f, "AIR DASH ATTACK: ad2", sf::Color(255, 90, 160), 0.60f, HitLevel::OVERHEAD, false};
+        _attacks["adu2"] = {4.0f, 75.0f, 880.0f, 0.28f, 0.40f, 0.16f, 0.0f, "AIR DASH ATTACK: adu2", sf::Color(255, 90, 35), 0.60f, HitLevel::OVERHEAD, false};
     }
 
     static void addCombo(const ComboEntry& ce) {
@@ -555,7 +567,28 @@ private:
         addCombo({
             "dw1jadw1",
             {"dw1", "j", "adw1"},
-            {5.5f, 25.0f, -520.0f, 0.26f, 0.50f, 0.16f, 0.0f, "COMBO dw1-j-adw1: STOMP & SKY HOOK!", sf::Color(255, 160, 40), 0.60f, HitLevel::OVERHEAD, false},
+            {5.5f, 25.0f, -520.0f, 0.26f, 0.50f, 0.16f, 15.0f, "COMBO dw1-j-adw1: STOMP & SKY HOOK!", sf::Color(255, 160, 40), 0.60f, HitLevel::OVERHEAD, false},
+            true, true, true
+        });
+
+        addCombo({
+            "dw1adw1",
+            {"dw1", "adw1"},
+            {5.5f, 25.0f, -520.0f, 0.26f, 0.50f, 0.16f, 15.0f, "COMBO dw1-j-adw1: STOMP & SKY HOOK!", sf::Color(255, 160, 40), 0.60f, HitLevel::OVERHEAD, false},
+            true, true, true
+        });
+
+        addCombo({
+            "dw1jadu2",
+            {"dw1", "j", "adu2"},
+            {5.8f, 75.0f, 880.0f, 0.42f, 0.75f, 0.24f, 0.0f, "COMBO dw1-j-adu2: AIR GRAB METEOR SLAM!", sf::Color(255, 90, 35), 0.75f, HitLevel::OVERHEAD, false},
+            true, true, true
+        });
+
+        addCombo({
+            "dw1adu2",
+            {"dw1", "adu2"},
+            {5.8f, 75.0f, 880.0f, 0.42f, 0.75f, 0.24f, 0.0f, "COMBO dw1-j-adu2: AIR GRAB METEOR SLAM!", sf::Color(255, 90, 35), 0.75f, HitLevel::OVERHEAD, false},
             true, true, true
         });
 

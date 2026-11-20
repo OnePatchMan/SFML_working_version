@@ -141,6 +141,9 @@ public:
     void setFacingLocked(bool locked) { _facingLocked = locked; }
     bool isFacingLocked() const { return _facingLocked; }
 
+    void setAirGrabLocked(bool locked) { _isAirGrabLocked = locked; }
+    bool isAirGrabLocked() const { return _isAirGrabLocked; }
+
     const Animation& getAnimation() const { return _animation; }
     Animation& getAnimation() { return _animation; }
     const Animation& getRollAnimation() const { return _rollAnimation; }
@@ -214,6 +217,7 @@ private:
 
     BlockType _blockType = BlockType::NONE;
     float _blockStunTimer = 0.0f;
+    bool _isAirGrabLocked = false;
 
     bool _hasWeapon = true; // С самого начала персонаж появляется с булавой
     bool _hasWallBounced = false; // Отскок от стены (Wall Splat как в Mortal Kombat X)

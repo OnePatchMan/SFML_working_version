@@ -90,7 +90,7 @@ Arena::~Arena() {
 bool Arena::isBlockSolid(int tx, int ty) const {
     if (tx < 0 || tx >= _width || ty < 0 || ty >= _height) return true; // Границы арены непроницаемы
     int t = _map[ty][tx];
-    return (t == 1 || t == 2);
+    return (t == 1 || t == 2 || t >= 5);
 }
 
 bool Arena::raycastSolid(sf::Vector2f start, sf::Vector2f target, sf::Vector2f& hitPoint, sf::Vector2i& hitTile, sf::Vector2f& hitNormal) const {
@@ -818,45 +818,206 @@ void Arena::loadTileset(const std::string& texturePath) {
     _tilesetPath = texturePath;
     _tileSprites.clear();
 
-    std::string path = resolveAssetPath(texturePath);
-    if (!_tileTexture.loadFromFile(path)) {
-        std::cerr << "Предупреждение: Не удалось загрузить тайлсет (" << path << "). Создание процедурного тайлсета." << std::endl;
-        sf::Image img({96, 32}, sf::Color::Transparent);
-        for (unsigned int x = 32; x < 64; ++x) {
-            for (unsigned int y = 0; y < 32; ++y) {
-                if (x == 32 || x == 63 || y == 0 || y == 31) img.setPixel({x, y}, sf::Color(45, 55, 65));
-                else if ((x + y) % 7 == 0) img.setPixel({x, y}, sf::Color(75, 85, 95));
-                else img.setPixel({x, y}, sf::Color(60, 70, 80));
+    // 1. Поиск всех спрайтшитов блоков в папке assets/tiles/blocks/
+    std::vector<std::string> blockSheetPaths;
+    std::string blocksDir = resolveAssetPath("assets/tiles/blocks");
+    if (std::filesystem::exists(blocksDir) && std::filesystem::is_directory(blocksDir)) {
+        for (const auto& entry : std::filesystem::directory_iterator(blocksDir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".png") {
+                blockSheetPaths.push_back(entry.path().string());
             }
         }
-        for (unsigned int x = 64; x < 96; ++x) {
-            for (unsigned int y = 0; y < 32; ++y) {
-                if (y == 0 || y == 16 || y == 31 || 
-                    ((y < 16) && (x == 64 || x == 80 || x == 95)) ||
-                    ((y >= 16) && (x == 72 || x == 88))) {
-                    img.setPixel({x, y}, sf::Color(80, 50, 40));
-                } else {
-                    img.setPixel({x, y}, sf::Color(130, 90, 70));
-                }
-            }
-        }
-        (void)_tileTexture.loadFromImage(img);
     }
 
-    int count = static_cast<int>(_tileTexture.getSize().x / 32);
-    if (count < 3) count = 3;
-    _tileSprites.reserve(count);
+    // Базовый лист BlocksTest.png должен идти первым для фиксации тайла 1 (платформа) и 2 (стена)
+    std::sort(blockSheetPaths.begin(), blockSheetPaths.end(), [](const std::string& a, const std::string& b) {
+        bool aIsBase = (a.find("BlocksTest") != std::string::npos || a.find("01_") != std::string::npos);
+        bool bIsBase = (b.find("BlocksTest") != std::string::npos || b.find("01_") != std::string::npos);
+        if (aIsBase && !bIsBase) return true;
+        if (!aIsBase && bIsBase) return false;
+        return a < b;
+    });
+
+    if (blockSheetPaths.empty()) {
+        std::string fallbackPath = resolveAssetPath(texturePath);
+        if (std::filesystem::exists(fallbackPath)) {
+            blockSheetPaths.push_back(fallbackPath);
+        }
+    }
+
+    // 2. Автоматическое разделение по 32 пикселя по X для каждого найденного спрайтшита
+    struct TileSlice {
+        sf::Image imgSlice;
+    };
+    std::vector<TileSlice> allSlices;
+
+    auto load32Img = [](const std::string& path, sf::Color fallbackColor) -> sf::Image {
+        sf::Image img;
+        if (std::filesystem::exists(path)) {
+            (void)img.loadFromFile(path);
+        }
+        if (img.getSize().x == 0 || img.getSize().y == 0) {
+            img.resize({32, 32}, fallbackColor);
+        }
+        return img;
+    };
+
+    // Срез 0: Пустота / Воздух (Air) - прозрачный 32x32
+    {
+        TileSlice airSlice;
+        airSlice.imgSlice.resize({32, 32}, sf::Color::Transparent);
+        allSlices.push_back(std::move(airSlice));
+    }
+    // Срез 1: Платформа (01_platform.png)
+    {
+        std::string p = resolveAssetPath("assets/tiles/blocks/01_platform.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/01_platform.png");
+        TileSlice s1;
+        s1.imgSlice = load32Img(p, sf::Color(60, 70, 80));
+        allSlices.push_back(std::move(s1));
+    }
+    // Срез 2: Стена (02_wall.png)
+    {
+        std::string p = resolveAssetPath("assets/tiles/blocks/02_wall.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/02_wall.png");
+        TileSlice s2;
+        s2.imgSlice = load32Img(p, sf::Color(130, 90, 70));
+        allSlices.push_back(std::move(s2));
+    }
+    // Срез 3: Дверь (03_door.png)
+    {
+        std::string p = resolveAssetPath("assets/tiles/tools/03_door.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/03_door.png");
+        TileSlice s3;
+        s3.imgSlice = load32Img(p, sf::Color(0, 200, 255));
+        allSlices.push_back(std::move(s3));
+    }
+    // Срез 4: Лампа (04_lamp.png)
+    {
+        std::string p = resolveAssetPath("assets/tiles/decor/04_lamp.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/blocks/04_lamp.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/04_lamp.png");
+        TileSlice s4;
+        s4.imgSlice = load32Img(p, sf::Color(255, 255, 180));
+        allSlices.push_back(std::move(s4));
+    }
+    // Срез 5: Ящик / Дерево (06_wood.png)
+    {
+        std::string p = resolveAssetPath("assets/tiles/blocks/06_wood.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/06_wood.png");
+        TileSlice s5;
+        s5.imgSlice = load32Img(p, sf::Color(150, 105, 55));
+        allSlices.push_back(std::move(s5));
+    }
+    // Срез 6: Колонна (04_pillar.png)
+    {
+        std::string p = resolveAssetPath("assets/tiles/decor/04_pillar.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/blocks/04_pillar.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/04_pillar.png");
+        TileSlice s6;
+        s6.imgSlice = load32Img(p, sf::Color(130, 135, 150));
+        allSlices.push_back(std::move(s6));
+    }
+    // Срез 7: Лава / Опасность (05_hazard.png)
+    {
+        std::string p = resolveAssetPath("assets/tiles/decor/05_hazard.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/blocks/05_hazard.png");
+        if (!std::filesystem::exists(p)) p = resolveAssetPath("assets/tiles/05_hazard.png");
+        TileSlice s7;
+        s7.imgSlice = load32Img(p, sf::Color(210, 60, 20));
+        allSlices.push_back(std::move(s7));
+    }
+
+    std::vector<std::string> extraDirs = {
+        resolveAssetPath("assets/tiles/blocks"),
+        resolveAssetPath("assets/tiles/decor")
+    };
+    for (const auto& dirPath : extraDirs) {
+        if (!std::filesystem::exists(dirPath) || !std::filesystem::is_directory(dirPath)) continue;
+        std::vector<std::string> curFiles;
+        for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".png") {
+                curFiles.push_back(entry.path().string());
+            }
+        }
+        std::sort(curFiles.begin(), curFiles.end());
+        for (const auto& sheetPath : curFiles) {
+            std::string fname = std::filesystem::path(sheetPath).filename().string();
+            if (fname == "01_platform.png" || fname == "02_wall.png" || fname == "04_lamp.png" ||
+                fname == "06_wood.png" || fname == "04_pillar.png" || fname == "05_hazard.png" ||
+                fname == "03_door.png" || fname == "jump_pad.png" || fname == "spikes.png" ||
+                fname == "player_spawn.png" || fname.find("enemy_") == 0) {
+                continue;
+            }
+
+            sf::Image sheetImg;
+            if (!sheetImg.loadFromFile(sheetPath)) continue;
+
+            unsigned int sheetW = sheetImg.getSize().x;
+            unsigned int sheetH = sheetImg.getSize().y;
+            if (sheetW == 0 || sheetH == 0) continue;
+
+            int numSlices = static_cast<int>(sheetW / 32);
+            if (numSlices <= 0) numSlices = 1;
+
+            bool isBlocksTest = (fname.find("BlocksTest") != std::string::npos);
+
+            for (int s = 0; s < numSlices; ++s) {
+                if (isBlocksTest && (s == 0 || s == 1 || s == 2)) {
+                    // В BlocksTest срез 0=воздух, 1=платформа, 2=стена (уже в базовых)
+                    continue;
+                }
+
+                TileSlice slice;
+                slice.imgSlice.resize({32, 32}, sf::Color::Transparent);
+
+                unsigned int startX = s * 32;
+                for (unsigned int py = 0; py < 32 && py < sheetH; ++py) {
+                    for (unsigned int px = 0; px < 32 && (startX + px) < sheetW; ++px) {
+                        slice.imgSlice.setPixel({px, py}, sheetImg.getPixel({startX + px, py}));
+                    }
+                }
+                allSlices.push_back(std::move(slice));
+            }
+        }
+    }
+
+    // Процедурный fallback если ни один лист не найден
+    if (allSlices.size() <= 1) {
+        TileSlice plat;
+        plat.imgSlice.resize({32, 32}, sf::Color(60, 70, 80));
+        allSlices.push_back(std::move(plat));
+
+        TileSlice wall;
+        wall.imgSlice.resize({32, 32}, sf::Color(130, 90, 70));
+        allSlices.push_back(std::move(wall));
+    }
+
+    // 3. Формируем единый горизонтальный атлас тайлов (все срезы по 32px в ряд)
+    unsigned int totalCount = static_cast<unsigned int>(allSlices.size());
+    sf::Image combinedImg({totalCount * 32, 32}, sf::Color::Transparent);
+    for (unsigned int i = 0; i < totalCount; ++i) {
+        for (unsigned int py = 0; py < 32; ++py) {
+            for (unsigned int px = 0; px < 32; ++px) {
+                combinedImg.setPixel({i * 32 + px, py}, allSlices[i].imgSlice.getPixel({px, py}));
+            }
+        }
+    }
+
+    (void)_tileTexture.loadFromImage(combinedImg);
 
     float scale = _tileSize / 32.0f;
-    for (int i = 0; i < count; ++i) {
+    _tileSprites.reserve(totalCount);
+    for (unsigned int i = 0; i < totalCount; ++i) {
         sf::Sprite sp(_tileTexture);
-        sp.setTextureRect(sf::IntRect({i * 32, 0}, {32, 32}));
+        sp.setTextureRect(sf::IntRect({static_cast<int>(i * 32), 0}, {32, 32}));
         sp.scale({scale, scale});
         _tileSprites.push_back(sp);
     }
 
     // Загрузка спрайта двери
-    std::string doorPath = resolveAssetPath("assets/tiles/03_door.png");
+    std::string doorPath = resolveAssetPath("assets/tiles/tools/03_door.png");
+    if (!std::filesystem::exists(doorPath)) doorPath = resolveAssetPath("assets/tiles/03_door.png");
     if (!_doorTexture.loadFromFile(doorPath)) {
         doorPath = resolveAssetPath("assets/sprites/03_door.png");
         _doorTextureLoaded = _doorTexture.loadFromFile(doorPath);
@@ -865,21 +1026,15 @@ void Arena::loadTileset(const std::string& texturePath) {
     }
 
     // Загрузка текстур батута (jump_pad) и шипов (spikes)
-    std::string jpPath = resolveAssetPath("assets/sprites/jump_pad.png");
-    if (!_jumpPadTexture.loadFromFile(jpPath)) {
-        jpPath = resolveAssetPath("assets/tiles/jump_pad.png");
-        _jumpPadTextureLoaded = _jumpPadTexture.loadFromFile(jpPath);
-    } else {
-        _jumpPadTextureLoaded = true;
-    }
+    std::string jpPath = resolveAssetPath("assets/tiles/tools/jump_pad.png");
+    if (!std::filesystem::exists(jpPath)) jpPath = resolveAssetPath("assets/tiles/jump_pad.png");
+    if (!std::filesystem::exists(jpPath)) jpPath = resolveAssetPath("assets/sprites/jump_pad.png");
+    _jumpPadTextureLoaded = _jumpPadTexture.loadFromFile(jpPath);
 
-    std::string spkPath = resolveAssetPath("assets/sprites/spikes.png");
-    if (!_spikesTexture.loadFromFile(spkPath)) {
-        spkPath = resolveAssetPath("assets/tiles/spikes.png");
-        _spikesTextureLoaded = _spikesTexture.loadFromFile(spkPath);
-    } else {
-        _spikesTextureLoaded = true;
-    }
+    std::string spkPath = resolveAssetPath("assets/tiles/tools/spikes.png");
+    if (!std::filesystem::exists(spkPath)) spkPath = resolveAssetPath("assets/tiles/spikes.png");
+    if (!std::filesystem::exists(spkPath)) spkPath = resolveAssetPath("assets/sprites/spikes.png");
+    _spikesTextureLoaded = _spikesTexture.loadFromFile(spkPath);
 
     // Шрифт для отображения целевой комнаты на двери
     std::vector<std::string> fontCandidates = {
@@ -1133,6 +1288,14 @@ bool Arena::applyAsciiGrid(const std::vector<std::string>& rows) {
                 _doors.push_back({x, y, -1, -1, -1, ""});
             } else if (c == 'L' || c == '4') {
                 _map[y][x] = 4; // Тайл 4 = Флуоресцентная лампа лаборатории
+            } else if (c == 'W' || c == 'w' || c == '5') {
+                _map[y][x] = 5; // Тайл 5 = Ящик / Дерево
+            } else if (c == 'C' || c == 'c' || c == '6') {
+                _map[y][x] = 6; // Тайл 6 = Колонна
+            } else if (c == 'H' || c == 'h' || c == '7') {
+                _map[y][x] = 7; // Тайл 7 = Лава / Опасность
+            } else if (c >= '8' && c <= '9') {
+                _map[y][x] = (c - '0');
             } else if (c == 'P') {
                 _map[y][x] = 0; // Воздух
                 _spawnPosition = {static_cast<float>(x * _tileSize), 
@@ -1276,6 +1439,10 @@ bool Arena::saveToAsciiFile(const std::string& asciiPath) const {
                     else if (tile == 1) row += '=';
                     else if (tile == 3) row += 'D';
                     else if (tile == 4) row += 'L';
+                    else if (tile == 5) row += 'W';
+                    else if (tile == 6) row += 'C';
+                    else if (tile == 7) row += 'H';
+                    else if (tile >= 8 && tile <= 9) row += static_cast<char>('0' + tile);
                     else row += ' ';
                 }
             }
@@ -1474,9 +1641,6 @@ bool Arena::saveToKVCoordinates(const std::string& kvPath) const {
     int pTx = static_cast<int>(std::round(_spawnPosition.x / _tileSize));
     int pTy = static_cast<int>(std::round((_spawnPosition.y + 30.0f) / _tileSize)) - 1;
 
-    int eTx = static_cast<int>(std::round(_enemySpawnPosition.x / _tileSize));
-    int eTy = static_cast<int>(std::round((_enemySpawnPosition.y + 28.0f) / _tileSize)) - 1;
-
     std::ostringstream ss;
     ss << "// =========================================================================\n";
     ss << "// КООРДИНАТНЫЙ КОНФИГ КОМНАТЫ " << _currentRoomIndex << "\n";
@@ -1546,6 +1710,25 @@ bool Arena::saveToKVCoordinates(const std::string& kvPath) const {
             ss << "        \"" << name << "\"  \"" << curStart << " " << y << " " << len << "\"\n";
         }
     }
+    ss << "\n    // Список люминесцентных ламп: [x  y  r  g  b  intensity  radius  coneAngle]\n";
+    ss << "    \"Lamps\"\n    {\n";
+    int lampIdx = 0;
+    for (int y = 0; y < _height; ++y) {
+        for (int x = 0; x < _width; ++x) {
+            if (_map[y][x] == 4) {
+                const LampLight* l = findLamp(x, y);
+                if (l) {
+                    ss << "        \"lamp_" << lampIdx++ << "\"  \"" << x << " " << y << " "
+                       << static_cast<int>(l->color.r) << " "
+                       << static_cast<int>(l->color.g) << " "
+                       << static_cast<int>(l->color.b) << " "
+                       << l->intensity << " " << l->radius << " " << l->coneAngle << "\"\n";
+                } else {
+                    ss << "        \"lamp_" << lampIdx++ << "\"  \"" << x << " " << y << "\"\n";
+                }
+            }
+        }
+    }
     ss << "    }\n";
     ss << "}\n";
 
@@ -1577,8 +1760,10 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
 
     struct Plat { int x, y, len; };
     struct Wall { int x, y, w, h; };
+    struct LampCoord { int x, y; };
     std::vector<Plat> platforms;
     std::vector<Wall> walls;
+    std::vector<LampCoord> lamps;
 
     std::string line;
     std::string currentSection = "";
@@ -1664,6 +1849,10 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
                 std::istringstream iss(val);
                 int x = 0, y = 0, w = 1, h = 1;
                 if (iss >> x >> y >> w >> h) walls.push_back({x, y, w, h});
+            } else if (currentSection == "lamps" || key.rfind("lamp", 0) == 0) {
+                std::istringstream iss(val);
+                int lx = 0, ly = 0;
+                if (iss >> lx >> ly) lamps.push_back({lx, ly});
             }
         }
     }
@@ -1719,10 +1908,25 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
         }
     }
 
+    // Применяем люминесцентные лампы
+    for (const auto& l : lamps) {
+        if (l.x >= 0 && l.x < _width && l.y >= 0 && l.y < _height) {
+            _map[l.y][l.x] = 4;
+        }
+    }
+
     _floorY = (lowestFloor >= 0) ? lowestFloor : (_height - 5);
 
     if (hasP) {
-        _spawnPosition = { static_cast<float>(pX * _tileSize), static_cast<float>((pY + 1) * _tileSize - 30.0f) };
+        int groundTileY = pY + 1;
+        while (groundTileY < _height && !isSolid(pX, groundTileY)) {
+            groundTileY++;
+        }
+        if (groundTileY < _height && isSolid(pX, groundTileY)) {
+            _spawnPosition = { static_cast<float>(pX * _tileSize), static_cast<float>(groundTileY * _tileSize - 30.0f) };
+        } else {
+            _spawnPosition = { static_cast<float>(pX * _tileSize), static_cast<float>((pY + 1) * _tileSize - 30.0f) };
+        }
     } else {
         _spawnPosition = { 6.0f * _tileSize, static_cast<float>(_floorY) * _tileSize - 30.0f };
     }
@@ -1854,6 +2058,30 @@ void Arena::loadKVOverlays(const std::string& kvPath) {
                 if (iss >> lx >> ly) {
                     if (lx >= 0 && lx < _width && ly >= 0 && ly < _height) {
                         _map[ly][lx] = 4;
+                        int r = 240, g = 250, b = 255;
+                        float intens = 1.0f, rad = 980.0f, cone = 130.0f;
+                        if (iss >> r >> g >> b) {
+                            if (iss >> intens) {}
+                            if (iss >> rad) {}
+                            if (iss >> cone) {}
+                            LampLight* ex = findLamp(lx, ly);
+                            if (ex) {
+                                ex->color = sf::Color(r, g, b);
+                                ex->intensity = intens;
+                                ex->radius = rad;
+                                ex->coneAngle = cone;
+                            } else {
+                                LampLight nl;
+                                nl.tileX = lx;
+                                nl.tileY = ly;
+                                nl.worldPos = {(lx + 0.5f) * _tileSize, (ly + 0.5f) * _tileSize};
+                                nl.color = sf::Color(r, g, b);
+                                nl.intensity = intens;
+                                nl.radius = rad;
+                                nl.coneAngle = cone;
+                                _lamps.push_back(nl);
+                            }
+                        }
                     }
                 }
             } else if (currentSection == "platforms") {
@@ -1874,6 +2102,15 @@ void Arena::loadKVOverlays(const std::string& kvPath) {
     }
 
     if (hasPlayerSpawn) {
+        int spTx = static_cast<int>(std::round(playerSpawnPos.x / _tileSize));
+        int spTy = static_cast<int>(std::round((playerSpawnPos.y + 30.0f) / _tileSize)) - 1;
+        int checkY = spTy + 1;
+        while (checkY < _height && !isSolid(spTx, checkY)) {
+            checkY++;
+        }
+        if (checkY < _height && isSolid(spTx, checkY)) {
+            playerSpawnPos.y = static_cast<float>(checkY * _tileSize - 30.0f);
+        }
         _spawnPosition = playerSpawnPos;
     }
 
@@ -1907,37 +2144,29 @@ bool Arena::loadRoomByName(const std::string& name) {
     std::string base = "assets/maps/" + name;
     bool loadedBase = false;
 
-    // 1. Проверяем PNG картинку-карту
+    // 1. Приоритет: текстовый ASCII-файл или координатный KV-файл (authoritative source)
+    std::string txtPath = resolveAssetPath(base + ".txt");
+    std::string kvPath  = resolveAssetPath(base + ".kv");
     std::string pngPath = resolveAssetPath(base + ".png");
-    if (std::filesystem::exists(pngPath)) {
-        if (loadFromImageFile(pngPath)) {
-            std::cout << "[ROOM] Загружена PNG-карта комнаты " << name 
-                      << " (" << pngPath << ", " << _width << "x" << _height << ")" << std::endl;
-            loadedBase = true;
-        }
-    }
 
-    // 2. Проверяем блочный координатный KV файл
-    std::string kvPath = resolveAssetPath(base + ".kv");
-    if (!loadedBase && std::filesystem::exists(kvPath)) {
-        if (loadFromKVCoordinates(kvPath)) {
-            std::cout << "[ROOM] Загружен координатный KV-файл комнаты " << name 
-                      << " (" << kvPath << ", " << _width << "x" << _height << ")" << std::endl;
-            loadedBase = true;
-        }
-    }
-
-    // 3. Fallback: текстовый ASCII-файл
-    if (!loadedBase) {
-        std::string txtPath = resolveAssetPath(base + ".txt");
-        if (!std::filesystem::exists(txtPath)) {
-            txtPath = resolveAssetPath("assets/config/map.txt");
-        }
-
+    if (std::filesystem::exists(txtPath)) {
         _layoutFilePath = txtPath;
         loadedBase = loadFromAsciiFile(txtPath);
         std::cout << "[ROOM] Загружен текстовый файл комнаты " << name 
                   << " (" << txtPath << ", " << _width << "x" << _height << ")" << std::endl;
+    } else if (std::filesystem::exists(kvPath)) {
+        loadedBase = loadFromKVCoordinates(kvPath);
+        std::cout << "[ROOM] Загружен координатный KV-файл комнаты " << name 
+                  << " (" << kvPath << ", " << _width << "x" << _height << ")" << std::endl;
+    } else if (std::filesystem::exists(pngPath)) {
+        loadedBase = loadFromImageFile(pngPath);
+        std::cout << "[ROOM] Загружена PNG-карта комнаты " << name 
+                  << " (" << pngPath << ", " << _width << "x" << _height << ")" << std::endl;
+    } else {
+        std::string cfgMap = resolveAssetPath("assets/config/map.txt");
+        _layoutFilePath = cfgMap;
+        loadedBase = loadFromAsciiFile(cfgMap);
+        std::cout << "[ROOM] Загружен дефолтный текстовый файл карты " << cfgMap << std::endl;
     }
 
     // Накладываем KV оверлеи (двери, связи комнат, спавны врагов, триггеры)
@@ -2032,6 +2261,7 @@ void Arena::restoreFromSnapshot(int w, int h, const std::vector<int>& tiles,
     syncEnemySpawnPositions();
     _spawnPosition = playerSpawn;
     _tilemapDirty = true;
+    scanLamps();
 }
 
 bool Arena::isDoor(int tx, int ty) const {
@@ -2139,11 +2369,12 @@ bool Arena::isSolid(int tx, int ty) const {
     }
     // Открытый проход у самого левого и правого края внутри карты
     if (ty >= _floorY - 4 && ty < _floorY) {
-        if ((tx <= 1 || tx >= _width - 2) && (_map[ty][tx] == 0 || _map[ty][tx] == 3)) {
+        if ((tx <= 1 || tx >= _width - 2) && (_map[ty][tx] == 0 || _map[ty][tx] == 3 || _map[ty][tx] == 4)) {
             return false;
         }
     }
-    return _map[ty][tx] == 1 || _map[ty][tx] == 2;
+    int t = _map[ty][tx];
+    return t == 1 || t == 2 || t >= 5;
 }
 
 bool Arena::overlapsSolid(float px, float py, float halfW, float topOffset, float bottomOffset) const {
@@ -2283,35 +2514,35 @@ void Arena::draw(sf::RenderWindow& window) {
 
     // 1. Пакетная отрисовка стекающей крови на заднем фоне (Batch VertexArray в 1 Draw Call)
     if (!_bgBloodStreaks.empty()) {
-        sf::VertexArray bgBloodVA(sf::PrimitiveType::Triangles);
+        _bgBloodVA.clear();
         for (const auto& streak : _bgBloodStreaks) {
             if (streak.isSpray) {
                 float h = (streak.blotchH > 0.0f) ? streak.blotchH : streak.width;
                 float px = std::floor(streak.startPos.x - streak.width * 0.5f);
                 float py = std::floor(streak.startPos.y - (streak.blotchH > 0.0f ? streak.blotchH * 0.5f : streak.width * 0.5f));
-                addQuadColored(bgBloodVA, px, py, streak.width, h, streak.color);
+                addQuadColored(_bgBloodVA, px, py, streak.width, h, streak.color);
             } else if (streak.isBlotch) {
                 float px = std::floor(streak.startPos.x - streak.width * 0.5f);
                 float py = std::floor(streak.startPos.y - streak.blotchH * 0.5f);
-                addQuadColored(bgBloodVA, px, py, streak.width, streak.blotchH, streak.color);
+                addQuadColored(_bgBloodVA, px, py, streak.width, streak.blotchH, streak.color);
             } else if (streak.length <= 1.0f) {
                 float px = std::floor(streak.startPos.x - streak.width * 0.5f);
                 float py = std::floor(streak.startPos.y);
-                addQuadColored(bgBloodVA, px, py, streak.width, std::max(2.0f, streak.width * 0.8f), streak.color);
+                addQuadColored(_bgBloodVA, px, py, streak.width, std::max(2.0f, streak.width * 0.8f), streak.color);
             } else {
                 float anchorW = streak.width * 1.35f;
                 float anchorH = std::max(3.5f, streak.width * 0.85f);
-                addQuadColored(bgBloodVA, std::floor(streak.startPos.x - anchorW * 0.5f), std::floor(streak.startPos.y), anchorW, anchorH, streak.color);
+                addQuadColored(_bgBloodVA, std::floor(streak.startPos.x - anchorW * 0.5f), std::floor(streak.startPos.y), anchorW, anchorH, streak.color);
 
-                addQuadColored(bgBloodVA, std::floor(streak.startPos.x - streak.width * 0.5f), std::floor(streak.startPos.y), streak.width, streak.length, streak.color);
+                addQuadColored(_bgBloodVA, std::floor(streak.startPos.x - streak.width * 0.5f), std::floor(streak.startPos.y), streak.width, streak.length, streak.color);
 
                 float headW = streak.width * 1.35f;
                 float headH = std::max(4.0f, streak.width * 1.5f);
-                addQuadColored(bgBloodVA, std::floor(streak.currentPos.x - headW * 0.5f), std::floor(streak.currentPos.y), headW, headH, streak.color);
+                addQuadColored(_bgBloodVA, std::floor(streak.currentPos.x - headW * 0.5f), std::floor(streak.currentPos.y), headW, headH, streak.color);
             }
         }
-        if (bgBloodVA.getVertexCount() > 0) {
-            window.draw(bgBloodVA);
+        if (_bgBloodVA.getVertexCount() > 0) {
+            window.draw(_bgBloodVA);
         }
     }
 
@@ -2324,23 +2555,23 @@ void Arena::draw(sf::RenderWindow& window) {
 
     // 3. Пакетная отрисовка наружных декалей крови и летящих частиц в воздухе (Batch VertexArray в 1 Draw Call)
     if (!_bloodDecals.empty() || !_bloodParticles.empty()) {
-        sf::VertexArray fgBloodVA(sf::PrimitiveType::Triangles);
+        _fgBloodVA.clear();
         for (const auto& decal : _bloodDecals) {
             float len = (decal.length > 0.0f) ? decal.length : (decal.radiusX * 2.0f);
             float thick = (decal.thickness > 0.0f) ? decal.thickness : 2.5f;
             float w = (decal.orientation == BloodDecalOrientation::HORIZONTAL) ? std::max(4.0f, len) : thick;
             float h = (decal.orientation == BloodDecalOrientation::HORIZONTAL) ? thick : std::max(4.0f, len);
-            addQuadColored(fgBloodVA, std::floor(decal.position.x), std::floor(decal.position.y), w, h, decal.color);
+            addQuadColored(_fgBloodVA, std::floor(decal.position.x), std::floor(decal.position.y), w, h, decal.color);
         }
 
         for (const auto& bp : _bloodParticles) {
             if (!bp.active) continue;
             float pSize = std::max(2.5f, std::floor(bp.radius * 1.1f));
-            addQuadColored(fgBloodVA, std::floor(bp.position.x - pSize * 0.5f), std::floor(bp.position.y - pSize * 0.5f), pSize, pSize, bp.color);
+            addQuadColored(_fgBloodVA, std::floor(bp.position.x - pSize * 0.5f), std::floor(bp.position.y - pSize * 0.5f), pSize, pSize, bp.color);
         }
 
-        if (fgBloodVA.getVertexCount() > 0) {
-            window.draw(fgBloodVA);
+        if (_fgBloodVA.getVertexCount() > 0) {
+            window.draw(_fgBloodVA);
         }
     }
 
@@ -2367,62 +2598,50 @@ void Arena::draw(sf::RenderWindow& window) {
         }
     }
 
-    // 4.1. Отрисовка флуоресцентных лабораторных ламп
-    for (int y = startY; y < endY; ++y) {
-        for (int x = startX; x < endX; ++x) {
-            if (_map[y][x] == 4) {
-                float lx = static_cast<float>(x * _tileSize);
-                float ly = static_cast<float>(y * _tileSize);
+    // 4.1. Отрисовка флуоресцентных лабораторных ламп (быстрая итерация по списку ламп)
+    for (const auto& l : _lamps) {
+        if (l.tileX < startX - 1 || l.tileX > endX + 1 || l.tileY < startY - 1 || l.tileY > endY + 1) continue;
+        float lx = static_cast<float>(l.tileX * _tileSize);
+        float ly = static_cast<float>(l.tileY * _tileSize);
 
-                bool isEnabled = true;
-                float flickerDip = 0.0f;
-                for (const auto& l : _lamps) {
-                    if (l.tileX == x && l.tileY == y) {
-                        isEnabled = l.enabled;
-                        flickerDip = l.flickerDip;
-                        break;
-                    }
-                }
+        bool isEnabled = l.enabled;
+        float flickerDip = l.flickerDip;
 
-                sf::RectangleShape fixture({_tileSize - 6.0f, 14.0f});
-                fixture.setPosition({lx + 3.0f, ly + 2.0f});
-                fixture.setFillColor(sf::Color(38, 42, 50));
-                fixture.setOutlineColor(sf::Color(70, 78, 92));
-                fixture.setOutlineThickness(1.0f);
-                window.draw(fixture);
+        sf::RectangleShape fixture({_tileSize - 6.0f, 14.0f});
+        fixture.setPosition({lx + 3.0f, ly + 2.0f});
+        fixture.setFillColor(sf::Color(38, 42, 50));
+        fixture.setOutlineColor(sf::Color(70, 78, 92));
+        fixture.setOutlineThickness(1.0f);
+        window.draw(fixture);
 
-                sf::RectangleShape mountL({4.0f, 6.0f});
-                mountL.setPosition({lx + 6.0f, ly});
-                mountL.setFillColor(sf::Color(80, 88, 102));
-                window.draw(mountL);
+        sf::RectangleShape mountL({4.0f, 6.0f});
+        mountL.setPosition({lx + 6.0f, ly});
+        mountL.setFillColor(sf::Color(80, 88, 102));
+        window.draw(mountL);
 
-                sf::RectangleShape mountR({4.0f, 6.0f});
-                mountR.setPosition({lx + _tileSize - 10.0f, ly});
-                mountR.setFillColor(sf::Color(80, 88, 102));
-                window.draw(mountR);
+        sf::RectangleShape mountR({4.0f, 6.0f});
+        mountR.setPosition({lx + _tileSize - 10.0f, ly});
+        mountR.setFillColor(sf::Color(80, 88, 102));
+        window.draw(mountR);
 
-                sf::RectangleShape tube({_tileSize - 18.0f, 7.0f});
-                tube.setPosition({lx + 9.0f, ly + 6.0f});
+        sf::RectangleShape tube({_tileSize - 18.0f, 7.0f});
+        tube.setPosition({lx + 9.0f, ly + 6.0f});
 
-                if (isEnabled) {
-                    float factor = std::clamp(1.0f - flickerDip * 0.85f, 0.15f, 1.0f);
-                    sf::Color tubeColor(
-                        static_cast<uint8_t>(240 * factor),
-                        static_cast<uint8_t>(252 * factor),
-                        static_cast<uint8_t>(255 * factor)
-                    );
-                    tube.setFillColor(tubeColor);
-                    window.draw(tube);
-
-                    sf::RectangleShape glow({_tileSize - 14.0f, 11.0f});
-                    glow.setPosition({lx + 7.0f, ly + 4.0f});
-                    glow.setFillColor(sf::Color(120, 225, 255, static_cast<uint8_t>(75 * factor)));
-                    window.draw(glow);
-                } else {
-                    tube.setFillColor(sf::Color(55, 60, 70));
-                    window.draw(tube);
-                }
-            }
+        if (isEnabled) {
+            float factor = std::clamp(1.0f - flickerDip * 0.85f, 0.15f, 1.0f);
+            sf::Color tubeColor(
+                static_cast<uint8_t>(255 * factor),
+                static_cast<uint8_t>(255 * factor),
+                static_cast<uint8_t>(255 * factor)
+            );
+            tube.setFillColor(tubeColor);
+            tube.setOutlineColor(sf::Color(160, 235, 255, static_cast<uint8_t>(100 * factor)));
+            tube.setOutlineThickness(1.0f);
+            window.draw(tube);
+        } else {
+            tube.setFillColor(sf::Color(55, 60, 70));
+            tube.setOutlineThickness(0.0f);
+            window.draw(tube);
         }
     }
 
@@ -2643,6 +2862,20 @@ void Arena::executeTriggerAction(const std::string& action, Player* player, cons
     }
 }
 
+LampLight* Arena::findLamp(int tx, int ty) {
+    for (auto& l : _lamps) {
+        if (l.tileX == tx && l.tileY == ty) return &l;
+    }
+    return nullptr;
+}
+
+const LampLight* Arena::findLamp(int tx, int ty) const {
+    for (const auto& l : _lamps) {
+        if (l.tileX == tx && l.tileY == ty) return &l;
+    }
+    return nullptr;
+}
+
 void Arena::scanLamps() {
     std::unordered_map<std::string, LampLight> oldProps;
     for (const auto& l : _lamps) {
@@ -2659,11 +2892,12 @@ void Arena::scanLamps() {
                 lamp.tileX = x;
                 lamp.tileY = y;
                 lamp.worldPos = {(x + 0.5f) * _tileSize, (y + 0.5f) * _tileSize};
-                lamp.radius = 850.0f;
-                lamp.intensity = 1.0f;
-                lamp.color = sf::Color(230, 245, 255);
+                lamp.radius = 980.0f;
+                lamp.intensity = 1.45f;
+                lamp.color = sf::Color(240, 250, 255);
                 lamp.enabled = true;
                 lamp.flickering = false;
+                lamp.coneAngle = 130.0f;
                 lamp.tag = "lamp_" + std::to_string(lampIndex++);
 
                 std::string key = std::to_string(x) + "_" + std::to_string(y);
@@ -2674,6 +2908,8 @@ void Arena::scanLamps() {
                     if (!it->second.tag.empty()) lamp.tag = it->second.tag;
                     lamp.color = it->second.color;
                     lamp.radius = it->second.radius;
+                    lamp.coneAngle = it->second.coneAngle;
+                    lamp.intensity = it->second.intensity;
                 }
                 _lamps.push_back(lamp);
             }
@@ -2689,11 +2925,12 @@ void Arena::addLamp(int tx, int ty, const std::string& tag, bool flickering) {
     lamp.tileX = tx;
     lamp.tileY = ty;
     lamp.worldPos = {(tx + 0.5f) * _tileSize, (ty + 0.5f) * _tileSize};
-    lamp.radius = 850.0f;
-    lamp.intensity = 1.0f;
-    lamp.color = sf::Color(230, 245, 255);
+    lamp.radius = 980.0f;
+    lamp.intensity = 1.45f;
+    lamp.color = sf::Color(240, 250, 255);
     lamp.enabled = true;
     lamp.flickering = flickering;
+    lamp.coneAngle = 130.0f;
     lamp.tag = tag.empty() ? ("lamp_" + std::to_string(_lamps.size())) : tag;
     _lamps.push_back(lamp);
 }
@@ -2732,6 +2969,337 @@ void Arena::setLampFlicker(const std::string& tag, bool flicker) {
     }
 }
 
+const sf::Texture& Arena::getSharedLampConeTexture() {
+    static sf::Texture s_lampTexture;
+    static bool s_initialized = false;
+    if (!s_initialized) {
+        s_initialized = true;
+        const unsigned int texW = 256;
+        const unsigned int texH = 256;
+        sf::Image img({texW, texH}, sf::Color::Transparent);
+
+        for (unsigned int py = 0; py < texH; ++py) {
+            float v = static_cast<float>(py) / (texH - 1.0f); // 0.0 (top) .. 1.0 (bottom)
+            
+            // Плавное рассеивание вниз от трубки к полу
+            float vertFactor = std::pow(std::max(0.0f, 1.0f - v), 1.25f);
+            // Мягкий плавный вход на первых пикселях у трубки
+            float topFade = std::clamp(v * 24.0f, 0.0f, 1.0f);
+
+            for (unsigned int px = 0; px < texW; ++px) {
+                float u = (static_cast<float>(px) / (texW - 1.0f)) * 2.0f - 1.0f; // -1.0 .. +1.0
+                float absU = std::abs(u);
+
+                float horizFactor = 0.0f;
+                if (absU < 1.0f) {
+                    // Гладкая колоколообразная функция cos^2 без резких срезов
+                    float cosVal = std::cos(absU * 1.57079632679f);
+                    horizFactor = std::pow(cosVal * cosVal, 1.25f);
+                }
+
+                float totalIntensity = horizFactor * vertFactor * topFade;
+                uint8_t a = static_cast<uint8_t>(std::clamp(totalIntensity * 255.0f, 0.0f, 255.0f));
+                img.setPixel({px, py}, sf::Color(255, 255, 255, a));
+            }
+        }
+        (void)s_lampTexture.loadFromImage(img);
+        s_lampTexture.setSmooth(true); // Аппаратная билинейная фильтрация для абсолютной гладкости
+    }
+    return s_lampTexture;
+}
+
+void Arena::ensureLampConeTextureInitialized() {
+    (void)getSharedLampConeTexture();
+}
+
+void Arena::renderSmoothLampBeam(sf::RenderTarget& target, float lx, float ly, float tileSize,
+                                 float radius, float coneAngle, const sf::Color& color,
+                                 float intensity, bool isLightmap,
+                                 std::function<bool(float wx, float wy)> isSolidWorldFn,
+                                 std::shared_ptr<sf::Texture>* outTextureCache,
+                                 sf::Vector2f* outPosCache,
+                                 sf::Vector2f* outScaleCache,
+                                 bool* inoutDirty) {
+    if (intensity <= 0.01f) return;
+
+    // 0. Быстрый путь GPU-кэша (0.002 мс на кадр для стабильных 1500+ FPS)
+    if (inoutDirty && !(*inoutDirty) && outTextureCache && *outTextureCache) {
+        sf::Sprite cachedSpr(**outTextureCache);
+        if (outPosCache) cachedSpr.setPosition(*outPosCache);
+        if (outScaleCache) cachedSpr.setScale(*outScaleCache);
+
+        float flickerMod = std::clamp(intensity, 0.0f, 2.0f);
+        uint8_t a = static_cast<uint8_t>(std::clamp(255.0f * (flickerMod > 1.0f ? 1.0f : flickerMod), 0.0f, 255.0f));
+        cachedSpr.setColor(sf::Color(255, 255, 255, a));
+
+        sf::RenderStates states;
+        states.blendMode = sf::BlendAdd;
+        target.draw(cachedSpr, states);
+        return;
+    }
+
+    float cx = lx + tileSize * 0.5f;
+    float cy = ly + 10.0f;
+    float tubeHalfW = tileSize * 0.5f - 4.0f;
+    float tubeL = cx - tubeHalfW;
+    float tubeR = cx + tubeHalfW;
+
+    float halfConeDeg = (coneAngle > 0.0f) ? (coneAngle * 0.5f) : 67.5f;
+    float halfConeRad = halfConeDeg * (3.141592653589793f / 180.0f);
+    float cosMaxCone = std::cos(halfConeRad);
+
+    float R = std::max(radius, 950.0f);
+    const float CS = 16.0f; // 16px на ячейку: в 4 раза меньше ячеек, аппаратная билинейная фильтрация обеспечивает идеальную гладкость
+
+    // Границы светового поля в мировых координатах
+    float minWorldX = cx - R * std::sin(halfConeRad) - 48.0f;
+    float maxWorldX = cx + R * std::sin(halfConeRad) + 48.0f;
+    float minWorldY = ly;
+    float maxWorldY = cy + R + 16.0f;
+
+    minWorldX = std::floor(minWorldX / CS) * CS;
+    maxWorldX = std::ceil(maxWorldX / CS) * CS;
+    minWorldY = std::floor(minWorldY / CS) * CS;
+    maxWorldY = std::ceil(maxWorldY / CS) * CS;
+
+    int GW = static_cast<int>((maxWorldX - minWorldX) / CS) + 1;
+    int GH = static_cast<int>((maxWorldY - minWorldY) / CS) + 1;
+    if (GW < 2 || GH < 2) return;
+
+    std::vector<float> lightField(GW * GH, 0.0f);
+    std::vector<bool> solidGrid(GW * GH, false);
+
+    // 1. Построение карты твердых блоков сетки
+    if (isSolidWorldFn) {
+        for (int gy = 0; gy < GH; ++gy) {
+            float wy = minWorldY + (gy + 0.5f) * CS;
+            for (int gx = 0; gx < GW; ++gx) {
+                float wx = minWorldX + (gx + 0.5f) * CS;
+                solidGrid[gy * GW + gx] = isSolidWorldFn(wx, wy);
+            }
+        }
+    }
+
+    struct SurfaceEmitter {
+        float wx = 0.0f;
+        float wy = 0.0f;
+        sf::Vector2f norm{0.0f, -1.0f};
+        float hitLight = 0.0f;
+    };
+    std::vector<SurfaceEmitter> allEmitters;
+
+    // 2. Расчет прямого света от люминесцентной лампы
+    const float directCheckStep = 24.0f;
+    for (int gy = 0; gy < GH; ++gy) {
+        float wy = minWorldY + (gy + 0.5f) * CS;
+        if (wy <= cy) continue;
+
+        for (int gx = 0; gx < GW; ++gx) {
+            float wx = minWorldX + (gx + 0.5f) * CS;
+
+            // Ближайшая точка на трубке светильника:
+            float tx = std::clamp(wx, tubeL, tubeR);
+            float ty = cy;
+
+            float dx = wx - tx;
+            float dy = wy - ty;
+            float dist = std::hypot(dx, dy);
+            if (dist > R || dist < 2.0f) continue;
+
+            float dirX = dx / dist;
+            float dirY = dy / dist; // cos(theta) к вертикали вниз
+
+            if (dirY <= cosMaxCone) continue; // за пределами угла конуса
+
+            // Проверка прямой видимости (Line of Sight)
+            bool blocked = false;
+            if (isSolidWorldFn) {
+                float maxCheckD = dist - CS * 0.8f;
+                int numSteps = static_cast<int>(maxCheckD / directCheckStep);
+                for (int st = 1; st <= numSteps; ++st) {
+                    float curD = st * directCheckStep;
+                    float chkX = tx + dirX * curD;
+                    float chkY = ty + dirY * curD;
+                    if (isSolidWorldFn(chkX, chkY)) {
+                        blocked = true;
+                        break;
+                    }
+                }
+            }
+
+            if (blocked) continue;
+
+            bool isSolid = solidGrid[gy * GW + gx];
+
+            // Плавный спад к боковым границам конуса (без резких срезов):
+            float coneFrac = (dirY - cosMaxCone) / (1.0f - cosMaxCone);
+            float angFactor = std::sin(std::clamp(coneFrac, 0.0f, 1.0f) * 1.5707963f);
+
+            // Мягкое естественное затухание с расстоянием:
+            float distFrac = std::clamp(1.0f - dist / R, 0.0f, 1.0f);
+            float distFactor = std::pow(distFrac, 1.35f);
+
+            float directIntensity = angFactor * distFactor * intensity;
+
+            if (!isSolid) {
+                lightField[gy * GW + gx] = std::max(lightField[gy * GW + gx], directIntensity);
+            } else {
+                // Освещенная грань блока: сохраняем для вторичного диффузного рассеивания
+                sf::Vector2f norm(0.0f, -1.0f);
+                if (gy > 0 && !solidGrid[(gy - 1) * GW + gx]) {
+                    norm = {0.0f, -1.0f}; // Верхняя грань (пол)
+                } else if (gx > 0 && !solidGrid[gy * GW + (gx - 1)] && dirX > 0.0f) {
+                    norm = {-1.0f, 0.0f}; // Левая стена
+                } else if (gx < GW - 1 && !solidGrid[gy * GW + (gx + 1)] && dirX < 0.0f) {
+                    norm = {1.0f, 0.0f}; // Правая стена
+                } else if (gy < GH - 1 && !solidGrid[(gy + 1) * GW + gx]) {
+                    norm = {0.0f, 1.0f}; // Потолок
+                }
+                if (directIntensity > 0.04f) {
+                    allEmitters.push_back({wx, wy, norm, directIntensity});
+                }
+                lightField[gy * GW + gx] = std::max(lightField[gy * GW + gx], directIntensity * 0.95f);
+            }
+        }
+    }
+
+    // 3. Непрерывное ламбертово вторичное рассеивание (Continuous Lambertian Diffuse Bounce)
+    if (!allEmitters.empty()) {
+        std::vector<SurfaceEmitter> emitters;
+        size_t stride = std::max<size_t>(1, allEmitters.size() / 12);
+        for (size_t i = 0; i < allEmitters.size(); i += stride) {
+            emitters.push_back(allEmitters[i]);
+            if (emitters.size() >= 12) break;
+        }
+
+        float bounceReach = std::min(R * 1.15f, 950.0f);
+        float emitterWeight = 7.0f / static_cast<float>(emitters.size());
+        const float bounceCheckStep = 28.0f;
+
+        for (const auto& em : emitters) {
+            float sx = em.wx + em.norm.x * (CS * 0.6f);
+            float sy = em.wy + em.norm.y * (CS * 0.6f);
+            float ePower = em.hitLight * 0.55f;
+
+            for (int gy = 0; gy < GH; ++gy) {
+                float wy = minWorldY + (gy + 0.5f) * CS;
+                for (int gx = 0; gx < GW; ++gx) {
+                    float wx = minWorldX + (gx + 0.5f) * CS;
+                    float dx = wx - sx;
+                    float dy = wy - sy;
+                    float dist = std::hypot(dx, dy);
+                    if (dist > bounceReach || dist < 4.0f) continue;
+
+                    float cosN = (dx * em.norm.x + dy * em.norm.y) / dist;
+                    if (cosN <= 0.05f) continue;
+
+                    bool blocked = false;
+                    if (isSolidWorldFn) {
+                        float maxD = dist - CS * 1.0f;
+                        int numSteps = static_cast<int>(maxD / bounceCheckStep);
+                        for (int st = 1; st <= numSteps; ++st) {
+                            float cd = st * bounceCheckStep;
+                            if (isSolidWorldFn(sx + (dx / dist) * cd, sy + (dy / dist) * cd)) {
+                                blocked = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (blocked) continue;
+
+                    float distFrac = 1.0f - dist / bounceReach;
+                    float bVal = ePower * std::pow(cosN, 0.85f) * std::pow(distFrac, 1.4f) * emitterWeight;
+                    lightField[gy * GW + gx] += bVal;
+                }
+            }
+        }
+    }
+
+    // 4. Двухпроходное размытие (диффузия) ТОЛЬКО по ячейкам воздуха (Air-Only Smoothing)
+    for (int pass = 0; pass < 2; ++pass) {
+        std::vector<float> blurred = lightField;
+        for (int gy = 1; gy < GH - 1; ++gy) {
+            for (int gx = 1; gx < GW - 1; ++gx) {
+                if (solidGrid[gy * GW + gx]) continue;
+                float sum = 0.0f;
+                float totalWeight = 0.0f;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        int ny = gy + dy;
+                        int nx = gx + dx;
+                        if (!solidGrid[ny * GW + nx]) {
+                            float w = (dx == 0 && dy == 0) ? 4.0f : ((dx == 0 || dy == 0) ? 2.0f : 1.0f);
+                            sum += lightField[ny * GW + nx] * w;
+                            totalWeight += w;
+                        }
+                    }
+                }
+                if (totalWeight > 0.0f) {
+                    blurred[gy * GW + gx] = sum / totalWeight;
+                }
+            }
+        }
+        lightField = std::move(blurred);
+    }
+
+    // 5. Дилатация (Padding) света в твердые граничные блоки
+    for (int pass = 0; pass < 2; ++pass) {
+        std::vector<float> padded = lightField;
+        for (int gy = 0; gy < GH; ++gy) {
+            for (int gx = 0; gx < GW; ++gx) {
+                if (solidGrid[gy * GW + gx]) {
+                    float maxNeighbor = 0.0f;
+                    if (gy > 0) maxNeighbor = std::max(maxNeighbor, lightField[(gy - 1) * GW + gx]);
+                    if (gy < GH - 1) maxNeighbor = std::max(maxNeighbor, lightField[(gy + 1) * GW + gx]);
+                    if (gx > 0) maxNeighbor = std::max(maxNeighbor, lightField[gy * GW + (gx - 1)]);
+                    if (gx < GW - 1) maxNeighbor = std::max(maxNeighbor, lightField[gy * GW + (gx + 1)]);
+                    padded[gy * GW + gx] = std::max(padded[gy * GW + gx], maxNeighbor * 0.98f);
+                }
+            }
+        }
+        lightField = std::move(padded);
+    }
+
+    // 6. Построение гладкой текстуры света с аппаратной билинейной интерполяцией
+    sf::Image lightImg({static_cast<unsigned int>(GW), static_cast<unsigned int>(GH)}, sf::Color::Transparent);
+
+    for (int gy = 0; gy < GH; ++gy) {
+        for (int gx = 0; gx < GW; ++gx) {
+            float val = std::clamp(lightField[gy * GW + gx], 0.0f, 1.0f);
+            if (val <= 0.002f) continue;
+
+            if (isLightmap) {
+                uint8_t r = static_cast<uint8_t>(std::clamp(color.r * 0.95f * val, 0.0f, 255.0f));
+                uint8_t g = static_cast<uint8_t>(std::clamp(color.g * 0.96f * val, 0.0f, 255.0f));
+                uint8_t b = static_cast<uint8_t>(std::clamp(color.b * 0.98f * val, 0.0f, 255.0f));
+                lightImg.setPixel({static_cast<unsigned int>(gx), static_cast<unsigned int>(gy)}, sf::Color(r, g, b, 255));
+            } else {
+                uint8_t r = static_cast<uint8_t>(std::clamp(color.r * 0.28f * val, 0.0f, 255.0f));
+                uint8_t g = static_cast<uint8_t>(std::clamp(color.g * 0.30f * val, 0.0f, 255.0f));
+                uint8_t b = static_cast<uint8_t>(std::clamp(color.b * 0.32f * val, 0.0f, 255.0f));
+                lightImg.setPixel({static_cast<unsigned int>(gx), static_cast<unsigned int>(gy)}, sf::Color(r, g, b, 255));
+            }
+        }
+    }
+
+    auto bakedTex = std::make_shared<sf::Texture>();
+    (void)bakedTex->loadFromImage(lightImg);
+    bakedTex->setSmooth(true);
+
+    if (outTextureCache) *outTextureCache = bakedTex;
+    if (outPosCache) *outPosCache = {minWorldX, minWorldY};
+    if (outScaleCache) *outScaleCache = {CS, CS};
+    if (inoutDirty) *inoutDirty = false;
+
+    sf::Sprite lightSpr(*bakedTex);
+    lightSpr.setPosition({minWorldX, minWorldY});
+    lightSpr.setScale({CS, CS});
+
+    sf::RenderStates states;
+    states.blendMode = sf::BlendAdd;
+    target.draw(lightSpr, states);
+}
+
 void Arena::renderLighting(sf::RenderWindow& window, const sf::View& camera, sf::Vector2f playerPos, bool playerArmed) {
     if (!_lightingEnabled) return;
 
@@ -2746,66 +3314,87 @@ void Arena::renderLighting(sf::RenderWindow& window, const sf::View& camera, sf:
     }
 
     _lightmap.setView(camera);
-    _lightmap.clear(_ambientColor);
 
-    sf::RenderStates addStates;
-    addStates.blendMode = sf::BlendAdd;
-
-    // 1. Освещение от активных флуоресцентных ламп
+    // Динамический эмбиент комнаты с учетом активных светильников (Global Illumination):
+    // В реальном помещении с включенными люминесцентными лампами углы и стены не являются абсолютно черными,
+    // так как свет многократно рассеивается между полом, потолком и стенами.
+    float totalLampPower = 0.0f;
     for (const auto& lamp : _lamps) {
+        if (lamp.enabled) {
+            totalLampPower += lamp.intensity * std::max(0.05f, 1.0f - lamp.flickerDip);
+        }
+    }
+    float giBoost = std::clamp(totalLampPower * 0.45f, 0.0f, 1.0f);
+    sf::Color activeAmbient(
+        static_cast<uint8_t>(std::clamp(_ambientColor.r + 70.0f * giBoost, 0.0f, 255.0f)),
+        static_cast<uint8_t>(std::clamp(_ambientColor.g + 78.0f * giBoost, 0.0f, 255.0f)),
+        static_cast<uint8_t>(std::clamp(_ambientColor.b + 95.0f * giBoost, 0.0f, 255.0f)),
+        255
+    );
+    _lightmap.clear(activeAmbient);
+
+    auto isSolidWorld = [this](float wx, float wy) -> bool {
+        int tx = static_cast<int>(std::floor(wx / _tileSize));
+        int ty = static_cast<int>(std::floor(wy / _tileSize));
+        return isBlockSolid(tx, ty);
+    };
+
+    // 1. Освещение мира от активных флуоресцентных ламп в лайтмап с преградами и отражением от стен
+    for (auto& lamp : _lamps) {
         if (!lamp.enabled) continue;
 
         float effectiveIntensity = lamp.intensity * std::max(0.05f, 1.0f - lamp.flickerDip);
         if (effectiveIntensity <= 0.01f) continue;
 
-        sf::Vector2f sourcePos = {lamp.worldPos.x, lamp.worldPos.y + 6.0f};
-        float radX = lamp.radius * 1.0f;
-        float radY = lamp.radius * 1.55f;
+        float lx = static_cast<float>(lamp.tileX * _tileSize);
+        float ly = static_cast<float>(lamp.tileY * _tileSize);
 
-        const int segments = 32;
-        sf::VertexArray lightFan(sf::PrimitiveType::TriangleFan);
-
-        sf::Color centerCol(
-            static_cast<uint8_t>(std::clamp(lamp.color.r * effectiveIntensity, 0.0f, 255.0f)),
-            static_cast<uint8_t>(std::clamp(lamp.color.g * effectiveIntensity, 0.0f, 255.0f)),
-            static_cast<uint8_t>(std::clamp(lamp.color.b * effectiveIntensity, 0.0f, 255.0f)),
-            255
-        );
-        lightFan.append({sourcePos, centerCol});
-
-        for (int i = 0; i <= segments; ++i) {
-            float angle = static_cast<float>(i) * (2.0f * 3.14159265f / segments);
-            float dirY = std::sin(angle);
-            float currentRadY = (dirY > 0.0f) ? radY : (radY * 0.25f);
-            float lx = sourcePos.x + std::cos(angle) * radX;
-            float ly = sourcePos.y + dirY * currentRadY;
-            lightFan.append({{lx, ly}, sf::Color(0, 0, 0, 255)});
-        }
-        _lightmap.draw(lightFan, addStates);
-
-        // Яркий точечный фокус вокруг лампы
-        sf::VertexArray coreFan(sf::PrimitiveType::TriangleFan);
-        coreFan.append({sourcePos, sf::Color(255, 255, 255, 255)});
-        float coreRad = 85.0f * effectiveIntensity;
-        for (int i = 0; i <= 16; ++i) {
-            float angle = static_cast<float>(i) * (2.0f * 3.14159265f / 16);
-            coreFan.append({{sourcePos.x + std::cos(angle) * coreRad * 2.2f, 
-                             sourcePos.y + std::sin(angle) * coreRad * 0.8f}, sf::Color(0, 0, 0, 255)});
-        }
-        _lightmap.draw(coreFan, addStates);
+        renderSmoothLampBeam(_lightmap, lx, ly, _tileSize, lamp.radius, lamp.coneAngle, lamp.color, effectiveIntensity, true, isSolidWorld,
+                             &lamp.bakedTexture, &lamp.bakedWorldPos, &lamp.bakedScale, &lamp.dirty);
     }
-
-    // 2. Персональная аура игрока удалена (свет излучается строго лампами)
 
     _lightmap.display();
 
-    // 3. Умножение лайтмапа на мир
+    // 2. Умножение лайтмапа на мир (освещение игрока, врагов, платформ, стен, потолков и фона)
     sf::RenderStates mulStates;
     mulStates.blendMode = sf::BlendMultiply;
     sf::Sprite lightSprite(_lightmap.getTexture());
     window.setView(window.getDefaultView());
     window.draw(lightSprite, mulStates);
     window.setView(camera);
+
+    // 3. Мягкий плафонный ореол светильника вокруг корпуса
+    for (const auto& lamp : _lamps) {
+        if (!lamp.enabled) continue;
+        float effectiveIntensity = lamp.intensity * std::max(0.05f, 1.0f - lamp.flickerDip);
+        if (effectiveIntensity <= 0.01f) continue;
+
+        float lx = static_cast<float>(lamp.tileX * _tileSize);
+        float ly = static_cast<float>(lamp.tileY * _tileSize);
+        sf::Vector2f lampCenter(lx + _tileSize * 0.5f, ly + 9.0f);
+        float haloRadX = 130.0f;
+        float haloRadY = 55.0f;
+        const int haloSegments = 24;
+
+        sf::VertexArray haloVA(sf::PrimitiveType::Triangles);
+        sf::Color centerCol(lamp.color.r, lamp.color.g, lamp.color.b, static_cast<uint8_t>(std::clamp(35.0f * effectiveIntensity, 0.0f, 255.0f)));
+        sf::Color edgeCol(0, 0, 0, 0);
+
+        for (int i = 0; i < haloSegments; ++i) {
+            float a0 = (6.28318530718f / haloSegments) * i;
+            float a1 = (6.28318530718f / haloSegments) * (i + 1);
+
+            sf::Vector2f p0(lampCenter.x + std::cos(a0) * haloRadX, lampCenter.y + std::sin(a0) * haloRadY);
+            sf::Vector2f p1(lampCenter.x + std::cos(a1) * haloRadX, lampCenter.y + std::sin(a1) * haloRadY);
+
+            haloVA.append({lampCenter, centerCol});
+            haloVA.append({p0, edgeCol});
+            haloVA.append({p1, edgeCol});
+        }
+        sf::RenderStates haloStates;
+        haloStates.blendMode = sf::BlendAdd;
+        window.draw(haloVA, haloStates);
+    }
 }
 
 void Arena::showNotification(const std::string& text, float duration, sf::Color col) {

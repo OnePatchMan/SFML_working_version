@@ -494,7 +494,7 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
 void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float w, float h) {
     if (!_font) return;
 
-    sf::Text hint(*_font, toSfString("ОБОЗНАЧЕНИЯ: 1 = ЛКМ | 2 = ПКМ | dw = Вниз (S) | u = Вверх (W) | d = Дэш (Shift) | df = Дэш вперед | db = Дэш назад | f = Вперед | b = Назад | a = В воздухе | [ОРУЖИЕ] / [РУКИ]"), 12);
+    sf::Text hint(*_font, toSfString("ОБОЗНАЧЕНИЯ: 1 = ЛКМ | 2 = ПКМ | dw = Вниз (S) | u = Вверх (W) | d = Дэш (Shift) | df = Дэш вперед | db = Дэш назад | a = В воздухе"), 12);
     hint.setFillColor(sf::Color(140, 195, 255));
     hint.setPosition(sf::Vector2f(x + 20.0f, y + 12.0f));
     window.draw(hint);
@@ -516,11 +516,7 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         {"a1 -> adw2", "Ground Bounce [РУКИ]", "Удар в воздухе (a1) -> дайв-слэм вниз (adw2): вбивание в пол с отскоком вверх", sf::Color(255, 90, 30)},
         {"a1 -> a1 -> adw2", "Dual Dive Slam [РУКИ]", "Два удара в воздухе (a1) -> финальный дайв-слэм вниз (adw2) об пол с отскоком", sf::Color(255, 75, 25)},
         {"a1 -> a2", "Air Push [РУКИ]", "Удар в воздухе (a1) и тяжелый толчок (a2) далеко по горизонтали", sf::Color(220, 130, 255)},
-        {"1 -> 2 -> df2", "Dash Smash [РУКИ]", "Джеб -> силовой удар -> дэш вперед со смешем (df2) строго по горизонтали", sf::Color(255, 180, 60)},
-        {"1 -> 2 -> f1", "Bat Swing [ОРУЖИЕ]", "Джеб -> удар об пол (2) -> сокрушительный удар булавой словно битой (f1)", sf::Color(255, 125, 40)},
-        {"b2 -> 1 -> u2", "Sky Launcher [ОРУЖИЕ]", "Дальний зацеп булавой (b2) -> тычок рукояткой (1) -> взмах (u2) в небо", sf::Color(255, 70, 120)},
-        {"1 -> 2 -> 1", "Tenderizer Push [ОРУЖИЕ]", "Джеб -> удар об пол -> силовой толчок по X на расстояние чуть меньше рывка", sf::Color(255, 165, 45)},
-        {"db1 -> u1", "Sky Pop-Up [ОРУЖИЕ]", "Удар назад с разворотом (db1) -> апперкот (u1) с подбросом под диагональный бросок", sf::Color(255, 110, 180)}
+        {"1 -> 2 -> df2", "Dash Smash [РУКИ]", "Джеб -> силовой удар -> дэш вперед со смешем (df2) строго по горизонтали", sf::Color(255, 180, 60)}
     };
 
     float startRowY = y + 26.0f;
@@ -583,6 +579,96 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
     antiSpam.setFillColor(sf::Color(255, 195, 65));
     antiSpam.setPosition(sf::Vector2f(x + 25.0f, noteY + 5.0f));
     window.draw(antiSpam);
+}
+
+void MenuSystem::drawWeaponCombosTab(sf::RenderWindow& window, float x, float y, float w, float h) {
+    if (!_font) return;
+
+    sf::Text hint(*_font, toSfString("ОБОЗНАЧЕНИЯ: dw1 = Вниз+ЛКМ | j = Прыжок (Space) | adw1 = Вниз+ЛКМ в воздухе | f1/f2 = Вперед+Атака | b2 = Назад+ПКМ"), 12);
+    hint.setFillColor(sf::Color(255, 180, 80));
+    hint.setPosition(sf::Vector2f(x + 20.0f, y + 12.0f));
+    window.draw(hint);
+
+    struct ComboGuideItem {
+        std::string inputs;
+        std::string name;
+        std::string desc;
+        sf::Color col;
+    };
+
+    std::vector<ComboGuideItem> items = {
+        {"dw1 -> j -> adu2", "Air Grab Meteor Slam [ОРУЖИЕ]", "Топот о пол (dw1) -> прыжок [Space] -> дэш и захват цели над собой (adu2) со слэмом о пол", sf::Color(255, 95, 35)},
+        {"dw1 -> j -> adw1", "Stomp & Sky Hook [ОРУЖИЕ]", "Топот о пол (dw1) -> прыжок [Space] -> зацеп крюком (adw1) ввысь с зависанием", sf::Color(255, 160, 40)},
+        {"dw1 -> adw1", "Quick Sky Hook [ОРУЖИЕ]", "Прямая воздушная связка: топот о землю + удар крюком под себя в воздухе", sf::Color(255, 175, 50)},
+        {"1 -> 2 -> f1", "Bat Swing Smash [ОРУЖИЕ]", "Джеб (1) -> удар о землю (2) -> сокрушительный удар булавой словно битой (f1)", sf::Color(255, 125, 40)},
+        {"b2 -> 1 -> u2", "Sky Launcher [ОРУЖИЕ]", "Дальний зацеп булавой (b2) -> тычок рукоятью (1) -> апперкот булавой (u2) в небо", sf::Color(255, 70, 120)},
+        {"1 -> 2 -> 1", "Tenderizer Push [ОРУЖИЕ]", "Джеб (1) -> удар о землю (2) -> силовой горизонтальный толчок булавой (1)", sf::Color(255, 165, 45)},
+        {"db1 -> u1", "Reverse Sky Pop-Up [ОРУЖИЕ]", "Удар назад с разворотом (db1) -> апперкот булавой (u1) с вертикальным подбросом", sf::Color(255, 110, 180)},
+        {"dw1 (стоя)", "Mace Ground Stomp", "Нижний силовой удар булавой о пол: пробивает верхний блок и подбрасывает цель", sf::Color(255, 190, 70)},
+        {"b2 (дальний)", "Mace Reach Hook", "Дальний притягивающий взмах булавой: подтягивает врага ближе к игроку", sf::Color(255, 90, 130)},
+        {"R / ПКМ", "Throw & Retrieve", "Бросок булавы по 8 направлениям (вверх зависает для джаггла; повторно притягивает)", sf::Color(100, 220, 255)}
+    };
+
+    float startRowY = y + 26.0f;
+    float rowH = 24.0f;
+
+    for (size_t i = 0; i < items.size(); ++i) {
+        float ry = startRowY + i * rowH;
+
+        sf::RectangleShape rowBg({w - 30.0f, rowH - 2.0f});
+        rowBg.setPosition(sf::Vector2f(x + 15.0f, ry));
+        rowBg.setFillColor((i % 2 == 0) ? sf::Color(14, 16, 22, 255) : sf::Color(18, 20, 28, 255));
+        rowBg.setOutlineThickness(1.0f);
+        rowBg.setOutlineColor(sf::Color(35, 42, 55));
+        window.draw(rowBg);
+
+        // Инпуты комбо
+        sf::Text txtIn(*_font, toSfString(items[i].inputs), 12);
+        txtIn.setStyle(sf::Text::Bold);
+        txtIn.setFillColor(items[i].col);
+        txtIn.setPosition(sf::Vector2f(x + 28.0f, ry + 1.0f));
+        window.draw(txtIn);
+
+        // Разделитель
+        sf::RectangleShape div1({2.0f, 15.0f});
+        div1.setPosition(sf::Vector2f(x + 210.0f, ry + 3.0f));
+        div1.setFillColor(sf::Color(48, 65, 92, 170));
+        window.draw(div1);
+
+        // Имя комбо
+        sf::Text txtName(*_font, toSfString(items[i].name), 12);
+        txtName.setStyle(sf::Text::Bold);
+        txtName.setFillColor(sf::Color(245, 250, 255));
+        txtName.setPosition(sf::Vector2f(x + 225.0f, ry + 1.0f));
+        window.draw(txtName);
+
+        // Разделитель
+        sf::RectangleShape div2({2.0f, 15.0f});
+        div2.setPosition(sf::Vector2f(x + 470.0f, ry + 3.0f));
+        div2.setFillColor(sf::Color(48, 65, 92, 170));
+        window.draw(div2);
+
+        // Описание эффекта на всю оставшуюся ширину
+        sf::Text txtDesc(*_font, toSfString(items[i].desc), 11);
+        txtDesc.setFillColor(sf::Color(190, 208, 230));
+        txtDesc.setPosition(sf::Vector2f(x + 485.0f, ry + 2.0f));
+        window.draw(txtDesc);
+    }
+
+    // Подсказка по оружию внизу
+    float noteY = startRowY + static_cast<float>(items.size()) * rowH + 10.0f;
+    sf::RectangleShape noteBg({w - 30.0f, 26.0f});
+    noteBg.setPosition(sf::Vector2f(x + 15.0f, noteY));
+    noteBg.setFillColor(sf::Color(20, 30, 42, 220));
+    noteBg.setOutlineThickness(1.0f);
+    noteBg.setOutlineColor(sf::Color(45, 120, 200, 200));
+    window.draw(noteBg);
+
+    sf::Text weaponNote(*_font, toSfString("[i] ОРУЖИЕ В БОЮ: Чтобы подобрать брошенную булаву, подойдите к ней или нажмите [R] / [ПКМ]. С оружием в руках все атаки наносят повышенный урон!"), 11);
+    weaponNote.setStyle(sf::Text::Bold);
+    weaponNote.setFillColor(sf::Color(120, 210, 255));
+    weaponNote.setPosition(sf::Vector2f(x + 25.0f, noteY + 5.0f));
+    window.draw(weaponNote);
 }
 
 void MenuSystem::drawMechanicsTab(sf::RenderWindow& window, float x, float y, float w, float h) {
@@ -727,28 +813,35 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
     bool justClicked = mouseClicked && !prevMouse;
     prevMouse = mouseClicked;
 
-    // Вкладки гайда
-    float tabW = 300.0f;
+    // Вкладки гайда (4 вкладки)
+    float tabW = 230.0f;
     float tabH = 42.0f;
     float tabY = topH + 16.0f;
-    float tabsStartX = cx - (tabW * 3.0f + 24.0f) * 0.5f;
+    float tabsStartX = cx - (tabW * 4.0f + 36.0f) * 0.5f;
 
-    Button btnTabCombos{{{tabsStartX, tabY}, {tabW, tabH}}, "1. КОМБО-ЦЕПОЧКИ",
-                       sf::Color(24, 24, 28), sf::Color(44, 44, 52), sf::Color(75, 75, 84), 16};
+    Button btnTabCombos{{{tabsStartX, tabY}, {tabW, tabH}}, "1. РУКОПАШНЫЕ КОМБО",
+                       sf::Color(24, 24, 28), sf::Color(44, 44, 52), sf::Color(75, 75, 84), 14};
     if (drawButton(window, btnTabCombos, mousePos, _guideTab == GuideTab::COMBOS) && justClicked) {
         _guideTab = GuideTab::COMBOS;
         SoundManager::get().play("1", 30.0f);
     }
 
-    Button btnTabMech{{{tabsStartX + tabW + 12.0f, tabY}, {tabW, tabH}}, "2. МЕХАНИКИ БОЯ",
-                     sf::Color(24, 24, 28), sf::Color(44, 44, 52), sf::Color(75, 75, 84), 16};
+    Button btnTabWeapon{{{tabsStartX + tabW + 12.0f, tabY}, {tabW, tabH}}, "2. КОМБО С ОРУЖИЕМ",
+                       sf::Color(24, 24, 28), sf::Color(44, 44, 52), sf::Color(75, 75, 84), 14};
+    if (drawButton(window, btnTabWeapon, mousePos, _guideTab == GuideTab::WEAPON_COMBOS) && justClicked) {
+        _guideTab = GuideTab::WEAPON_COMBOS;
+        SoundManager::get().play("1", 30.0f);
+    }
+
+    Button btnTabMech{{{tabsStartX + (tabW + 12.0f) * 2.0f, tabY}, {tabW, tabH}}, "3. МЕХАНИКИ БОЯ",
+                     sf::Color(24, 24, 28), sf::Color(44, 44, 52), sf::Color(75, 75, 84), 14};
     if (drawButton(window, btnTabMech, mousePos, _guideTab == GuideTab::MECHANICS) && justClicked) {
         _guideTab = GuideTab::MECHANICS;
         SoundManager::get().play("1", 30.0f);
     }
 
-    Button btnTabEnemies{{{tabsStartX + (tabW + 12.0f) * 2.0f, tabY}, {tabW, tabH}}, "3. АРХЕТИПЫ ВРАГОВ",
-                        sf::Color(24, 24, 28), sf::Color(44, 44, 52), sf::Color(75, 75, 84), 16};
+    Button btnTabEnemies{{{tabsStartX + (tabW + 12.0f) * 3.0f, tabY}, {tabW, tabH}}, "4. АРХЕТИПЫ ВРАГОВ",
+                        sf::Color(24, 24, 28), sf::Color(44, 44, 52), sf::Color(75, 75, 84), 14};
     if (drawButton(window, btnTabEnemies, mousePos, _guideTab == GuideTab::ENEMIES) && justClicked) {
         _guideTab = GuideTab::ENEMIES;
         SoundManager::get().play("1", 30.0f);
@@ -771,6 +864,8 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
 
     if (_guideTab == GuideTab::COMBOS) {
         drawCombosTab(window, contentX, contentY, contentW, contentH);
+    } else if (_guideTab == GuideTab::WEAPON_COMBOS) {
+        drawWeaponCombosTab(window, contentX, contentY, contentW, contentH);
     } else if (_guideTab == GuideTab::MECHANICS) {
         drawMechanicsTab(window, contentX, contentY, contentW, contentH);
     } else if (_guideTab == GuideTab::ENEMIES) {

@@ -24,7 +24,7 @@ private:
 public:
     Animation(const std::string& filename, bool isLooping, 
               sf::Vector2f position = {0.0f, 0.0f}) 
-        : _isLooping(isLooping), _currentFrame(0), _facingRight(true), _spritePosition(position) 
+        : _currentFrame(0), _isLooping(isLooping), _facingRight(true), _spritePosition(position) 
     {
         std::string resolved = resolveAssetPath(filename);
         if (!_animationTexture.loadFromFile(resolved)) {

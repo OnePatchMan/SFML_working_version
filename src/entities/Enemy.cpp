@@ -3,9 +3,11 @@
 #include "audio/SoundManager.h"
 #include "combat/CombatSystem.h"
 #include <iostream>
+#include <filesystem>
+#include <algorithm>
 
 Enemy::Enemy(sf::Vector2f spawnPos, EnemyType type)
-    : position(spawnPos), spawnPosition(spawnPos), patrolStartX(spawnPos.x), enemyType(type)
+    : position(spawnPos), spawnPosition(spawnPos), enemyType(type), patrolStartX(spawnPos.x)
 {
     setType(type);
 }
@@ -97,8 +99,8 @@ void Enemy::setType(EnemyType type) {
         damageMultiplier = 0.0f;
         hitboxScale = 1.0f;
         windupMultiplier = 1.0f;
-        canCounter = false;
-        canBlock = false;
+        canCounter = true;
+        canBlock = true;
         canDodge = false;
         aggressiveness = 0.0f;
         intelligence = 0.0f;
@@ -193,15 +195,15 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
         if (blockDefended) {
             blockStunTimer = 0.14f;
             if (dummyBlockMode == DummyBlockMode::AFTER_HIT) {
-                // Если удар заблокирован в окне блока — продолжаем удерживать блок на 1с
                 dummyBlockHoldTimer = 1.0f;
             }
         } else {
             if (dummyBlockMode == DummyBlockMode::AFTER_HIT) {
-                // Чистое попадание / пробитие блока: сбрасываем блок и взводим флаг
-                // "поднять блок на 1с ровно по окончании этого стана"
+                // Чистое попадание / пробитие: сбрасываем стойку и взводим флаг
+                // "нажать контратаку ровно по окончании этого стана"
                 isBlocking = false;
                 blockType = BlockType::NONE;
+                counterStanceTimer = 0.0f;
                 dummyBlockHoldTimer = 0.0f;
                 dummyNeedsBlockAfterStun = true;
             }
@@ -218,7 +220,7 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
         }
 
         dummyAccumDamage += effectiveAmount;
-        dummyResetTimer = 5.0f; // сбрасывается каждые 5.0 секунд после прекращения ударов
+        dummyResetTimer = 2.0f; // сбрасывается каждые 2.0 секунды после прекращения ударов
         dummyOutOfStunTimer = 0.0f;
 
         // Всплывающее уведомление над головой (вылетает и плавно исчезает)
@@ -631,18 +633,25 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 }
                 isBlocking = true;
             } else if (dummyBlockMode == DummyBlockMode::AFTER_HIT) {
-                // Режим "Блок после удара / в окно"
-                if (hurtTimer > 0.0f && blockStunTimer <= 0.0f) {
-                    // Пока манекен находится в стане от полученного удара — блок строго опущен
-                    isBlocking = false;
-                    blockType = BlockType::NONE;
+                // Режим "Контратака после удара / в окно"
+                isBlocking = false;
+                blockType = BlockType::NONE;
+                if (hurtTimer > 0.0f) {
+                    // Пока манекен находится в стане от полученного удара — контратака не активна
+                    counterStanceTimer = 0.0f;
                     dummyBlockHoldTimer = 0.0f;
                     dummyNeedsBlockAfterStun = true;
                 } else {
-                    // Стан закончился (или манекен в блок-стане)!
+                    // Стан закончился — манекен жмет контратаку на 1 секунду!
                     if (dummyNeedsBlockAfterStun) {
                         dummyNeedsBlockAfterStun = false;
-                        dummyBlockHoldTimer = 1.0f; // Поднимаем блок ровно на 1 секунду!
+                        canCounter = true;
+                        counterCooldownTimer = 0.0f;
+                        triggerCounterStance();
+                        counterStanceTimer = 1.0f;
+                        dummyBlockHoldTimer = 1.0f;
+                        isFacingLeft = (playerPos.x < position.x);
+                        currentComboName = "DUMMY: REVERSAL COUNTER!";
                     }
 
                     if (dummyBlockHoldTimer > 0.0f) {
@@ -650,19 +659,6 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                         if (dummyBlockHoldTimer <= 0.0f) {
                             dummyBlockHoldTimer = 0.0f;
                         }
-                    }
-
-                    if (dummyBlockHoldTimer > 0.0f || blockStunTimer > 0.0f) {
-                        isBlocking = true;
-                        isFacingLeft = (playerPos.x < position.x);
-                        if (playerPos.y > position.y + 15.0f) {
-                            blockType = BlockType::LOW;
-                        } else {
-                            blockType = BlockType::HIGH;
-                        }
-                    } else {
-                        isBlocking = false;
-                        blockType = BlockType::NONE;
                     }
                 }
             } else {
@@ -795,15 +791,22 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         counterStanceTimer -= dt;
         velocity.x *= 0.1f; // Стоит на месте в стойке парирования
         if (counterStanceTimer <= 0.0f) {
-            // ПРОМАХ СТОЙКИ ПАРИРОВАНИЯ БОТА (WHIFF)!
-            // Игрок не ударил бота во время стойки — бот получает ДОЛГИЙ СТАН!
             counterStanceTimer = 0.0f;
-            const auto& ecfg = getEConfig();
-            hurtTimer = ecfg.counter.whiffStun; // Долгий стан бота (1.2с)!
-            attackState = EnemyAttackState::IDLE;
-            attackStateTimer = 0.0f;
-            attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
-            currentComboName = "BOT COUNTER WHIFFED! [STUNNED]";
+            if (enemyType == EnemyType::DUMMY) {
+                attackState = EnemyAttackState::IDLE;
+                attackStateTimer = 0.0f;
+                attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+                currentComboName = "DUMMY: IDLE";
+            } else {
+                // ПРОМАХ СТОЙКИ ПАРИРОВАНИЯ БОТА (WHIFF)!
+                // Игрок не ударил бота во время стойки — бот получает ДОЛГИЙ СТАН!
+                const auto& ecfg = getEConfig();
+                hurtTimer = ecfg.counter.whiffStun; // Долгий стан бота (1.2с)!
+                attackState = EnemyAttackState::IDLE;
+                attackStateTimer = 0.0f;
+                attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+                currentComboName = "BOT COUNTER WHIFFED! [STUNNED]";
+            }
         }
     }
 
@@ -813,10 +816,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             hurtTimer = 0.0f;
             if (enemyType == EnemyType::DUMMY && dummyBlockMode == DummyBlockMode::AFTER_HIT && isOnGround && dummyNeedsBlockAfterStun) {
                 dummyNeedsBlockAfterStun = false;
+                canCounter = true;
+                counterCooldownTimer = 0.0f;
+                triggerCounterStance();
+                counterStanceTimer = 1.0f;
                 dummyBlockHoldTimer = 1.0f;
-                isBlocking = true;
+                isBlocking = false;
+                blockType = BlockType::NONE;
                 isFacingLeft = (playerPos.x < position.x);
-                blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
+                currentComboName = "DUMMY: REVERSAL COUNTER!";
             }
         }
         attackState = EnemyAttackState::IDLE;
@@ -2085,7 +2093,6 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
 
         case AIComboState::COMBO_FINISHED: {
-            const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 aiComboState = AIComboState::IDLE;
@@ -2097,6 +2104,9 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             }
             break;
         }
+
+        default:
+            break;
         }
     } else {
         // Логика обычного противника / тренировочного манекена
@@ -2352,10 +2362,15 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     } else {
         if (enemyType == EnemyType::DUMMY && dummyBlockMode == DummyBlockMode::AFTER_HIT && dummyNeedsBlockAfterStun && hurtTimer <= 0.0f) {
             dummyNeedsBlockAfterStun = false;
+            canCounter = true;
+            counterCooldownTimer = 0.0f;
+            triggerCounterStance();
+            counterStanceTimer = 1.0f;
             dummyBlockHoldTimer = 1.0f;
-            isBlocking = true;
+            isBlocking = false;
+            blockType = BlockType::NONE;
             isFacingLeft = (playerPos.x < position.x);
-            blockType = (playerPos.y > position.y + 15.0f) ? BlockType::LOW : BlockType::HIGH;
+            currentComboName = "DUMMY: REVERSAL COUNTER!";
         }
     }
 }
@@ -2603,9 +2618,9 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         hudBg.setOutlineColor(sf::Color(220, 175, 75, 230));
         window.draw(hudBg);
 
-        // Полоска таймера сброса (5 секунд)
+        // Полоска таймера сброса (2 секунды)
         if (dummyResetTimer > 0.0f) {
-            float timerProgress = std::clamp(dummyResetTimer / 5.0f, 0.0f, 1.0f);
+            float timerProgress = std::clamp(dummyResetTimer / 2.0f, 0.0f, 1.0f);
             sf::RectangleShape resetBar({(hudW - 4.0f) * timerProgress, 3.0f});
             resetBar.setPosition({hudX + 2.0f, hudY + hudH - 5.0f});
             resetBar.setFillColor(sf::Color(255, 215, 0));
@@ -2623,7 +2638,7 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
             _cachedDummyHudText->setPosition({hudX + 5.0f, hudY + 2.0f});
             window.draw(*_cachedDummyHudText);
 
-            // Текст 2: Накопленный урон + таймер сброса (5с) + последний фрейм-гэп
+            // Текст 2: Накопленный урон + таймер сброса (2с) + последний фрейм-гэп
             std::string statsStr = "УРОН: " + std::to_string(static_cast<int>(std::round(dummyAccumDamage)));
             if (dummyResetTimer > 0.0f) {
                 char tBuf[16];
@@ -2802,5 +2817,102 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
             window.draw(*_cachedAiBanner);
         }
     }
+}
+
+std::vector<EnemyTypeDef> Enemy::scanEnemyFolders(const std::string& baseDir) {
+    std::vector<EnemyTypeDef> result;
+
+    std::string resolvedDir = resolveAssetPath(baseDir);
+    if (!std::filesystem::exists(resolvedDir)) {
+        if (std::filesystem::exists("../" + baseDir)) resolvedDir = "../" + baseDir;
+        else if (std::filesystem::exists("assets/sprites/enemies")) resolvedDir = "assets/sprites/enemies";
+    }
+
+    std::vector<std::string> discoveredFolders;
+    if (std::filesystem::exists(resolvedDir)) {
+        for (const auto& entry : std::filesystem::directory_iterator(resolvedDir)) {
+            if (entry.is_directory()) {
+                discoveredFolders.push_back(entry.path().filename().string());
+            }
+        }
+    }
+
+    // Всегда гарантируем наличие 5 базовых врагов, даже если папки еще пусты
+    auto ensureFolderInList = [&](const std::string& name) {
+        if (std::find(discoveredFolders.begin(), discoveredFolders.end(), name) == discoveredFolders.end()) {
+            discoveredFolders.push_back(name);
+        }
+    };
+    ensureFolderInList("normal");
+    ensureFolderInList("tank");
+    ensureFolderInList("duelist_aggressive");
+    ensureFolderInList("duelist_passive");
+    ensureFolderInList("dummy");
+
+    std::sort(discoveredFolders.begin(), discoveredFolders.end());
+
+    for (const auto& folderName : discoveredFolders) {
+        EnemyTypeDef def;
+        def.id = folderName;
+
+        // Определяем один из 3 основных типов (архетипов)
+        if (folderName.find("tank") != std::string::npos || folderName.find("heavy") != std::string::npos) {
+            def.archetype = EnemyArchetype::HEAVY;
+            def.legacyType = 1;
+            def.scale = 1.5f;
+            def.maxHp = 110.0f;
+            def.displayName = "Танк (Тяжелый)";
+        } else if (folderName.find("duelist") != std::string::npos) {
+            def.archetype = EnemyArchetype::DUELIST;
+            def.scale = 1.0f;
+            def.maxHp = 65.0f;
+            if (folderName.find("pass") != std::string::npos) {
+                def.legacyType = 3;
+                def.displayName = "Дуэлянт (Пасс)";
+            } else {
+                def.legacyType = 2;
+                def.displayName = "Дуэлянт (Агр)";
+            }
+        } else if (folderName.find("dummy") != std::string::npos) {
+            def.archetype = EnemyArchetype::DUMMY;
+            def.legacyType = 4;
+            def.scale = 1.0f;
+            def.maxHp = 99999.0f;
+            def.displayName = "Манекен (Тренировка)";
+        } else {
+            def.archetype = EnemyArchetype::NORMAL;
+            def.legacyType = 0;
+            def.scale = 1.0f;
+            def.maxHp = 45.0f;
+            def.displayName = "Обычный";
+        }
+
+        // Определение ранга: Обычный / Элитный / Босс
+        if (folderName.find("boss") != std::string::npos) {
+            def.rank = EnemyRank::BOSS;
+            def.scale *= 1.35f;
+            def.maxHp *= 3.0f;
+            def.displayName = "БОСС: " + def.displayName;
+        } else if (folderName.find("elite") != std::string::npos) {
+            def.rank = EnemyRank::ELITE;
+            def.scale *= 1.15f;
+            def.maxHp *= 1.6f;
+            def.displayName = "Элитный " + def.displayName;
+        }
+
+        // Проверяем наличие файла preview.png в папке врага
+        std::filesystem::path pPath = std::filesystem::path(resolvedDir) / folderName / "preview.png";
+        if (std::filesystem::exists(pPath)) {
+            auto tex = std::make_shared<sf::Texture>();
+            if (tex->loadFromFile(pPath.string())) {
+                tex->setSmooth(true);
+                def.previewTexture = tex;
+            }
+        }
+
+        result.push_back(std::move(def));
+    }
+
+    return result;
 }
 

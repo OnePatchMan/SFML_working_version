@@ -26,6 +26,7 @@ enum class SettingsTab {
 
 enum class GuideTab {
     COMBOS,
+    WEAPON_COMBOS,
     MECHANICS,
     ENEMIES
 };
@@ -102,6 +103,7 @@ private:
     void drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& mousePos, const sf::Vector2f& winSize);
 
     void drawCombosTab(sf::RenderWindow& window, float x, float y, float w, float h);
+    void drawWeaponCombosTab(sf::RenderWindow& window, float x, float y, float w, float h);
     void drawMechanicsTab(sf::RenderWindow& window, float x, float y, float w, float h);
     void drawEnemiesTab(sf::RenderWindow& window, float x, float y, float w, float h);
 

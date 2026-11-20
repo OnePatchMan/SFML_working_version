@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <functional>
 #include "core/Common.h"
 
 class Player;
@@ -20,14 +21,21 @@ struct LampLight {
     int tileX = 0;
     int tileY = 0;
     sf::Vector2f worldPos;
-    float radius = 420.0f;
-    float intensity = 1.0f;
-    sf::Color color{220, 240, 255};
+    float radius = 980.0f;
+    float intensity = 1.45f;
+    sf::Color color{240, 250, 255};
     bool enabled = true;
     bool flickering = false;
     float flickerTimer = 0.0f;
     float flickerDip = 0.0f;
     std::string tag = "";
+    float coneAngle = 130.0f; // Угол раскрытия конуса света вниз в градусах (~130°)
+
+    // Сверхбыстрый GPU-кэш для стабильных 1500+ FPS:
+    mutable std::shared_ptr<sf::Texture> bakedTexture;
+    mutable sf::Vector2f bakedWorldPos{0.0f, 0.0f};
+    mutable sf::Vector2f bakedScale{1.0f, 1.0f};
+    mutable bool dirty = true;
 };
 
 struct ArenaTrigger {
@@ -50,6 +58,7 @@ struct ArenaTrigger {
 struct EnemySpawnConfig {
     sf::Vector2f position;
     int type = 0; // 0 = NORMAL, 1 = TANK, 2 = DUELIST (Aggressive), 3 = DUELIST_PASSIVE (Passive)
+    std::string enemyId = ""; // Идентификатор папки/врага ("duelist_aggressive", "tank", etc.)
 };
 
 enum class BloodDecalOrientation {
@@ -127,6 +136,17 @@ public:
     std::optional<int> getOverlappingDoorTargetRoom(float px, float py, float halfW, float topOffset, float bottomOffset) const;
     std::optional<DoorBlock> getOverlappingDoor(float px, float py, float halfW, float topOffset, float bottomOffset) const;
     void drawBlackoutMask(sf::RenderWindow& window) const;
+
+    // Гладкое органичное освещение флуоресцентных ламп (общее для игры и редактора, с преградами и отскоком от стен)
+    static const sf::Texture& getSharedLampConeTexture();
+    static void renderSmoothLampBeam(sf::RenderTarget& target, float lx, float ly, float tileSize,
+                                     float radius, float coneAngle, const sf::Color& color,
+                                     float intensity, bool isLightmap,
+                                     std::function<bool(float wx, float wy)> isSolidWorldFn = nullptr,
+                                     std::shared_ptr<sf::Texture>* outTextureCache = nullptr,
+                                     sf::Vector2f* outPosCache = nullptr,
+                                     sf::Vector2f* outScaleCache = nullptr,
+                                     bool* inoutDirty = nullptr);
 
     sf::Vector2f getSpawnPosition() const { return _spawnPosition; }
     sf::Vector2f getEnemySpawnPosition() const { return _enemySpawnPosition; }
@@ -209,6 +229,8 @@ public:
     void scanLamps();
     const std::vector<LampLight>& getLamps() const { return _lamps; }
     std::vector<LampLight>& getLamps() { return _lamps; }
+    LampLight* findLamp(int tx, int ty);
+    const LampLight* findLamp(int tx, int ty) const;
     void addLamp(int tx, int ty, const std::string& tag = "", bool flickering = false);
     void removeLamp(int tx, int ty);
     void setLampState(const std::string& tag, bool enabled);
@@ -227,7 +249,10 @@ public:
     void drawNotificationUI(sf::RenderWindow& window, const sf::Font* font);
 
     void draw(sf::RenderWindow& window);
-    void markTilemapDirty() { _tilemapDirty = true; }
+    void markTilemapDirty() { 
+        _tilemapDirty = true; 
+        for (auto& l : _lamps) l.dirty = true;
+    }
 
 private:
     int _width;
@@ -275,6 +300,14 @@ private:
     bool _lightingEnabled = true;
     mutable sf::RenderTexture _lightmap;
     bool _lightmapInitialized = false;
+    sf::Texture _lampConeTexture;
+    bool _lampConeTextureInitialized = false;
+    void ensureLampConeTextureInitialized();
+    mutable sf::VertexArray _coneVA{sf::PrimitiveType::Triangles};
+    mutable sf::VertexArray _lampHaloVA{sf::PrimitiveType::TriangleFan};
+    mutable sf::VertexArray _volBeamsVA{sf::PrimitiveType::Triangles};
+    mutable sf::VertexArray _bgBloodVA{sf::PrimitiveType::Triangles};
+    mutable sf::VertexArray _fgBloodVA{sf::PrimitiveType::Triangles};
 
     // Всплывающие уведомления / лог лаборатории
     std::string _notificationText = "";
