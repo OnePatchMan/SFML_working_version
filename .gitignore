@@ -47,4 +47,11 @@ assets/maps_backup/
 # ---- Системные файлы ----
 .DS_Store
 Thumbs.db
-desktop.inia.out
+desktop.ini
+a.out
+scratch/print_grid
+scratch/test_diff
+scratch/test_editor_autotile
+scratch/test_print_codes
+scratch/test_resolve_stairs
+

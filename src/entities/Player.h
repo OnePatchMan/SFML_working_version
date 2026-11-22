@@ -39,6 +39,16 @@ public:
     bool diveSlamBounce = false;
     float diveSlamDir = 1.0f;
 
+    // Хилки на кнопку [R] (восстанавливают до макс ХП, по умолчанию 4 штуки)
+    int healFlasks = 4;
+    int maxHealFlasks = 4;
+
+    int getHealFlasks() const { return healFlasks; }
+    int getMaxHealFlasks() const { return maxHealFlasks; }
+    void setHealFlasks(int count) { healFlasks = count; }
+    void addHealFlasks(int count) { healFlasks = std::max(0, healFlasks + count); }
+    bool useHealFlask();
+
     static constexpr float HALF_W = 20.0f;
     static constexpr float HALF_H = 27.5f;
     static constexpr float TOP_OFFSET = 25.0f;
@@ -79,13 +89,50 @@ public:
     bool isDashing() const { return _dashTimer > 0.0f; }
     void cancelDash() { _dashTimer = 0.0f; }
     bool isSpotDodging() const { return _isSpotDodging; }
+    void triggerSpotDodge() {
+        const auto& pcfg = PlayerConfig::get();
+        _isSpotDodging = true;
+        _spotDodgeTimer = pcfg.spotDodgeDuration;
+        _spotDodgeCooldown = pcfg.spotDodgeCooldown;
+        _dashCooldown = pcfg.spotDodgeCooldown;
+        _iframeTimer = pcfg.spotDodgeDuration;
+        _perfectDodgeWindowTimer = pcfg.perfectDodgeWindow;
+        _dashWindowTimer = 0.20f;
+        velocity.x = 0.0f;
+    }
     bool isInvulnerable() const { return _iframeTimer > 0.0f; }
     bool isPerfectDodgeActive() const { return _perfectDodgeWindowTimer > 0.0f; }
     bool isPerfectDodgeEmpowered() const { return _perfectDodgeEmpoweredTimer > 0.0f; }
-    void triggerPerfectDodge() { _perfectDodgeEmpoweredTimer = PlayerConfig::get().perfectDodgeEmpower; }
+    void triggerPerfectDodge() { 
+        _perfectDodgeEmpoweredTimer = PlayerConfig::get().perfectDodgeEmpower; 
+        _dashCooldown = 0.0f;
+        _spotDodgeCooldown = 0.0f;
+        _dashTimer = 0.0f;
+        _isSpotDodging = false;
+    }
     void consumePerfectDodgeEmpower() { _perfectDodgeEmpoweredTimer = 0.0f; }
     bool isDashWindow() const { return _dashWindowTimer > 0.0f; }
     void clearDashWindow() { _dashWindowTimer = 0.0f; }
+
+    // Шкала позы / выносливости блока (Poise & Guard Meter / ХП блока)
+    float guardHp = 100.0f;
+    float maxGuardHp = 100.0f;
+    float guardRegenDelay = 0.0f;
+    float guardBrokenTimer = 0.0f;
+    bool isGuardBroken() const { return guardBrokenTimer > 0.0f; }
+    void breakGuard() {
+        guardHp = 0.0f;
+        guardBrokenTimer = 1.5f;
+        _blockType = BlockType::NONE;
+        triggerStun(1.5f);
+    }
+    void damageGuard(float amount) {
+        guardHp -= amount;
+        guardRegenDelay = 1.2f;
+        if (guardHp <= 0.0f) {
+            breakGuard();
+        }
+    }
 
     sf::Vector2f getEffectiveVelocity() const;
     bool isAirSuspended() const { return _isAirSuspended; }

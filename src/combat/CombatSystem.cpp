@@ -38,6 +38,9 @@ void CombatSystem::reset() {
     _grabbedEnemy = nullptr;
     _attackTimer = 0.0f;
     _attackCooldown = 0.0f;
+    _airAttackCooldown = 0.0f;
+    _airAttacksInCurrentJump = 0;
+    _lastAirAttackType = "";
     _currentWhiffStun = 0.40f;
     _hasHitThisSwing = false;
     _lastStunReason = StunReason::NONE;
@@ -90,12 +93,8 @@ void CombatSystem::handleInput(const std::optional<sf::Event>& event, Player& pl
         } else if (keyPressed->code == sf::Keyboard::Key::K || keyPressed->code == sf::Keyboard::Key::G) {
             triggerAttack(AttackInput::HEAVY, player, mouseWorld);
         } else if (keyPressed->code == sf::Keyboard::Key::R) {
-            // Клавиатурная альтернатива броска / подбора оружия
-            if (player.hasWeapon()) {
-                throwWeapon(player);
-            } else {
-                tryRetrieveWeapon(player);
-            }
+            // Использование хилки (восстановление до макс ХП) на клавишу [R]
+            player.useHealFlask();
         }
     }
 }
@@ -180,6 +179,32 @@ bool CombatSystem::tryRetrieveWeapon(Player& player) {
         return true;
     }
     return false;
+}
+
+void CombatSystem::spawnHealEffect(const sf::Vector2f& playerPos, int remainingFlasks) {
+    DamageNumber dn;
+    dn.position = {playerPos.x, playerPos.y - Player::HALF_H - 16.0f};
+    dn.lifetime = 1.0f;
+    dn.color = sf::Color(80, 255, 120);
+    dn.text = "+MAX HP! [ХИЛКА] (" + std::to_string(remainingFlasks) + " ост.)";
+    _damageNumbers.push_back(dn);
+
+    for (int i = 0; i < 22; ++i) {
+        HitParticle p;
+        p.position = {playerPos.x + (static_cast<int>(_rng() % 32) - 16),
+                      playerPos.y + (static_cast<int>(_rng() % 40) - 20)};
+        float angle = (-90.0f + static_cast<float>(_rng() % 60) - 30.0f) * 3.14159f / 180.0f;
+        float spd = 80.0f + static_cast<float>(_rng() % 120);
+        p.velocity = {std::cos(angle) * spd, std::sin(angle) * spd};
+        p.color = sf::Color(80, 255, 140);
+        p.size = 3.5f;
+        p.lifetime = 0.45f;
+        _hitParticles.push_back(p);
+    }
+
+    _specialComboMarkers.push_back({playerPos + sf::Vector2f(0.0f, -50.0f),
+                                    "❤ FULL HEAL RESTORED! ❤", sf::Color(80, 255, 140), 1.0f, 1.0f, 1.2f, 255.0f});
+    SoundManager::get().play("heal", 90.0f);
 }
 
 void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) {
@@ -288,29 +313,6 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
 void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld) {
     if (player.isStunned() || player.isBlocking() || _isAirGrabActive) return;
 
-    // Комбо-отмена (Combo Cancel / Gatling):
-    // Если игрок успевает нажать следующий удар в окне комбо (_comboResetTimer > 0)
-    // и предыдущий удар ПОПАЛ по врагу (_hasHitThisSwing),
-    // то игрок НЕ ЖДЕТ весь откат/стан-лок, а отменяет остаток отката и наносит следующий удар СРАЗУ!
-    // При промахе (whiff) комбо-отмена строго заблокирована — персонаж наказывается стан-локом!
-    bool canComboCancel = (!_comboHistory.empty() && _comboResetTimer > 0.0f && _hasHitThisSwing);
-    if (_attackCooldown > 0.0f && !canComboCancel) {
-        // Буферизация ввода следующего удара комбо во время активной фазы замаха (только при подтвержденном попадании)
-        if (!_comboHistory.empty() && _comboResetTimer > 0.0f && _attackTimer > 0.0f && _hasHitThisSwing) {
-            _bufferedAttackInput = input;
-            _bufferedInputTimer = 0.18f;
-        }
-        return;
-    }
-
-    // Отменяем остаток кулдауна при успешном продолжении комбо
-    _attackCooldown = 0.0f;
-    _bufferedAttackInput.reset();
-    _bufferedInputTimer = 0.0f;
-
-    _attackDirection = player.isFacingRight() ? 1 : -1;
-    _hasHitThisSwing = false;
-
     bool inAir = !player.isOnGround();
     bool isDash = player.isDashWindow() || player.isDashing();
 
@@ -379,13 +381,65 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
                 attackType = "d" + dir + attackNum;
             }
         } else {
-            if (dir.empty()) {
+            if (dir == "u") {
+                attackType = "u" + attackNum;
+            } else if (dir.empty()) {
                 attackType = attackNum;
             } else {
                 attackType = dir + attackNum;
             }
         }
     }
+
+    // Комбо-отмена (Combo Cancel / Gatling):
+    // Если игрок успевает нажать следующий удар в окне комбо (_comboResetTimer > 0)
+    // и предыдущий удар ПОПАЛ по врагу (_hasHitThisSwing),
+    // то игрок НЕ ЖДЕТ весь откат/стан-лок, а отменяет остаток отката и наносит следующий удар СРАЗУ!
+    // При промахе (whiff) комбо-отмена строго заблокирована — персонаж наказывается стан-локом!
+    // ПРАВИЛА В ВОЗДУХЕ:
+    // 1. Нельзя отменить атаку в саму себя (adw1 -> adw1, a2 -> a2) — это не комбо, а спам!
+    // 2. adw1 (Air Down Hook) не имеет продолжений и не может быть отменена ни в какую другую атаку!
+    bool canComboCancel = (!_comboHistory.empty() && _comboResetTimer > 0.0f && _hasHitThisSwing);
+    if (inAir) {
+        if (attackType == "adw1" || _lastAirAttackType == attackType || _lastAirAttackType == "adw1") {
+            // Исключение: a1 -> a1 при подтвержденном комбо-хите
+            if (attackType == "a1" && _lastAirAttackType == "a1" && _airAttacksInCurrentJump < 2 && canComboCancel) {
+                // Разрешено для выхода в трипл комбо a1-a1-adw2
+            } else {
+                canComboCancel = false;
+            }
+        }
+        // Строгий запрет спама одиночной одинаковой атаки в воздухе (adw1, a2, adw2, повтор a1 вне комбо)
+        if (_lastAirAttackType == attackType) {
+            if (attackType != "a1" || !canComboCancel || _airAttacksInCurrentJump >= 2) {
+                return;
+            }
+        }
+        if (attackType == "adw1" && _airAttacksInCurrentJump >= 1) {
+            return;
+        }
+    }
+
+    if ((_attackCooldown > 0.0f || _attackTimer > 0.0f) && !canComboCancel) {
+        // Буферизация ввода следующего удара комбо во время активной фазы замаха (только при подтвержденном попадании)
+        if (!_comboHistory.empty() && _comboResetTimer > 0.0f && _attackTimer > 0.0f && _hasHitThisSwing && !inAir) {
+            _bufferedAttackInput = input;
+            _bufferedInputTimer = 0.18f;
+        }
+        return;
+    }
+
+    if (inAir && _airAttackCooldown > 0.0f && !canComboCancel) {
+        return;
+    }
+
+    // Отменяем остаток кулдауна при успешном продолжении комбо
+    _attackCooldown = 0.0f;
+    _bufferedAttackInput.reset();
+    _bufferedInputTimer = 0.0f;
+
+    _attackDirection = player.isFacingRight() ? 1 : -1;
+    _hasHitThisSwing = false;
 
     // Комбо-правило для воздуха:
     // Персонаж может нанести a1, затем a1 (связка a1a1), но после нее разрешен ТОЛЬКО
@@ -395,9 +449,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         bool endsWithA1A1 = (_comboHistory[n - 1] == "a1" || _comboHistory[n - 1] == "af1") &&
                             (_comboHistory[n - 2] == "a1" || _comboHistory[n - 2] == "af1");
         if (endsWithA1A1) {
-            bool isAdw2 = (attackType == "adw2" || attackType == "addw2");
+            bool isAdw2 = (attackType == "adw2" || attackType == "addw2" || attackType == "a2" || attackType == "af2" || attackType == "ad2");
             if (!isAdw2) {
-                return; // Разрешен ТОЛЬКО adw2 либо ничего!
+                return; // Разрешен ТОЛЬКО adw2 / a2 либо ничего!
             }
         }
     }
@@ -458,7 +512,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         if (actual == "2" && expected == "u2") return true;
         if ((actual == "af1" && expected == "a1") || (actual == "a1" && expected == "af1")) return true;
         if ((actual == "af2" && expected == "a2") || (actual == "a2" && expected == "af2")) return true;
-        if (actual == "f1" && expected == "1") return true;
+        if ((actual == "adw2" && expected == "a2") || (actual == "a2" && expected == "adw2")) return true;
+        if ((actual == "ad2" && expected == "a2") || (actual == "a2" && expected == "ad2")) return true;
+        if ((actual == "f1" && expected == "1") || (actual == "1" && expected == "f1")) return true;
         if ((actual == "addw2" && expected == "adw2") || (actual == "adw2" && expected == "addw2")) return true;
         if ((actual == "addw1" && expected == "adw1") || (actual == "adw1" && expected == "addw1")) return true;
         if ((actual == "adu2" && expected == "ad2") || (actual == "ad2" && expected == "adu2")) return true;
@@ -510,8 +566,10 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
 
     // ==========================================
     // ПОИСК КОМБО В РЕЕСТРЕ COMBATCONFIG
+    // Приоритет отдается самой длинной цепочке (например, a1a1a2 приоритетнее a1a2)
     // ==========================================
     const ComboEntry* matchedCombo = nullptr;
+    size_t longestMatchLen = 0;
     for (const auto& entry : CombatConfig::getCombos()) {
         // Разделение комбо: оружие (isWeapon) vs рукопашные
         bool isWeaponCombo = entry.isWeapon || (entry.id.rfind("weapon_", 0) == 0) || 
@@ -532,15 +590,51 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         }
 
         if (endsWith(entry.sequence)) {
-            matchedCombo = &entry;
-            break; // Первый совпавший комбо (уникальные завершители идут первыми)
+            if (entry.sequence.size() > longestMatchLen) {
+                matchedCombo = &entry;
+                longestMatchLen = entry.sequence.size();
+            }
         }
     }
 
     // Проверка анти-спам системы:
-    // Нельзя дать 2 одинаковых комбо в течение 2.5 секунд после завершения 1-го,
-    // независимо от того, выполнялись ли какие-либо другие удары или комбо между ними!
+    // 1. В воздухе: запрещен повтор одного и того же приема, запрещено более 1 adw1 за прыжок,
+    //    и запрещен спам одиночных ударов без связки в комбо.
     bool spamStunTriggered = false;
+    if (inAir) {
+        if (attackType == "adw1") {
+            // adw1 строго 1 раз за прыжок! Любой повтор adw1 в воздухе — мгновенный стан-лок
+            if (_airAttacksInCurrentJump >= 1 || _lastAirAttackType == "adw1") {
+                spamStunTriggered = true;
+            }
+        } else if (_lastAirAttackType == attackType && attackType != "a1") {
+            // Повтор той же атаки в воздухе (a2 -> a2, adw2 -> adw2)
+            spamStunTriggered = true;
+        } else if (_airAttacksInCurrentJump >= 2) {
+            // Максимум 2 атаки за прыжок (например a1 -> a2 или a1 -> adw2).
+            // Исключение: завершение 3-ударного комбо a1a1adw2
+            if (!canComboCancel || attackType != "adw2") {
+                spamStunTriggered = true;
+            }
+        } else if (!canComboCancel && _airAttacksInCurrentJump >= 1) {
+            if (_lastAirAttackType == attackType) {
+                spamStunTriggered = true;
+            }
+        }
+        _airAttacksInCurrentJump++;
+        _lastAirAttackType = attackType;
+    }
+
+    // 2. Независимый таймер спама для adw1 (даже при прыжках с земли!):
+    if (attackType == "adw1") {
+        auto it = _comboCooldowns.find("adw1");
+        if (it != _comboCooldowns.end() && it->second > 0.0f) {
+            spamStunTriggered = true;
+            it->second = 0.0f;
+        } else {
+            _comboCooldowns["adw1"] = 2.0f; // 2 секунды кулдауна на повторный запуск adw1
+        }
+    }
     if (matchedCombo != nullptr) {
         if (matchedCombo->isFinisher) {
             _pendingBaseCombo = "";
@@ -584,6 +678,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
 
     _attackTimer = stats.activeTime;
     _attackCooldown = stats.playerRecovery;
+    if (inAir) {
+        _airAttackCooldown = std::max(0.35f, stats.playerRecovery + 0.12f);
+    }
     float baseWhiff = (stats.whiffStun > 0.0f) ? stats.whiffStun : std::max(0.18f, stats.playerRecovery * 1.3f);
     _currentWhiffStun = baseWhiff * CombatConfig::getWhiffMultiplier();
     _currentDamage = stats.damage;
@@ -603,6 +700,20 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     _comboDisplayTimer = (matchedCombo && matchedCombo->isUniqueFinisher) ? 1.3f : 0.8f;
     _comboDisplayColor = stats.color;
     player.lunge(stats.lunge);
+
+    // Пикирование вниз для всех атак Dive Slam в воздухе (a1a1a2, a1a1adw2, adw2, a1adw2):
+    // ВНИМАНИЕ: a1a2 НЕ пикирует — персонаж зависает на месте в воздухе и вбивает врага вниз!
+    if (inAir && (_comboDisplayName.find("DIVE SLAM") != std::string::npos ||
+                  _comboDisplayName.find("GROUND BOUNCE SLAM") != std::string::npos ||
+                  attackType == "adw2")) {
+        _airSuspendedRemaining = 0.0f;
+        player.setAirSuspended(false);
+        player.velocity.y = std::max(player.velocity.y, 650.0f); // Стремительное пикирование вниз в пол
+    } else if (inAir && _comboDisplayName.find("AIR GROUND SLAM") != std::string::npos) {
+        _airSuspendedRemaining = stats.activeTime + 0.15f;
+        player.setAirSuspended(true);
+        player.velocity.y = 0.0f;
+    }
 
     AttackAnimType animType = resolveAttackAnimType(attackType, _comboDisplayName);
     player.triggerAttackAnimation(animType, std::max(stats.activeTime, stats.playerRecovery));
@@ -626,14 +737,21 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         SoundManager::get().play("adw2", 65.0f);
     }
 
-    // Если комбо повторено 2 раза подряд — штрафной стан-лок игрока
+    // Если комбо повторено 2 раза подряд или спамятся атаки в воздухе — штрафной стан-лок игрока
     if (spamStunTriggered) {
         player.triggerStun(0.75f);
         _attackCooldown = 0.85f;
+        _airAttackCooldown = 0.85f;
         _lastStunReason = StunReason::SPAM;
-        _comboDisplayName += " [SPAM EXHAUSTION: STUNNED!]";
+        _comboDisplayName += inAir ? " [AIR SPAM EXHAUSTION: STUNNED!]" : " [SPAM EXHAUSTION: STUNNED!]";
         _comboDisplayColor = sf::Color(255, 75, 75);
         _comboDisplayTimer = 1.6f;
+        player.setAirSuspended(false);
+        _airSuspendedRemaining = 0.0f;
+        if (player.velocity.y < 200.0f) {
+            player.velocity.y = 200.0f; // Падение вниз в стан-локе
+        }
+        SoundManager::get().play("whiff");
     }
 }
 
@@ -660,6 +778,14 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
     if (_attackCooldown > 0.0f) {
         _attackCooldown -= dt;
+    }
+    if (_airAttackCooldown > 0.0f) {
+        _airAttackCooldown -= dt;
+    }
+    if (player.isOnGround()) {
+        _airAttackCooldown = 0.0f;
+        _airAttacksInCurrentJump = 0;
+        _lastAirAttackType = "";
     }
 
     if (!player.isStunned()) {
@@ -1064,6 +1190,28 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     }
 
                     if (targetWasBlocking && blockSucceeded) {
+                        float guardDmg = scaledDamage * 1.5f;
+                        enemy.damageGuard(guardDmg);
+                        if (enemy.isGuardBroken()) {
+                            enemy.breakGuard();
+                            _specialComboMarkers.push_back({enemy.position + sf::Vector2f(0.0f, -50.0f),
+                                                            "★ GUARD BREAK! ★", sf::Color(255, 120, 40), 1.2f, 1.2f, 1.5f, 255.0f});
+                            SoundManager::get().play("heavy", 85.0f);
+                            _shakeTimer = 0.20f;
+                            _shakeIntensity = 6.0f;
+                            for (int i = 0; i < 28; ++i) {
+                                HitParticle p;
+                                p.position = enemy.position;
+                                float angle = (i * 360.0f / 28.0f) * 3.14159f / 180.0f;
+                                float spd = 180.0f + (_rng() % 160);
+                                p.velocity = {std::cos(angle) * spd, std::sin(angle) * spd};
+                                p.color = sf::Color(255, 180, 50);
+                                p.size = 3.5f;
+                                p.lifetime = 0.40f;
+                                _hitParticles.push_back(p);
+                            }
+                        }
+
                         for (int i = 0; i < 14; ++i) {
                             HitParticle p;
                             p.position = enemy.position;
@@ -1230,10 +1378,19 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 // Задерживаем в воздухе ТОЛЬКО ПРИ ПОПАДАНИИ по врагу!
                 if (!player.isOnGround()) {
                     if (_comboDisplayName.find("dw1-j-adu2") == std::string::npos &&
-                        _comboDisplayName.find("METEOR SLAM") == std::string::npos) {
+                        _comboDisplayName.find("METEOR SLAM") == std::string::npos &&
+                        _currentAttackType != "adw1" &&
+                        _comboDisplayName.find("adw1") == std::string::npos) {
                         _airSuspendedRemaining = 0.22f;
                         player.setAirSuspended(true);
                         player.velocity.y = 0.0f;
+                    } else if (_currentAttackType == "adw1" || _comboDisplayName.find("adw1") != std::string::npos) {
+                        // adw1 (удар под себя) направляет персонажа вниз к земле
+                        _airSuspendedRemaining = 0.0f;
+                        player.setAirSuspended(false);
+                        if (player.velocity.y < 140.0f) {
+                            player.velocity.y = 140.0f;
+                        }
                     }
                 }
 
@@ -1255,21 +1412,37 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     _knockX = (player.isFacingRight() ? 1.0f : -1.0f) * 220.0f;
                 }
 
-                // Особая логика комбо a1a1adw2 / a1adw2 (падение вместе с врагом в пол и отскок на длину дэша):
+                // Особая логика комбо a1a1adw2 / a1a1a2 / a1adw2 (падение вместе с врагом в пол и отскок на длину дэша):
                 if (_comboDisplayName.find("a1-a1-adw2") != std::string::npos ||
+                    _comboDisplayName.find("a1-a1-a2") != std::string::npos ||
                     _comboDisplayName.find("a1-adw2") != std::string::npos ||
+                    _comboDisplayName.find("DUAL AIR DIVE SLAM") != std::string::npos ||
                     _comboDisplayName.find("GROUND BOUNCE SLAM") != std::string::npos) {
                     _airSuspendedRemaining = 0.0f;
                     player.setAirSuspended(false);
                     player.velocity.y = 1200.0f; // Падают вместе с врагом вниз
-                    enemy.velocity.y = 1200.0f;
-                    enemy.diveSlamBounce = true;
-                    enemy.diveSlamDir = static_cast<float>(_attackDirection);
+                    if (enemy.getType() != EnemyType::BOSS_1) {
+                        enemy.velocity.y = 1200.0f;
+                        enemy.diveSlamBounce = true;
+                        enemy.diveSlamDir = static_cast<float>(_attackDirection);
+                    }
+                } else if (_comboDisplayName.find("a1-a2") != std::string::npos ||
+                           _comboDisplayName.find("AIR GROUND SLAM") != std::string::npos) {
+                    // a1-a2: Сам игрок остается на месте, а противника сбивает вниз в пол с отскоком!
+                    _airSuspendedRemaining = _attackTimer + 0.15f;
+                    player.setAirSuspended(true);
+                    player.velocity.y = 0.0f;
+                    if (enemy.getType() != EnemyType::BOSS_1) {
+                        enemy.velocity.y = 850.0f;
+                        enemy.diveSlamBounce = true;
+                        enemy.diveSlamDir = static_cast<float>(_attackDirection);
+                    }
                 }
 
                 // Атака a2 / комбо a1a2 (толчок по прямой на уровень дэша):
                 // Выравниваем врага строго по высоте уровня дэша игрока
-                if ((_comboDisplayName.find("a2") != std::string::npos || _comboDisplayName.find("a1-a2") != std::string::npos) && 
+                if (enemy.getType() != EnemyType::BOSS_1 &&
+                    (_comboDisplayName.find("a2") != std::string::npos || _comboDisplayName.find("a1-a2") != std::string::npos) && 
                     _comboDisplayName.find("SLAM") == std::string::npos && 
                     _comboDisplayName.find("LAUNCH") == std::string::npos) {
                     enemy.position.y = player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H);
@@ -1279,9 +1452,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 // Особая логика комбо dw1jadw1 (зацеп булавой в воздухе и подброс высоко в небо):
                 if (_comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
                     _comboDisplayName.find("SKY HOOK") != std::string::npos) {
-                    enemy.velocity.x = _attackDirection * 25.0f;
-                    enemy.velocity.y = -520.0f;
-                    enemy.triggerStun(0.50f);
+                    if (enemy.getType() != EnemyType::BOSS_1) {
+                        enemy.velocity.x = _attackDirection * 25.0f;
+                        enemy.velocity.y = -520.0f;
+                        enemy.triggerStun(0.50f);
+                    }
                     player.setAirSuspended(true);
                     _airSuspendedRemaining = 0.25f;
                     player.velocity.y = -60.0f; // Легкий подскок игрока в воздухе
@@ -1326,7 +1501,8 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 }
 
                 // Особая логика импульсов комбо: берется строго из KV таблицы баланса (_knockX, _knockY)
-                if (_comboDisplayName.find("1-2-df2") != std::string::npos ||
+                if (enemy.getType() != EnemyType::BOSS_1 &&
+                    (_comboDisplayName.find("1-2-df2") != std::string::npos ||
                     _comboDisplayName.find("12df2") != std::string::npos ||
                     _comboDisplayName.find("DASH SMASH") != std::string::npos ||
                     _comboDisplayName.find("1-2-f1") != std::string::npos ||
@@ -1343,7 +1519,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     _comboDisplayName.find("SKY HOOK") != std::string::npos ||
                     _comboDisplayName.find("COMBO 1-2:") != std::string::npos ||
                     _comboDisplayName.find("b2-1") != std::string::npos ||
-                    _currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos) {
+                    _currentAttackType == "b2" || _comboDisplayName.find("b2 (") != std::string::npos)) {
                     enemy.velocity.x = _knockX;
                     enemy.velocity.y = _knockY;
                 }
@@ -1426,6 +1602,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 const auto& pcfg = PlayerConfig::get();
                 float pDir = player.isFacingRight() ? 1.0f : -1.0f;
                 bool enemyWasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
+                if (enemy.isBurrowed || enemy.isErupting) {
+                    enemy.cancelBurrowAndStun(pcfg.counterEnemyStun);
+                }
                 enemy.takeDamage(pcfg.counterDamage, pDir * pcfg.counterKnockX, pcfg.counterKnockY, pcfg.counterEnemyStun);
                 if (!enemyWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f) && Arena::getActive()) {
                     Arena::getActive()->spawnKillBlood(enemy.position, sf::Vector2f(pDir * 0.707f, -0.707f), enemy.maxHp);
@@ -1460,9 +1639,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 _damageNumbers.push_back(dn);
             } else if (player.isPerfectDodgeActive()) {
                 // ИДЕАЛЬНЫЙ УВОРОТ (PERFECT DODGE)!
-                // Удар спарирован: противник оглушается, комбо мгновенно прерывается
+                // Удар спарирован: противник оглушается (кроме босса), комбо мгновенно прерывается, кд уворота сбрасывается в 0
                 player.triggerPerfectDodge();
-                enemy.stagger(0.75f);
+                if (enemy.getType() != EnemyType::BOSS_1) {
+                    enemy.stagger(0.75f);
+                }
                 enemy.attackHasHit = false;
 
                 _shakeTimer = 0.14f;
@@ -1563,6 +1744,25 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 }
 
                 if (playerWasBlocking && playerBlockSucceeded) {
+                    if (player.isGuardBroken()) {
+                        _specialComboMarkers.push_back({player.position + sf::Vector2f(0.0f, -50.0f),
+                                                        "★ GUARD BREAK! ★", sf::Color(255, 80, 40), 1.2f, 1.2f, 1.5f, 255.0f});
+                        SoundManager::get().play("heavy", 90.0f);
+                        _shakeTimer = 0.22f;
+                        _shakeIntensity = 7.0f;
+                        for (int i = 0; i < 28; ++i) {
+                            HitParticle p;
+                            p.position = player.position;
+                            float angle = (i * 360.0f / 28.0f) * 3.14159f / 180.0f;
+                            float spd = 180.0f + (_rng() % 160);
+                            p.velocity = {std::cos(angle) * spd, std::sin(angle) * spd};
+                            p.color = sf::Color(255, 120, 50);
+                            p.size = 3.5f;
+                            p.lifetime = 0.40f;
+                            _hitParticles.push_back(p);
+                        }
+                    }
+
                     for (int i = 0; i < 12; ++i) {
                         HitParticle p;
                         p.position = player.position;
@@ -1601,6 +1801,29 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             }
         }
     }
+    }
+
+    // Проверка попадания волн пыли от удара о землю Босса 1
+    for (auto* enemyPtr : enemiesList) {
+        if (!enemyPtr || enemyPtr->isDead || enemyPtr->getType() != EnemyType::BOSS_1) continue;
+        for (const auto& wave : enemyPtr->bossDustWaves) {
+            if (!wave.active) continue;
+            float playerFeetY = player.position.y + Player::BOTTOM_OFFSET;
+            float waveDistX = std::abs(player.position.x - wave.x);
+            float waveDistY = std::abs(playerFeetY - wave.y);
+            if (waveDistX <= 32.0f && waveDistY <= 26.0f && player.isOnGround()) {
+                if (!player.isInvulnerable() && player.getStunTimer() <= 0.0f) {
+                    player.takeDamage(7.0f, wave.dir * 320.0f, -180.0f, 1.2f); // Стан на 1.2 секунды!
+                    DamageNumber dn;
+                    dn.position = player.position;
+                    dn.text = "-7 [СТАН!]";
+                    dn.color = sf::Color(255, 80, 40);
+                    _damageNumbers.push_back(dn);
+                    triggerShake(0.25f, 6.0f);
+                    SoundManager::get().play("hit");
+                }
+            }
+        }
     }
 
     // Обновление всплывающих чисел урона
@@ -1723,7 +1946,31 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             sf::Vector2f hitPoint, hitNormal;
             sf::Vector2i hitTile;
 
+            // Попадание брошенного оружия (weapon throw) в интерактивную дверь ломает ее (ТОЛЬКО ЕСЛИ ДВЕРЬ ЗАКРЫТА)
+            if (Arena::getActive()) {
+                int dTx0 = static_cast<int>(std::floor(startPos.x / Arena::getActive()->getTileSize()));
+                int dTy0 = static_cast<int>(std::floor(startPos.y / Arena::getActive()->getTileSize()));
+                int dTx1 = static_cast<int>(std::floor(targetPos.x / Arena::getActive()->getTileSize()));
+                int dTy1 = static_cast<int>(std::floor(targetPos.y / Arena::getActive()->getTileSize()));
+                auto* door0 = Arena::getActive()->findInteractiveDoor(dTx0, dTy0);
+                auto* door1 = Arena::getActive()->findInteractiveDoor(dTx1, dTy1);
+                if (door0 && !door0->isOpen && !door0->isBroken) {
+                    Arena::getActive()->breakDoorAt(dTx0, dTy0, it->velocity);
+                    triggerShake(0.35f, 9.0f);
+                } else if (door1 && !door1->isOpen && !door1->isBroken) {
+                    Arena::getActive()->breakDoorAt(dTx1, dTy1, it->velocity);
+                    triggerShake(0.35f, 9.0f);
+                }
+            }
+
             if (Arena::getActive() && Arena::getActive()->raycastSolid(startPos, targetPos, hitPoint, hitTile, hitNormal)) {
+                // Проверяем, не была ли повреждена закрытая дверь в точке столкновения луча
+                auto* doorRay = Arena::getActive()->findInteractiveDoor(hitTile.x, hitTile.y);
+                if (doorRay && !doorRay->isOpen && !doorRay->isBroken) {
+                    Arena::getActive()->breakDoorAt(hitTile.x, hitTile.y, it->velocity);
+                    triggerShake(0.35f, 9.0f);
+                }
+
                 // Удар булавы-копья о твердый блок карты (стена / пол / потолок)
                 float dot = it->velocity.x * hitNormal.x + it->velocity.y * hitNormal.y;
                 it->velocity = (it->velocity - 2.0f * dot * hitNormal) * 0.35f;
@@ -1837,7 +2084,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                         _damageNumbers.push_back(dn);
                     } else {
                         // Прямое попадание без блока
-                        enemy.velocity += hitDir * knockForce;
+                        if (enemy.getType() != EnemyType::BOSS_1) {
+                            enemy.velocity += hitDir * knockForce;
+                        }
                         enemy.triggerStun(std::max(enemy.getStunTimer() + 0.38f, 0.50f));
                         enemy.spinTimer = 0.70f;
                         enemy.spinSpeed = 920.0f;
@@ -1932,12 +2181,12 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
 
     // 2. Хитбокс и динамический росчерк удара
     if (_attackTimer > 0.0f) {
-        sf::RectangleShape hbRect({_attackHitbox.size.x, _attackHitbox.size.y});
-        hbRect.setPosition(_attackHitbox.position);
-        hbRect.setFillColor(sf::Color(_attackColor.r, _attackColor.g, _attackColor.b, 35));
-        hbRect.setOutlineThickness(1.5f);
-        hbRect.setOutlineColor(sf::Color(_attackColor.r, _attackColor.g, _attackColor.b, 220));
-        window.draw(hbRect);
+        _cachedHitboxRect.setSize({_attackHitbox.size.x, _attackHitbox.size.y});
+        _cachedHitboxRect.setPosition(_attackHitbox.position);
+        _cachedHitboxRect.setFillColor(sf::Color(_attackColor.r, _attackColor.g, _attackColor.b, 35));
+        _cachedHitboxRect.setOutlineThickness(1.5f);
+        _cachedHitboxRect.setOutlineColor(sf::Color(_attackColor.r, _attackColor.g, _attackColor.b, 220));
+        window.draw(_cachedHitboxRect);
 
         sf::VertexArray slash(sf::PrimitiveType::TriangleStrip, 6);
         float startX = (_attackDirection > 0) ? _attackHitbox.position.x : (_attackHitbox.position.x + _attackHitbox.size.x);
@@ -1986,40 +2235,46 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
 
     // 3. Расширяющиеся ударные волны (Shockwave Rings)
     for (const auto& sw : _empoweredShockwaves) {
-        sf::CircleShape ring(sw.radius);
-        ring.setOrigin({sw.radius, sw.radius});
-        ring.setPosition(sw.position);
+        _cachedCircle.setRadius(sw.radius);
+        _cachedCircle.setOrigin({sw.radius, sw.radius});
+        _cachedCircle.setPosition(sw.position);
         float alphaProg = (sw.lifetime / sw.maxLifetime);
         sf::Color ringCol = sw.color;
         ringCol.a = static_cast<std::uint8_t>(std::clamp(alphaProg * 230.0f, 0.0f, 255.0f));
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineColor(ringCol);
-        ring.setOutlineThickness(std::max(1.5f, 3.5f * alphaProg));
-        window.draw(ring);
+        _cachedCircle.setFillColor(sf::Color::Transparent);
+        _cachedCircle.setOutlineColor(ringCol);
+        _cachedCircle.setOutlineThickness(std::max(1.5f, 3.5f * alphaProg));
+        window.draw(_cachedCircle);
     }
 
     // 4. Всплывающий урон
     if (_fontLoaded) {
+        if (!_cachedDamageText.has_value()) {
+            _cachedDamageText.emplace(_font, "", 17);
+        }
         for (const auto& dn : _damageNumbers) {
-            sf::Text dtText(_font, toSfString(dn.text), 17);
-            dtText.setPosition(dn.position);
+            _cachedDamageText->setString(toSfString(dn.text));
+            _cachedDamageText->setPosition(dn.position);
             sf::Color c = dn.color;
             c.a = static_cast<std::uint8_t>(std::clamp(dn.alpha, 0.0f, 255.0f));
-            dtText.setFillColor(c);
-            window.draw(dtText);
+            _cachedDamageText->setFillColor(c);
+            window.draw(*_cachedDamageText);
         }
 
         // 5. Особые парящие комбо-маркеры (Special Combo Markers)
+        if (!_cachedSpecialMarkerText.has_value()) {
+            _cachedSpecialMarkerText.emplace(_font, "", 16);
+            _cachedSpecialMarkerText->setOutlineThickness(1.8f);
+        }
         for (const auto& marker : _specialComboMarkers) {
-            sf::Text mText(_font, toSfString(marker.text), 16);
-            mText.setPosition(marker.position);
+            _cachedSpecialMarkerText->setString(toSfString(marker.text));
+            _cachedSpecialMarkerText->setPosition(marker.position);
             sf::Color mc = marker.color;
             mc.a = static_cast<std::uint8_t>(std::clamp(marker.alpha, 0.0f, 255.0f));
-            mText.setFillColor(mc);
-            mText.setOutlineColor(sf::Color(0, 0, 0, mc.a));
-            mText.setOutlineThickness(1.8f);
-            mText.setScale({marker.scale, marker.scale});
-            window.draw(mText);
+            _cachedSpecialMarkerText->setFillColor(mc);
+            _cachedSpecialMarkerText->setOutlineColor(sf::Color(0, 0, 0, mc.a));
+            _cachedSpecialMarkerText->setScale({marker.scale, marker.scale});
+            window.draw(*_cachedSpecialMarkerText);
         }
 
         // 6. Отрисовка летящих и лежащих на земле булав (Thrown Mace Meat Tenderizers)
@@ -2032,19 +2287,30 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
             if (_maceTextureLoaded) {
                 if (mace.grounded) {
                     // Пульсирующая подсветка на полу для легкого обнаружения оружия
-                    sf::CircleShape glow(14.0f);
-                    glow.setOrigin({14.0f, 14.0f});
-                    glow.setPosition(mace.position);
-                    glow.setFillColor(sf::Color(255, 210, 80, 55));
-                    window.draw(glow);
+                    _cachedCircle.setRadius(14.0f);
+                    _cachedCircle.setOrigin({14.0f, 14.0f});
+                    _cachedCircle.setPosition(mace.position);
+                    _cachedCircle.setFillColor(sf::Color(255, 210, 80, 55));
+                    _cachedCircle.setOutlineThickness(0.0f);
+                    window.draw(_cachedCircle);
                 }
 
-                sf::Sprite sp(_maceTexture);
-                sp.setOrigin({static_cast<float>(_maceTexture.getSize().x) * 0.5f, 
-                              static_cast<float>(_maceTexture.getSize().y) * 0.5f}); // Динамический центр масс
-                sp.setPosition(mace.position);
-                sp.setRotation(sf::degrees(mace.rotation));
-                window.draw(sp);
+                if (!_cachedMaceSprite.has_value()) {
+                    _cachedMaceSprite.emplace(_maceTexture);
+                }
+                float texW = static_cast<float>(_maceTexture.getSize().x);
+                float texH = static_cast<float>(_maceTexture.getSize().y);
+                // Размер булавы в игре: ровно в 1.25 раза больше игрока (высота игрока = 64px, 64 * 1.25 = 80px)
+                constexpr float playerHeight = static_cast<float>(FRAME_SIZE) * SPRITE_SCALE; // 64.0f
+                constexpr float targetMaceH = playerHeight * 1.25f; // 80.0f
+                float scaleY = targetMaceH / (texH > 0.0f ? texH : targetMaceH);
+                float scaleX = scaleY; // Сохраняем идеальные 1:1 пропорции текстуры без искажения пикселей
+
+                _cachedMaceSprite->setOrigin({texW * 0.5f, texH * 0.5f});
+                _cachedMaceSprite->setScale({scaleX, scaleY});
+                _cachedMaceSprite->setPosition(mace.position);
+                _cachedMaceSprite->setRotation(sf::degrees(mace.rotation));
+                window.draw(*_cachedMaceSprite);
             }
         }
     }
@@ -2054,7 +2320,7 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
     if (!_fontLoaded) return;
 
     if (!_uiTextsInitialized) {
-        _hint1Text.emplace(_font, toSfString("[ЛКМ/J]: 1 | [ПКМ/K]: 2 | [Q]: Контр-атака | [Shift]: Рывок/Уворот | [Tab]: ИИ | [F5]: КВ/Карта | [T]: Атака"), 13);
+        _hint1Text.emplace(_font, toSfString("[ЛКМ/J]: 1 | [ПКМ/K]: 2 | [R]: ХИЛКА | [Q]: Контр-атака | [Shift]: Рывок | [F]: Блок | [Tab]: ИИ"), 13);
         _hint1Text->setFillColor(sf::Color(220, 220, 235, 210));
 
         _hint2Text.emplace(_font, toSfString("Комбо: 111 | 222 | 11b2 (бросок назад) | 112 | 1f2d1 | 21db1 | dw1-j-adw1 (топот+крюк) | a1a2 | a1a1adw2"), 13);
@@ -2127,6 +2393,65 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
         }
         _pLabelText->setPosition({pBarX + pBarW + 10.0f, pBarY - 2.0f});
         window.draw(*_pLabelText);
+
+        // Шкала прочности блока (GUARD / POISE METER) игрока:
+        float gBarW = pBarW;
+        float gBarH = 6.0f;
+        float gBarX = pBarX;
+        float gBarY = pBarY + pBarH + 4.0f;
+
+        sf::RectangleShape gBorder({gBarW + 2.0f, gBarH + 2.0f});
+        gBorder.setPosition({gBarX - 1.0f, gBarY - 1.0f});
+        gBorder.setFillColor(sf::Color(15, 20, 25, 220));
+        gBorder.setOutlineThickness(1.0f);
+        gBorder.setOutlineColor(sf::Color(50, 70, 90, 200));
+        window.draw(gBorder);
+
+        sf::RectangleShape gBg({gBarW, gBarH});
+        gBg.setPosition({gBarX, gBarY});
+        gBg.setFillColor(sf::Color(25, 30, 40));
+        window.draw(gBg);
+
+        float curGuardRatio = (player->maxGuardHp > 0.0f) ? std::clamp(player->guardHp / player->maxGuardHp, 0.0f, 1.0f) : 0.0f;
+        sf::RectangleShape gBar({gBarW * curGuardRatio, gBarH});
+        gBar.setPosition({gBarX, gBarY});
+        if (player->isGuardBroken()) {
+            gBar.setFillColor(sf::Color(255, 60, 60)); // Красный при пробитии
+        } else if (curGuardRatio < 0.35f) {
+            gBar.setFillColor(sf::Color(255, 170, 40)); // Оранжевый при низком запасе
+        } else {
+            gBar.setFillColor(sf::Color(60, 185, 245)); // Стальной лазурный
+        }
+        window.draw(gBar);
+
+        std::string guardStr = player->isGuardBroken() ? "GUARD BROKEN!" : ("GUARD: " + std::to_string(static_cast<int>(player->guardHp)) + "%");
+        sf::Text guardLabel(_font, toSfString(guardStr), 10);
+        guardLabel.setPosition({gBarX + gBarW + 10.0f, gBarY - 3.0f});
+        guardLabel.setFillColor(player->isGuardBroken() ? sf::Color(255, 80, 80) : sf::Color(140, 210, 255));
+        window.draw(guardLabel);
+
+        // Отображение запаса хилок [R]
+        int flasks = player->getHealFlasks();
+        int maxFlasks = player->getMaxHealFlasks();
+        std::string healStr = "[R] ХИЛКИ: " + std::to_string(flasks) + " / " + std::to_string(maxFlasks);
+        sf::Text healText(_font, toSfString(healStr), 11);
+        healText.setPosition({pBarX, gBarY + gBarH + 5.0f});
+        healText.setFillColor(flasks > 0 ? sf::Color(80, 255, 130) : sf::Color(160, 160, 160, 180));
+        window.draw(healText);
+
+        for (int i = 0; i < maxFlasks; ++i) {
+            sf::RectangleShape flaskIcon({7.0f, 9.0f});
+            flaskIcon.setPosition({pBarX + 130.0f + i * 11.0f, gBarY + gBarH + 6.0f});
+            if (i < flasks) {
+                flaskIcon.setFillColor(sf::Color(80, 255, 120));
+                flaskIcon.setOutlineColor(sf::Color(40, 180, 70));
+            } else {
+                flaskIcon.setFillColor(sf::Color(50, 50, 60, 180));
+                flaskIcon.setOutlineColor(sf::Color(80, 80, 90, 180));
+            }
+            flaskIcon.setOutlineThickness(1.0f);
+            window.draw(flaskIcon);
+        }
     }
 
     // Отображение текущего комбо баннера
@@ -2197,4 +2522,71 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
 
     _hint2Text->setPosition({30.0f, winH - 26.0f});
     window.draw(*_hint2Text);
+}
+
+void CombatSystem::drawBossHealthBar(sf::RenderWindow& window, const Enemy* boss) const {
+    if (!boss || boss->isDead || boss->hp <= 0.0f) return;
+
+    sf::Vector2u winSize = window.getSize();
+    float barW = 560.0f;
+    float barH = 22.0f;
+    float barX = (winSize.x - barW) * 0.5f;
+    float barY = 28.0f;
+
+    // Внешняя рамка
+    sf::RectangleShape border({barW + 6.0f, barH + 6.0f});
+    border.setPosition({barX - 3.0f, barY - 3.0f});
+    border.setFillColor(sf::Color(15, 15, 20, 230));
+    border.setOutlineThickness(2.0f);
+    border.setOutlineColor(sf::Color(190, 165, 90)); // Золотисто-благородная окантовка
+    window.draw(border);
+
+    // Темная подложка
+    sf::RectangleShape bg({barW, barH});
+    bg.setPosition({barX, barY});
+    bg.setFillColor(sf::Color(45, 10, 10, 240));
+    window.draw(bg);
+
+    // Отстающая полоска плавного урона (Catch-up bar)
+    if (boss->displayedHp > boss->hp && boss->maxHp > 0.0f) {
+        float lagW = std::clamp(barW * (boss->displayedHp / boss->maxHp), 0.0f, barW);
+        sf::RectangleShape lagBar({lagW, barH});
+        lagBar.setPosition({barX, barY});
+        lagBar.setFillColor(sf::Color(240, 150, 40));
+        window.draw(lagBar);
+    }
+
+    // Текущее ХП (ярко-красная полоса)
+    if (boss->hp > 0.0f && boss->maxHp > 0.0f) {
+        float curW = std::clamp(barW * (boss->hp / boss->maxHp), 0.0f, barW);
+        sf::RectangleShape curBar({curW, barH});
+        curBar.setPosition({barX, barY});
+        curBar.setFillColor(sf::Color(230, 30, 30));
+        window.draw(curBar);
+    }
+
+    // Текстовая плашка с именем босса "БОСС 1"
+    if (_fontLoaded) {
+        if (!_bossNameText.has_value()) {
+            _bossNameText.emplace(_font, toSfString("БОСС 1"), 15);
+            _bossNameText->setStyle(sf::Text::Bold);
+        }
+        _bossNameText->setFillColor(sf::Color(255, 220, 130));
+        float nameW = _bossNameText->getLocalBounds().size.x;
+        _bossNameText->setPosition({(winSize.x - nameW) * 0.5f, barY - 20.0f});
+        window.draw(*_bossNameText);
+
+        // Цифры ХП
+        if (!_bossHpText.has_value()) {
+            _bossHpText.emplace(_font, "", 11);
+            _bossHpText->setStyle(sf::Text::Bold);
+        }
+        std::string hpStr = std::to_string(static_cast<int>(std::round(boss->hp))) + " / " +
+                            std::to_string(static_cast<int>(std::round(boss->maxHp)));
+        _bossHpText->setString(toSfString(hpStr));
+        _bossHpText->setFillColor(sf::Color(255, 255, 255, 220));
+        float hpW = _bossHpText->getLocalBounds().size.x;
+        _bossHpText->setPosition({(winSize.x - hpW) * 0.5f, barY + 3.0f});
+        window.draw(*_bossHpText);
+    }
 }

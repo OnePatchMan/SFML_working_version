@@ -21,6 +21,7 @@ GameApp::GameApp()
     : _arena(ARENA_WIDTH, ARENA_HEIGHT),
       _player(_arena.getSpawnPosition())
 {
+    Arena::setActive(&_arena);
     initWindow();
     initSubsystems();
 }
@@ -102,6 +103,9 @@ void GameApp::initSubsystems() {
     _lastCombatTime = getFileTimeSafe("assets/config/combat_balance.kv");
     _lastPlayerTime = getFileTimeSafe("assets/config/player.kv");
     _lastEnemyTime = getFileTimeSafe("assets/config/enemy.kv");
+
+    // Запускаем фоновую музыку главного меню при старте
+    SoundManager::get().playMenuMusic();
 }
 
 void GameApp::applyFpsMode(FpsMode mode) {
@@ -161,8 +165,12 @@ void GameApp::respawnEnemies() {
             EnemyType t = (sp.type == 1) ? EnemyType::TANK : 
                           (sp.type == 2) ? EnemyType::DUELIST : 
                           (sp.type == 3) ? EnemyType::DUELIST_PASSIVE : 
-                          (sp.type == 4) ? EnemyType::DUMMY : EnemyType::NORMAL;
+                          (sp.type == 4) ? EnemyType::DUMMY :
+                          (sp.type == 5 || sp.type == static_cast<int>(EnemyType::BOSS_1) || sp.enemyId == "boss_1") ? EnemyType::BOSS_1 : EnemyType::NORMAL;
             _enemies.emplace_back(sp.position, t);
+            if (!sp.enemyId.empty()) {
+                _enemies.back().setEnemyId(sp.enemyId);
+            }
         }
     }
     for (auto& e : _enemies) {
@@ -326,7 +334,36 @@ void GameApp::processEvents() {
 }
 
 void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
-    if (_menuSystem.isInMenu()) return;
+    if (_menuSystem.isInMenu()) {
+        if (_menuSystem.getAppState() == AppState::MAIN_MENU) {
+            // В главном меню играет музыка меню (The_Final_Log.mp3)
+            SoundManager::get().playMenuMusic();
+        }
+        return;
+    }
+
+    // Во время боссфайта играет Boss1.mp3, а при победе или исследовании локации — саундтрек игры
+    bool bossActive = false;
+    for (const auto& e : _enemies) {
+        if (e.getType() == EnemyType::BOSS_1 && !e.isDead && e.hp > 0.0f) {
+            bossActive = true;
+            break;
+        }
+    }
+    if (_arena.isBossFightActive()) {
+        if (!bossActive) {
+            // Босс побежден: убираем барьеры, снимаем фиксацию камеры, деактивируем триггер
+            _arena.endBossFight();
+        } else {
+            SoundManager::get().playBossMusic("Boss1");
+        }
+    } else {
+        if (bossActive) {
+            SoundManager::get().playBossMusic("Boss1");
+        } else {
+            SoundManager::get().playGameMusic();
+        }
+    }
 
     _arena.update(dt);
     _arena.updateTriggers(dt, _player);
@@ -334,7 +371,7 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
 
     bool playerIsAttacking = _combat.isAttacking() || _combat.getCooldown() > 0.0f;
     for (auto& e : _enemies) {
-        e.update(dt, _arena, _player.position, _player.isStunned(), playerIsAttacking);
+        e.update(dt, _arena, _player.position, _player.isStunned(), playerIsAttacking, _player.isInvulnerable());
     }
     _combat.update(dt, _player, _enemies);
 
@@ -392,9 +429,71 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
         }
     }
 
-    _camera.setCenter(_player.position + _combat.getScreenShake());
+    // Спавн динамических врагов из триггеров
+    if (_arena.hasPendingEnemySpawns()) {
+        auto pending = _arena.consumePendingEnemySpawns();
+        for (const auto& sp : pending) {
+            EnemyType t = (sp.type == 1) ? EnemyType::TANK : 
+                          (sp.type == 2) ? EnemyType::DUELIST : 
+                          (sp.type == 3) ? EnemyType::DUELIST_PASSIVE : 
+                          (sp.type == 4) ? EnemyType::DUMMY :
+                          (sp.type == 5 || sp.type == static_cast<int>(EnemyType::BOSS_1) || sp.enemyId == "boss_1") ? EnemyType::BOSS_1 : EnemyType::NORMAL;
+            _enemies.emplace_back(sp.position, t);
+            if (!sp.enemyId.empty()) {
+                _enemies.back().setEnemyId(sp.enemyId);
+            }
+            _enemies.back().setSmartAI(_isSmartAIMode);
+            _enemies.back().reset();
+        }
+    }
 
-    // Перезапуск при гибели
+    // Динамический зум / размер камеры от триггеров
+    if (_player.isDead) {
+        _camera.setSize({1280.0f, 720.0f});
+        _camera.setCenter(_player.position + _combat.getScreenShake());
+    } else if (_arena.hasCustomCameraSize()) {
+        _camera.setSize(_arena.getCameraSize());
+    }
+
+    if (!_player.isDead) {
+        if (_arena.isCameraLocked()) {
+            sf::Vector2f targetCam = _arena.getCameraLockPosition();
+            int lockMode = _arena.getCameraLockMode();
+            if (lockMode == 1) { // Фиксация на точке или блоке
+                targetCam = _arena.getCameraLockPosition();
+            } else if (lockMode == 2) { // Фиксация на определенном враге
+                int enIdx = _arena.getCameraTargetEnemyIndex();
+                const std::string& enTag = _arena.getCameraTargetEnemyTag();
+                bool found = false;
+                if (!enTag.empty()) {
+                    for (const auto& e : _enemies) {
+                        if (e.getEnemyId() == enTag && !e.isDead) {
+                            targetCam = e.position;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found && enIdx >= 0 && enIdx < static_cast<int>(_enemies.size()) && !_enemies[enIdx].isDead) {
+                    targetCam = _enemies[enIdx].position;
+                    found = true;
+                }
+                if (!found) targetCam = _arena.getCameraLockPosition();
+            } else if (lockMode == 3 || _arena.isCameraLockOnBoss()) { // Боссфайт: средняя точка между игроком и боссом
+                for (const auto& e : _enemies) {
+                    if (e.getType() == EnemyType::BOSS_1 && !e.isDead) {
+                        targetCam = (e.position + _player.position) * 0.5f;
+                        break;
+                    }
+                }
+            }
+            _camera.setCenter(targetCam + _combat.getScreenShake());
+        } else {
+            _camera.setCenter(_player.position + _combat.getScreenShake());
+        }
+    }
+
+    // Перезапуск при гибели (полный сброс арены, камеры и музыки!)
     static float playerDeathTimer = 2.0f;
     if (_player.isDead) {
         playerDeathTimer -= dt;
@@ -405,10 +504,13 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
 
         if (playerDeathTimer <= 0.0f) {
             _arena.loadRoom(1);
+            _arena.resetCameraLock();
             _player.reset(_arena.getSpawnPosition());
             respawnEnemies();
             _combat.reset();
+            _camera.setSize({1280.0f, 720.0f});
             _camera.setCenter(_player.position);
+            SoundManager::get().playGameMusic();
             playerDeathTimer = 2.0f;
         }
     } else {
@@ -443,6 +545,14 @@ void GameApp::render() {
     if (_menuSystem.isInMenu()) {
         _menuSystem.draw(_window, mouseScreenPos);
     } else {
+        // Отрисовка грандиозного ХП-бара босса по центру экрана
+        for (const auto& e : _enemies) {
+            if (e.getType() == EnemyType::BOSS_1 && !e.isDead && e.hp > 0.0f) {
+                _combat.drawBossHealthBar(_window, &e);
+                break;
+            }
+        }
+
         _combat.drawUI(_window, &_player);
 
         if (_player.isDead && _combat.getFont()) {

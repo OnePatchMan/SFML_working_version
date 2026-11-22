@@ -443,7 +443,7 @@ private:
         // Воздушные атаки
         _attacks["a1"]   = {2.0f, 70.0f, -40.0f, 0.16f, 0.35f, 0.13f, 6.0f, "AIR ATTACK: a1 (Air Juggle)", sf::Color(80, 220, 255), 0.40f, HitLevel::OVERHEAD, false};
         _attacks["af1"]  = _attacks["a1"];
-        _attacks["a2"]   = {3.5f, 1250.0f, 0.0f, 0.24f, 0.48f, 0.15f, 0.0f, "AIR ATTACK: a2 (Horizontal Air Push)", sf::Color(240, 130, 255), 0.55f, HitLevel::OVERHEAD, false};
+        _attacks["a2"]   = {4.0f, 440.0f, 550.0f, 0.28f, 0.40f, 0.16f, 8.0f, "AIR ATTACK: a2 (Air Dive Slam)", sf::Color(255, 90, 30), 0.60f, HitLevel::OVERHEAD, false};
         _attacks["af2"]  = _attacks["a2"];
         _attacks["adw1"] = {2.8f, 20.0f, -320.0f, 0.18f, 0.35f, 0.13f, 0.0f, "AIR ATTACK: adw1 (Air Down Hook)", sf::Color(255, 190, 60), 0.38f, HitLevel::OVERHEAD, false};
         _attacks["adw2"] = {4.0f, 440.0f, 550.0f, 0.28f, 0.40f, 0.16f, 8.0f, "AIR ATTACK: adw2 (Air Down Slam)", sf::Color(255, 90, 30), 0.60f, HitLevel::OVERHEAD, false};
@@ -516,10 +516,17 @@ private:
         });
 
         addCombo({
+            "a1a1a2",
+            {"a1", "a1", "a2"},
+            {5.5f, 1150.0f, -280.0f, 0.32f, 0.52f, 0.18f, 10.0f, "COMBO a1-a1-a2: DUAL AIR DIVE SLAM!", sf::Color(255, 75, 25), 0.65f, HitLevel::OVERHEAD, false},
+            true, true, false
+        });
+
+        addCombo({
             "a1a2",
             {"a1", "a2"},
-            {3.5f, 1250.0f, 0.0f, 0.24f, 0.45f, 0.15f, 0.0f, "COMBO a1-a2: HORIZONTAL AIR PUSH!", sf::Color(240, 130, 255), 0.55f, HitLevel::OVERHEAD, false},
-            false, true, false
+            {4.5f, 440.0f, 650.0f, 0.28f, 0.40f, 0.16f, 8.0f, "COMBO a1-a2: AIR GROUND SLAM!", sf::Color(255, 90, 30), 0.60f, HitLevel::OVERHEAD, false},
+            true, true, false
         });
 
         addCombo({

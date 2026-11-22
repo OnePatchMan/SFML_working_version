@@ -5,6 +5,7 @@
 #include <vector>
 #include <optional>
 #include "core/Common.h"
+#include "audio/SoundManager.h"
 
 enum class AppState {
     MAIN_MENU,
@@ -40,6 +41,17 @@ enum class FpsLimitMode {
     VSYNC
 };
 
+namespace MenuTheme {
+    constexpr float BUTTON_OUTLINE = 1.5f;
+    constexpr float BUTTON_HOVER_OUTLINE = 2.5f;
+    constexpr sf::Color BG_DARK{10, 10, 12, 255};
+    constexpr sf::Color BG_PANEL{18, 18, 22, 255};
+    constexpr sf::Color ROW_BG{20, 20, 24, 255};
+    constexpr sf::Color OUTLINE_GRAY{45, 45, 52, 255};
+    constexpr sf::Color TEXT_WHITE{255, 255, 255, 255};
+    constexpr sf::Color ACCENT_CYAN{100, 210, 255, 255};
+}
+
 class MenuSystem {
 public:
     MenuSystem();
@@ -74,16 +86,19 @@ public:
         _appState = AppState::PAUSED;
         _currentScreen = MenuScreen::MAIN;
         _returnScreen = MenuScreen::MAIN;
+        SoundManager::get().pauseMusic();
     }
 
     void resumeGame() {
         _appState = AppState::IN_GAME;
+        SoundManager::get().resumeMusic();
     }
 
     void openMainMenu() {
         _appState = AppState::MAIN_MENU;
         _currentScreen = MenuScreen::MAIN;
         _returnScreen = MenuScreen::MAIN;
+        SoundManager::get().playMenuMusic();
     }
 
 private:
@@ -128,6 +143,11 @@ private:
     float _preMuteVolume = 50.0f;
 
     bool _isTrainingMode = false;
+
+    mutable sf::RectangleShape _cachedButtonRect;
+    mutable std::optional<sf::Text> _cachedButtonText;
+    mutable sf::RectangleShape _cachedRowBg;
+    mutable std::optional<sf::Text> _cachedRowText;
 
     std::function<void()> _onStartGame;
     std::function<void()> _onStartTraining;

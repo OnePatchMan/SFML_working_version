@@ -60,6 +60,8 @@ public:
     sf::Vector2f getScreenShake() const { return _shakeOffset; }
     const std::string& getCurrentComboName() const { return _comboDisplayName; }
     float getCooldown() const { return _attackCooldown; }
+    float getAirAttackCooldown() const { return _airAttackCooldown; }
+    int getAirAttacksInCurrentJump() const { return _airAttacksInCurrentJump; }
     float getAttackTimer() const { return _attackTimer; }
     bool isAttacking() const { return _attackTimer > 0.0f; }
     bool isAirGrabActive() const { return _isAirGrabActive; }
@@ -129,6 +131,9 @@ public:
     const sf::Font* getFont() const { return _fontLoaded ? &_font : nullptr; }
     bool hasHitThisSwing() const { return _hasHitThisSwing; }
 
+    void drawBossHealthBar(sf::RenderWindow& window, const Enemy* boss) const;
+    void spawnHealEffect(const sf::Vector2f& playerPos, int remainingFlasks);
+
     static AttackAnimType resolveAttackAnimType(const std::string& attackType, const std::string& comboName);
 
     enum class StunReason { NONE, WHIFF, SPAM, ENEMY_HIT, COUNTER_WHIFF };
@@ -167,6 +172,9 @@ private:
     class Enemy* _grabbedEnemy = nullptr;
     float _attackTimer = 0.0f;
     float _attackCooldown = 0.0f;
+    float _airAttackCooldown = 0.0f;
+    int _airAttacksInCurrentJump = 0;
+    std::string _lastAirAttackType = "";
     float _currentWhiffStun = 0.40f;
     bool _hasHitThisSwing = false;
     StunReason _lastStunReason = StunReason::NONE;
@@ -220,6 +228,15 @@ private:
     mutable std::string _lastCachedComboName;
     mutable std::string _lastCachedChainStr;
     mutable std::string _lastCachedScaleStr;
+
+    // Кешированные графические примитивы мира для 1500+ FPS (устраняют аллокации в цикле)
+    mutable sf::RectangleShape _cachedHitboxRect;
+    mutable sf::CircleShape _cachedCircle;
+    mutable std::optional<sf::Text> _cachedDamageText;
+    mutable std::optional<sf::Text> _cachedSpecialMarkerText;
+    mutable std::optional<sf::Sprite> _cachedMaceSprite;
+    mutable std::optional<sf::Text> _bossNameText;
+    mutable std::optional<sf::Text> _bossHpText;
 
     void updateInternal(float dt, Player& player, const std::vector<Enemy*>& enemiesList);
     void triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld);

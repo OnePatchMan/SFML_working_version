@@ -10,6 +10,20 @@ Enemy::Enemy(sf::Vector2f spawnPos, EnemyType type)
     : position(spawnPos), spawnPosition(spawnPos), enemyType(type), patrolStartX(spawnPos.x)
 {
     setType(type);
+    if (enemyId == "lurker" || enemyId == "burrow") {
+        isBurrowed = true;
+        isErupting = false;
+        hasSurfaceY = false;
+    }
+}
+
+void Enemy::setEnemyId(const std::string& id) {
+    enemyId = id;
+    if (enemyId == "lurker" || enemyId == "burrow") {
+        isBurrowed = true;
+        isErupting = false;
+        hasSurfaceY = false;
+    }
 }
 
 const EnemyArchetypeData& Enemy::getEConfig() const {
@@ -125,9 +139,46 @@ void Enemy::setType(EnemyType type) {
             blockType = BlockType::NONE;
             isBlocking = false;
         }
+    } else if (enemyType == EnemyType::BOSS_1) {
+        maxHp = 100.0f;
+        scale = 3.3f;
+        halfW = 120.0f; // 4 тайла ширина
+        halfH = 92.0f;  // 3 тайла высота
+        stunMultiplier = 0.0f; // Полноценный poise (unflinching)
+        knockMultiplier = 0.0f; // Полный иммунитет к форсе!
+        damageMultiplier = 1.0f; // Сниженный сбалансированный урон
+        hitboxScale = 2.0f;
+        windupMultiplier = 1.0f;
+        canCounter = false; // "Данный босс не может ставить блок контр атаку и применять уворот"
+        canBlock = false;
+        canDodge = false;
+        aggressiveness = 0.85f;
+        intelligence = 0.80f;
+        maxComboHits = 4;
+        allowAirFollowup = false;
+        isSmartAI = false;
+        bossComboCooldown = 1.0f;
+        bossSpecialAttackCooldown = 3.5f;
+        bossSpecialState = Boss1SpecialState::NONE;
+        bossWallStunTimer = 0.0f;
     }
     hp = maxHp;
     displayedHp = maxHp;
+
+    if (enemyType == EnemyType::DUELIST || enemyType == EnemyType::DUELIST_PASSIVE) {
+        maxGuardHp = 50.0f;
+    } else if (enemyType == EnemyType::TANK) {
+        maxGuardHp = 90.0f;
+    } else if (enemyType == EnemyType::DUMMY) {
+        maxGuardHp = 70.0f;
+    } else if (enemyType == EnemyType::BOSS_1) {
+        maxGuardHp = 9999.0f;
+    } else {
+        maxGuardHp = 60.0f;
+    }
+    guardHp = maxGuardHp;
+    guardBrokenTimer = 0.0f;
+    guardRegenDelay = 0.0f;
 }
 
 void Enemy::triggerDodge(float dir) {
@@ -148,8 +199,70 @@ void Enemy::triggerDodge(float dir) {
 }
 
 sf::FloatRect Enemy::getBounds() const {
+    if (isBurrowWaiting()) {
+        return sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    }
     return sf::FloatRect({position.x - halfW, position.y - halfH}, 
                          {halfW * 2.0f, halfH * 2.0f});
+}
+
+void Enemy::triggerBurrowErupt(const sf::Vector2f& targetPos) {
+    if (isErupting) return;
+    isBurrowed = false; // Выходит на поверхность!
+    isErupting = true;
+    isEruptTelegraph = false;
+    eruptDelayTimer = 0.0f;
+    eruptTimer = 0.65f;
+    isFacingLeft = (targetPos.x < position.x);
+    float dir = isFacingLeft ? -1.0f : 1.0f;
+    if (hasSurfaceY) {
+        position.y = surfaceY;
+    }
+    velocity.y = -420.0f;
+    velocity.x = dir * 140.0f;
+    isOnGround = false;
+    attackState = EnemyAttackState::ATTACKING;
+    attackStateTimer = 0.35f;
+    attackHasHit = false;
+    currentHbw = 54.0f;
+    currentHbh = 54.0f;
+    currentHbyOffset = -12.0f;
+    behaviorState = AIBehaviorState::COMBAT;
+    hasDetectedPlayer = true;
+
+    // Скрытень проводит длинное комбо из 3 ударов при выходе из засады!
+    isSmartAI = true;
+    maxComboHits = 3;
+    allowAirFollowup = true;
+    triggerComboSequence(static_cast<int>(AIStarterType::STARTER_112), 3);
+    currentComboName = "LURKER: 3-HIT AMBUSH COMBO!";
+
+    SoundManager::get().playAttack("1", "", false, 75.0f);
+    if (CombatSystem::getActive()) {
+        CombatSystem::getActive()->triggerShake(0.16f, 4.5f);
+    }
+}
+
+void Enemy::cancelBurrowAndStun(float stunTime) {
+    isBurrowed = false;
+    isErupting = false;
+    isEruptTelegraph = false;
+    eruptDelayTimer = 0.0f;
+    eruptTimer = 0.0f;
+    if (hasSurfaceY) {
+        position.y = surfaceY;
+    }
+    isOnGround = true;
+    velocity = {0.0f, 0.0f};
+    attackState = EnemyAttackState::IDLE;
+    attackStateTimer = 0.0f;
+    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    dropCombo();
+    hurtTimer = std::max(hurtTimer, stunTime);
+    behaviorState = AIBehaviorState::CHASE;
+    hasDetectedPlayer = true;
+    currentComboName = "PARRIED OUT OF GROUND!";
+    SoundManager::get().play("adw2", 60.0f);
 }
 
 bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
@@ -324,6 +437,37 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
         hasWallBounced = false;
     }
 
+    if (isBurrowed || isErupting || isEruptTelegraph) {
+        cancelBurrowAndStun(stunTime * stunMultiplier);
+    }
+
+    if (enemyType == EnemyType::BOSS_1) {
+        hp -= amount;
+        velocity.x = 0.0f; // Полный иммунитет к форсе
+        velocity.y = 0.0f;
+        // Во время стана о стену босс остается оглушенным и получает урон
+        if (bossWallStunTimer > 0.0f) {
+            hurtTimer = bossWallStunTimer;
+        } else {
+            hurtTimer = 0.0f; // Unflinching poise (не сбивается обычными атаками)
+            // Если босс в IDLE и игрок атакует его сверху или вблизи — босс моментально реагирует встречной атакой!
+            if (attackState == EnemyAttackState::IDLE && bossComboCooldown <= 0.0f) {
+                triggerBossCombo(bossNextComboIndex % 5);
+                bossNextComboIndex++;
+            }
+        }
+        if (hp <= 0.0f) {
+            hp = 0.0f;
+            isDead = true;
+            deathFadeTimer = 1.5f;
+            respawnTimer = 0.0f;
+            if (Arena::getActive()) {
+                Arena::getActive()->endBossFight();
+            }
+        }
+        return true;
+    }
+
     hp -= amount;
     hurtTimer = stunTime * stunMultiplier;
     velocity.x = knockX * knockMultiplier;
@@ -368,6 +512,27 @@ void Enemy::reset() {
     spinTimer = 0.0f;
     spinAngle = 0.0f;
     isDodging = false;
+    bossSpecialState = Boss1SpecialState::NONE;
+    bossSpecialTimer = 0.0f;
+    bossWallStunTimer = 0.0f;
+    bossComboCooldown = 1.0f;
+    bossSpecialAttackCooldown = 3.5f;
+    bossDustWaves.clear();
+    if (enemyId == "lurker" || enemyId == "burrow") {
+        isBurrowed = true;
+        isErupting = false;
+        isEruptTelegraph = false;
+        eruptDelayTimer = 0.0f;
+        eruptTimer = 0.0f;
+        tendrilTimer = 0.0f;
+        hasSurfaceY = false;
+    } else {
+        isBurrowed = false;
+        isErupting = false;
+        isEruptTelegraph = false;
+        eruptDelayTimer = 0.0f;
+        eruptTimer = 0.0f;
+    }
     dodgeTimer = 0.0f;
     dodgeCooldownTimer = 0.0f;
     isPerfectDodged = false;
@@ -565,6 +730,7 @@ void Enemy::dropCombo() {
     currentComboName = "";
     isAirSuspended = false;
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    behaviorState = hasDetectedPlayer ? AIBehaviorState::CHASE : AIBehaviorState::PATROL;
 }
 
 void Enemy::finishCombo(bool hitConfirmed) {
@@ -582,6 +748,7 @@ void Enemy::finishCombo(bool hitConfirmed) {
     currentComboName = "";
     isAirSuspended = false;
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    behaviorState = hasDetectedPlayer ? AIBehaviorState::CHASE : AIBehaviorState::PATROL;
 }
 
 void Enemy::stagger(float duration) {
@@ -589,13 +756,81 @@ void Enemy::stagger(float duration) {
     dropCombo();
 }
 
-void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking) {
+void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking, bool playerIsInvulnerable) {
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             deathFadeTimer -= dt;
             if (deathFadeTimer < 0.0f) deathFadeTimer = 0.0f;
         }
         return; // Мертвые враги не воскресают автоматически
+    }
+
+    if (enemyType == EnemyType::BOSS_1) {
+        updateBoss1(dt, arena, playerPos, playerIsStunned, playerIsAttacking);
+        return;
+    }
+
+    // Логика затаившегося врага (Lurker / Скрытень с усиками)
+    if (isBurrowed) {
+        if (!hasSurfaceY) {
+            surfaceY = position.y;
+            hasSurfaceY = true;
+        }
+        if (!isErupting) {
+            // Погружен неподвижно под землю
+            position.y = surfaceY + halfH * 1.5f;
+            velocity = {0.0f, 0.0f};
+
+            // Фаза задержки / предупреждения перед вылезанием:
+            if (isEruptTelegraph) {
+                eruptDelayTimer -= dt;
+                tendrilTimer += dt * 5.0f; // Бешеное колыхание/вибрация усиков
+                if (eruptDelayTimer <= 0.0f) {
+                    isEruptTelegraph = false;
+                    eruptDelayTimer = 0.0f;
+                    triggerBurrowErupt(eruptTargetPos);
+                }
+                return; // Во время задержки остается под землей
+            }
+
+            tendrilTimer += dt;
+
+            // Проверка наступания игрока на усики
+            bool hasPlayer = (playerPos.x != 0.0f || playerPos.y != 0.0f);
+            if (hasPlayer && !isDead && hurtTimer <= 0.0f) {
+                float distToTendrilX = std::abs(playerPos.x - position.x);
+                float distToSurfaceY = std::abs(playerPos.y - surfaceY);
+                // Зона усиков: ширина tendrilTriggerWidth, по вертикали уровень пола
+                if (distToTendrilX <= (tendrilTriggerWidth * 0.5f + 16.0f) && distToSurfaceY <= (halfH + 24.0f)) {
+                    if (playerIsInvulnerable) {
+                        // Игрок в кадрах неуязвимости (i-frames): усики НЕ трогают его!
+                    } else {
+                        // Наступил без неуязвимости -> запускаем задержку перед выходом с предупреждением!
+                        isEruptTelegraph = true;
+                        eruptDelayTimer = 0.42f; // Задержка 0.42с для реакции и парирования контратакой [Q]
+                        eruptTargetPos = playerPos;
+                        SoundManager::get().play("adw2", 45.0f);
+                        if (CombatSystem::getActive()) {
+                            CombatSystem::getActive()->triggerShake(0.35f, 2.5f);
+                        }
+                    }
+                }
+            }
+            return; // Под землей враг неподвижен и не обновляет наземный ИИ
+        } else {
+            // Враг в фазе вылезания и атаки
+            eruptTimer -= dt;
+            if (eruptTimer <= 0.0f) {
+                isBurrowed = false;
+                isErupting = false;
+                eruptTimer = 0.0f;
+                if (aiComboState == AIComboState::IDLE) {
+                    attackState = EnemyAttackState::RECOVERY;
+                    attackStateTimer = 0.20f;
+                    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+                }
+            }
+        }
     }
 
     // Плавное догоняние полоски урона
@@ -613,9 +848,26 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     if (stunPunishCooldown > 0.0f) stunPunishCooldown -= dt;
     if (punishBannerTimer > 0.0f) punishBannerTimer -= dt;
 
+    if (guardBrokenTimer > 0.0f) {
+        guardBrokenTimer -= dt;
+        isBlocking = false;
+        blockType = BlockType::NONE;
+        if (guardBrokenTimer <= 0.0f) {
+            guardHp = maxGuardHp * 0.5f;
+        }
+    } else {
+        if (!isBlocking && guardHp < maxGuardHp) {
+            if (guardRegenDelay > 0.0f) {
+                guardRegenDelay -= dt;
+            } else {
+                guardHp = std::min(maxGuardHp, guardHp + 30.0f * dt);
+            }
+        }
+    }
+
     // Логика тренировочного манекена (Dummy): блок, сброс урона через 5 секунд и вылетающие надписи
     if (enemyType == EnemyType::DUMMY) {
-        if (isOnGround) {
+        if (isOnGround && !isGuardBroken()) {
             if (dummyBlockMode == DummyBlockMode::HIGH) {
                 blockType = BlockType::HIGH;
                 isBlocking = true;
@@ -885,7 +1137,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 if (alertTimer <= 0.0f) {
                     behaviorState = AIBehaviorState::CHASE;
                 }
-            } else if (behaviorState != AIBehaviorState::COMBAT) {
+            } else if (behaviorState != AIBehaviorState::COMBAT || (aiComboState == AIComboState::IDLE && attackState == EnemyAttackState::IDLE)) {
                 behaviorState = AIBehaviorState::CHASE;
             }
         } else {
@@ -898,7 +1150,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     patrolStartX = position.x;
                     patrolWaitTimer = pcfg.patrolWaitTime;
                     velocity.x = 0.0f;
-                } else if (behaviorState != AIBehaviorState::COMBAT) {
+                } else if (behaviorState != AIBehaviorState::COMBAT || (aiComboState == AIComboState::IDLE && attackState == EnemyAttackState::IDLE)) {
                     behaviorState = AIBehaviorState::CHASE;
                 }
             } else {
@@ -922,13 +1174,18 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 bool reachedLimit = (isPatrolMovingRight && position.x >= patrolStartX + pcfg.patrolRadius) ||
                                     (!isPatrolMovingRight && position.x <= patrolStartX - pcfg.patrolRadius);
 
-                // Проверка стены/препятствия впереди
+                // Проверка стены/препятствия впереди (на наклонных лестницах подъем выполняется шагом)
+                bool nearSlope = arena.isSlopeNear(position.x, position.y + HALF_H - 4.0f, 96.0f);
                 float checkWallX = position.x + pDir * (HALF_W + 12.0f);
-                bool wallAhead = arena.overlapsSolid(checkWallX, position.y, 6.0f, HALF_H - 6.0f, HALF_H - 6.0f);
+                bool wallAhead = !nearSlope && arena.overlapsSolid(checkWallX, position.y - 8.0f, 6.0f, HALF_H - 12.0f, HALF_H - 12.0f);
 
-                // Проверка обрыва/пропасти впереди на текущем уровне пола (не падать вниз на нижний блок!)
-                bool floorAhead = arena.overlapsSolid(checkWallX, position.y + HALF_H + 8.0f, 6.0f, 4.0f, 4.0f);
-                bool footFloor = arena.overlapsSolid(position.x + pDir * HALF_W, position.y + HALF_H + 8.0f, 4.0f, 4.0f, 4.0f);
+                // Проверка обрыва/пропасти впереди (учитываем наклонный спуск по ступеням лестницы)
+                bool floorAhead = nearSlope ||
+                                  arena.overlapsSolid(checkWallX, position.y + HALF_H + 8.0f, 6.0f, 4.0f, 4.0f) ||
+                                  arena.overlapsSolid(checkWallX, position.y + HALF_H + 34.0f, 6.0f, 8.0f, 8.0f);
+                bool footFloor = nearSlope ||
+                                 arena.overlapsSolid(position.x + pDir * HALF_W, position.y + HALF_H + 8.0f, 4.0f, 4.0f, 4.0f) ||
+                                 arena.overlapsSolid(position.x + pDir * HALF_W, position.y + HALF_H + 34.0f, 4.0f, 8.0f, 8.0f);
 
                 if (reachedLimit || wallAhead || !floorAhead || !footFloor) {
                     isPatrolMovingRight = !isPatrolMovingRight;
@@ -958,12 +1215,13 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     attackStateTimer -= dt;
                     if (attackStateTimer <= 0.0f) {
                         attackState = EnemyAttackState::IDLE;
+                        behaviorState = hasDetectedPlayer ? AIBehaviorState::CHASE : AIBehaviorState::PATROL;
                     }
                 }
                 if (attackCooldown > 0.0f) attackCooldown -= dt;
 
-                // Если игрок обнаружен (CHASE или ALERT)
-                if (behaviorState == AIBehaviorState::CHASE || behaviorState == AIBehaviorState::ALERT) {
+                // Если игрок обнаружен (CHASE, ALERT или COMBAT в фазе готовности)
+                if (behaviorState == AIBehaviorState::CHASE || behaviorState == AIBehaviorState::ALERT || behaviorState == AIBehaviorState::COMBAT) {
                     sf::Vector2f targetPos = canSeePlayer ? playerPos : lastKnownPlayerPos;
                     isFacingLeft = (targetPos.x < position.x);
                     dir = isFacingLeft ? -1.0f : 1.0f;
@@ -1162,18 +1420,21 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
 
                     // НАУЧИЛИ ИИ ПРЫГАТЬ (ПРЫЖКИ ПРИ ПОГОНЕ)
                     bool isGrounded = arena.overlapsSolid(position.x, position.y + 1.0f, halfW, halfH, halfH);
-                    if (isGrounded && jumpCooldown <= 0.0f) {
+                    bool onOrNearSlope = arena.isSlopeNear(position.x, position.y + halfH - 4.0f, 96.0f);
+                    if (isGrounded && jumpCooldown <= 0.0f && !onOrNearSlope) {
                         float frontX = position.x + dir * (halfW + 24.0f);
                         float farFrontX = position.x + dir * (halfW + 48.0f);
-                        bool blockedAhead = arena.overlapsSolid(frontX, position.y + halfH - 8.0f, 8.0f, 16.0f, 8.0f) ||
-                                            arena.overlapsSolid(frontX, position.y, 8.0f, 16.0f, 16.0f) ||
-                                            arena.overlapsSolid(farFrontX, position.y + halfH - 8.0f, 8.0f, 16.0f, 8.0f) ||
-                                            arena.overlapsSolid(farFrontX, position.y, 8.0f, 16.0f, 16.0f);
+                        // Проверяем реальную вертикальную стену на уровне тела, а не наклонный подъем лестницы:
+                        bool blockedAhead = arena.overlapsSolid(frontX, position.y - 10.0f, 8.0f, 16.0f, 16.0f) ||
+                                            arena.overlapsSolid(farFrontX, position.y - 10.0f, 8.0f, 16.0f, 16.0f);
                         bool spaceAbove = !arena.overlapsSolid(frontX, position.y - 50.0f, halfW, 16.0f, 16.0f) &&
-                                          !arena.overlapsSolid(position.x, position.y - 64.0f, halfW, 16.0f, 16.0f);
+                                          !arena.overlapsSolid(position.x, position.y - 64.0f, halfW, 12.0f, 12.0f);
                         float floorCheckX = position.x + dir * (halfW + 24.0f);
-                        bool noFloorAhead = !arena.overlapsSolid(floorCheckX, position.y + halfH + 12.0f, 8.0f, 4.0f, 4.0f);
-                        bool playerAbove = (targetPos.y < position.y - 45.0f) && (distToPlayer < 260.0f);
+                        // Проверяем наличие пола с учетом наклонного спуска лестницы до 34px вниз:
+                        bool hasFloorAhead = arena.overlapsSolid(floorCheckX, position.y + halfH + 12.0f, 8.0f, 4.0f, 4.0f) ||
+                                             arena.overlapsSolid(floorCheckX, position.y + halfH + 34.0f, 8.0f, 8.0f, 8.0f);
+                        bool noFloorAhead = !hasFloorAhead;
+                        bool playerAbove = (targetPos.y < position.y - 45.0f) && (distToPlayer < 70.0f);
                         bool headroomClear = !arena.overlapsSolid(position.x, position.y - 64.0f, halfW, 12.0f, 12.0f);
 
                         if ((blockedAhead && spaceAbove) || (noFloorAhead && distToPlayer > 40.0f) || (playerAbove && headroomClear)) {
@@ -2135,17 +2396,19 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
 
                 // Прыжки манекена при преследовании
                 bool isGrounded = arena.overlapsSolid(position.x, position.y + 1.0f, halfW, halfH, halfH);
-                if (isGrounded && jumpCooldown <= 0.0f) {
+                bool onOrNearSlope = arena.isSlopeNear(position.x, position.y + halfH - 4.0f, 96.0f);
+                if (isGrounded && jumpCooldown <= 0.0f && !onOrNearSlope) {
                     float frontX = position.x + dir * (halfW + 24.0f);
                     float farFrontX = position.x + dir * (halfW + 48.0f);
-                    bool blockedAhead = arena.overlapsSolid(frontX, position.y + halfH - 8.0f, 8.0f, 16.0f, 8.0f) ||
-                                        arena.overlapsSolid(frontX, position.y, 8.0f, 16.0f, 16.0f) ||
-                                        arena.overlapsSolid(farFrontX, position.y + halfH - 8.0f, 8.0f, 16.0f, 8.0f) ||
-                                        arena.overlapsSolid(farFrontX, position.y, 8.0f, 16.0f, 16.0f);
+                    bool blockedAhead = arena.overlapsSolid(frontX, position.y - 10.0f, 8.0f, 16.0f, 16.0f) ||
+                                        arena.overlapsSolid(farFrontX, position.y - 10.0f, 8.0f, 16.0f, 16.0f);
                     bool spaceAbove = !arena.overlapsSolid(frontX, position.y - 50.0f, halfW, 16.0f, 16.0f) &&
-                                      !arena.overlapsSolid(position.x, position.y - 64.0f, halfW, 16.0f, 16.0f);
-                    bool noFloorAhead = !arena.overlapsSolid(frontX, position.y + halfH + 12.0f, 8.0f, 4.0f, 4.0f);
-                    bool playerAbove = (targetPos.y < position.y - 45.0f) && (distToPlayer < 260.0f);
+                                      !arena.overlapsSolid(position.x, position.y - 64.0f, halfW, 12.0f, 12.0f);
+                    float floorCheckX = position.x + dir * (halfW + 24.0f);
+                    bool hasFloorAhead = arena.overlapsSolid(floorCheckX, position.y + halfH + 12.0f, 8.0f, 4.0f, 4.0f) ||
+                                         arena.overlapsSolid(floorCheckX, position.y + halfH + 34.0f, 8.0f, 8.0f, 8.0f);
+                    bool noFloorAhead = !hasFloorAhead;
+                    bool playerAbove = (targetPos.y < position.y - 45.0f) && (distToPlayer < 70.0f);
                     bool headroomClear = !arena.overlapsSolid(position.x, position.y - 64.0f, halfW, 12.0f, 12.0f);
 
                     if ((blockedAhead && spaceAbove) || (noFloorAhead && distToPlayer > 40.0f) || (playerAbove && headroomClear)) {
@@ -2193,8 +2456,14 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
 
     // Динамическое обновление хитбокса атаки каждый кадр (привязано к актуальной позиции врага)
     if (attackState == EnemyAttackState::ATTACKING) {
-        float hbx = isFacingLeft ? (position.x - halfW - currentHbw) : (position.x + halfW);
-        attackHitbox = sf::FloatRect({hbx, position.y + currentHbyOffset}, {currentHbw, currentHbh});
+        if (isErupting) {
+            float hbx = position.x - halfW - 8.0f;
+            float hby = position.y - halfH - 12.0f;
+            attackHitbox = sf::FloatRect({hbx, hby}, {halfW * 2.0f + 16.0f, halfH * 2.0f + 16.0f});
+        } else {
+            float hbx = isFacingLeft ? (position.x - halfW - currentHbw) : (position.x + halfW);
+            attackHitbox = sf::FloatRect({hbx, position.y + currentHbyOffset}, {currentHbw, currentHbh});
+        }
     } else {
         attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
     }
@@ -2221,6 +2490,12 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
     // Защита от застревания в стенах при ударах (De-penetration / Unstuck logic)
     if (arena.overlapsSolid(position.x, position.y, halfW, halfH, halfH)) {
         for (float dist = 1.0f; dist <= 64.0f; dist += 1.0f) {
+            // В первую очередь выталкиваем ВВЕРХ (из пола или наклонной лестницы), не сдвигая врага вбок
+            if (!arena.overlapsSolid(position.x, position.y - dist, halfW, halfH, halfH)) {
+                position.y -= dist;
+                if (velocity.y > 0.0f) velocity.y = 0.0f;
+                break;
+            }
             if (!arena.overlapsSolid(position.x - dist, position.y, halfW, halfH, halfH)) {
                 position.x -= dist;
                 velocity.x = 0.0f;
@@ -2231,16 +2506,17 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 velocity.x = 0.0f;
                 break;
             }
-            if (!arena.overlapsSolid(position.x, position.y - dist, halfW, halfH, halfH)) {
-                position.y -= dist;
+            if (!arena.overlapsSolid(position.x, position.y + dist, halfW, halfH, halfH)) {
+                position.y += dist;
                 velocity.y = 0.0f;
                 break;
             }
         }
     }
 
-    // Движение по X с пошаговой коллизией (предотвращает заталкивание в стену)
+    // Движение по X с пошаговой коллизией и поддержкой подъема по ступеням
     float deltaX = velocity.x * dt;
+    bool wasGroundedBeforeX = isGrounded || isOnGround;
     if (deltaX != 0.0f) {
         float stepSign = (deltaX > 0.0f) ? 1.0f : -1.0f;
         float remaining = std::abs(deltaX);
@@ -2250,10 +2526,11 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             float nextX = position.x + step;
             if (!arena.overlapsSolid(nextX, position.y, halfW, halfH, halfH)) {
                 // Если противник в режиме патрулирования, он ни в коем случае не должен делать шаг,
-                // если его передний край теряет твердый пол (чтобы не падать вниз на нижний блок!)
+                // если его передний край теряет твердый пол (с учетом наклонного спуска до 34px)
                 // Во время получения урона / отталкивания (hurtTimer > 0) враг и манекен отлетают свободно без блокировки обрыва!
                 if (hurtTimer <= 0.0f && behaviorState == AIBehaviorState::PATROL && attackState == EnemyAttackState::IDLE && enemyType != EnemyType::DUMMY) {
-                    bool hasFloor = arena.overlapsSolid(nextX + stepSign * (halfW - 2.0f), position.y + halfH + 8.0f, 4.0f, 4.0f, 4.0f);
+                    bool hasFloor = arena.overlapsSolid(nextX + stepSign * (halfW - 2.0f), position.y + halfH + 8.0f, 4.0f, 4.0f, 4.0f) ||
+                                    arena.overlapsSolid(nextX + stepSign * (halfW - 2.0f), position.y + halfH + 34.0f, 4.0f, 8.0f, 8.0f);
                     if (!hasFloor) {
                         velocity.x = 0.0f;
                         isPatrolMovingRight = !isPatrolMovingRight;
@@ -2264,7 +2541,28 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 position.x = nextX;
                 remaining -= std::abs(step);
             } else {
+                // Плавный подъем на полублоки и наклонные лестницы при ходьбе по земле
+                bool steppedUp = false;
+                if (wasGroundedBeforeX) {
+                    constexpr float maxStepUp = 32.0f;
+                    for (float up = 1.0f; up <= maxStepUp; up += 1.0f) {
+                        if (!arena.overlapsSolid(nextX, position.y - up, halfW, halfH, halfH)) {
+                            position.x = nextX;
+                            position.y -= up;
+                            remaining -= std::abs(step);
+                            steppedUp = true;
+                            break;
+                        }
+                    }
+                }
+                if (steppedUp) continue;
+
                 // Столкновение со стеной!
+                if (hurtTimer > 0.0f) {
+                    if (auto* act = Arena::getActive()) {
+                        act->checkAndBreakDoorOverlap(getBounds(), velocity, true);
+                    }
+                }
                 // Механика отскока от стены (Wall Bounce как в Mortal Kombat X):
                 float minSpeed = CombatConfig::getWallBounceMinSpeed();
                 if (hurtTimer > 0.0f && preCollisionSpeedX >= minSpeed && !hasWallBounced && !isDead) {
@@ -2315,6 +2613,31 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
         }
     }
 
+    // Плавный спуск по ступеням лестницы при движении по земле
+    if (wasGroundedBeforeX && velocity.y >= 0.0f && std::abs(deltaX) > 0.001f) {
+        if (!arena.overlapsSolid(position.x, position.y + 1.0f, halfW, halfH, halfH)) {
+            constexpr float maxStepDown = 32.0f;
+            for (float down = 1.0f; down <= maxStepDown; down += 1.0f) {
+                if (arena.overlapsSolid(position.x, position.y + down, halfW, halfH, halfH)) {
+                    float low = down - 1.0f;
+                    float high = down;
+                    for (int iter = 0; iter < 4; ++iter) {
+                        float mid = (low + high) * 0.5f;
+                        if (arena.overlapsSolid(position.x, position.y + mid, halfW, halfH, halfH)) {
+                            high = mid;
+                        } else {
+                            low = mid;
+                        }
+                    }
+                    position.y += low;
+                    isGrounded = true;
+                    isOnGround = true;
+                    break;
+                }
+            }
+        }
+    }
+
     // Горизонтальное затухание скорости (плавное экспоненциальное трение):
     float friction = ((isGrounded && velocity.y >= 0.0f) || (hurtTimer > 0.0f && std::abs(velocity.y) <= 1.0f)) ? 10.0f : 4.0f;
     velocity.x *= std::exp(-friction * dt);
@@ -2338,8 +2661,18 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 } else {
                     velocity.y = 0.0f;
                 }
-                // Прижимаем к полу
-                position.y = std::floor((nextY + halfH) / TILE_SIZE) * TILE_SIZE - halfH - 0.01f;
+                // Находим точную поверхность пола/склона через бинарный поиск
+                float low = position.y;
+                float high = nextY;
+                for (int iter = 0; iter < 6; ++iter) {
+                    float mid = (low + high) * 0.5f;
+                    if (arena.overlapsSolid(position.x, mid, halfW, halfH, halfH)) {
+                        high = mid;
+                    } else {
+                        low = mid;
+                    }
+                }
+                position.y = low;
             } else {
                 position.y = nextY;
             }
@@ -2422,13 +2755,91 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         return;
     }
 
+    if (isBurrowWaiting()) {
+        // Отрисовка затаившегося Скрытня: бугорок земли и колышущиеся усики на поверхности
+        float groundY = (hasSurfaceY ? surfaceY : position.y) + halfH;
+        
+        // 1. Землистый бугорок засады
+        sf::RectangleShape mound({32.0f, 6.0f});
+        mound.setOrigin({16.0f, 6.0f});
+        if (isEruptTelegraph) {
+            float shakeX = ((rand() % 100) / 50.0f - 1.0f) * 1.5f;
+            mound.setPosition({position.x + shakeX, groundY});
+            mound.setFillColor(sf::Color(80, 35, 30));
+            mound.setOutlineColor(sf::Color(255, 60, 40));
+        } else {
+            mound.setPosition({position.x, groundY});
+            mound.setFillColor(sf::Color(45, 45, 52));
+            mound.setOutlineColor(sf::Color(25, 25, 30));
+        }
+        mound.setOutlineThickness(1.0f);
+        window.draw(mound);
+
+        // 2. Колышущиеся усики (3 штуки)
+        for (int i = -1; i <= 1; ++i) {
+            float xOffset = i * 8.0f;
+            float sway = isEruptTelegraph ? 
+                (std::sin(tendrilTimer * 8.0f + i * 2.0f) * 7.5f) : 
+                (std::sin(tendrilTimer * 3.5f + i * 1.4f) * 5.0f);
+            float h = 15.0f + std::abs(i) * -2.0f;
+            
+            // Стебель усика
+            sf::Color stemColor1 = isEruptTelegraph ? sf::Color(160, 40, 40) : sf::Color(100, 70, 130);
+            sf::Color stemColor2 = isEruptTelegraph ? sf::Color(220, 80, 50) : sf::Color(140, 95, 180);
+            sf::Color stemColor3 = isEruptTelegraph ? sf::Color(255, 120, 70) : sf::Color(180, 120, 230);
+            sf::Vertex line[] = {
+                sf::Vertex{sf::Vector2f{position.x + xOffset, groundY}, stemColor1},
+                sf::Vertex{sf::Vector2f{position.x + xOffset + sway * 0.5f, groundY - h * 0.5f}, stemColor2},
+                sf::Vertex{sf::Vector2f{position.x + xOffset + sway, groundY - h}, stemColor3}
+            };
+            window.draw(line, 3, sf::PrimitiveType::LineStrip);
+
+            // Светящаяся сенсорная луковица на кончике усика
+            sf::CircleShape tip(isEruptTelegraph ? 3.0f : 2.2f);
+            tip.setOrigin({tip.getRadius(), tip.getRadius()});
+            tip.setPosition({position.x + xOffset + sway, groundY - h});
+            if (isEruptTelegraph) {
+                float pulse = 0.5f + 0.5f * std::sin(tendrilTimer * 12.0f + i * 2.0f);
+                tip.setFillColor(sf::Color(255, static_cast<std::uint8_t>(50 + 100 * pulse), 40));
+            } else {
+                float pulse = 0.7f + 0.3f * std::sin(tendrilTimer * 5.0f + i * 1.5f);
+                tip.setFillColor(sf::Color(
+                    static_cast<std::uint8_t>(200 * pulse),
+                    static_cast<std::uint8_t>(130 * pulse),
+                    static_cast<std::uint8_t>(255 * pulse)
+                ));
+            }
+            window.draw(tip);
+        }
+
+        // Предупреждающий маркер тревоги [ ! ] во время задержки перед выходом
+        if (isEruptTelegraph) {
+            sf::CircleShape warnBadge(7.5f);
+            warnBadge.setOrigin({7.5f, 7.5f});
+            warnBadge.setPosition({position.x, groundY - 26.0f});
+            warnBadge.setFillColor(sf::Color(255, 40, 30));
+            warnBadge.setOutlineThickness(1.5f);
+            warnBadge.setOutlineColor(sf::Color(255, 220, 60));
+            window.draw(warnBadge);
+
+            if (_cachedWarnExText) {
+                _cachedWarnExText->setPosition({position.x - 2.5f, groundY - 35.0f});
+                window.draw(*_cachedWarnExText);
+            }
+        }
+        return; // Тело скрыто под землей
+    }
+
     // ЦВЕТОВЫЕ ОТЛИЧИЯ АРХЕТИПОВ:
+    // Подземный (Скрытень) — ярко-оранжевый
     // Обычный — серый
     // Жирный (Танк) — красный
     // Агрессивный дуэлянт — фиолетовый
     // Пассивный дуэлянт — голубой
     sf::Color baseColor;
-    if (enemyType == EnemyType::NORMAL) {
+    if (enemyId == "lurker" || enemyId == "burrow") {
+        baseColor = sf::Color(255, 140, 25); // Ярко-оранжевый цвет для Скрытня
+    } else if (enemyType == EnemyType::NORMAL) {
         baseColor = sf::Color(135, 140, 150); // Серый цвет
     } else if (enemyType == EnemyType::TANK) {
         baseColor = sf::Color(215, 38, 48);   // Красный цвет
@@ -2438,6 +2849,8 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         baseColor = sf::Color(45, 185, 245);  // Голубой цвет (пассивный)
     } else if (enemyType == EnemyType::DUMMY) {
         baseColor = sf::Color(220, 175, 75);  // Золотисто-древесный цвет (манекен)
+    } else if (enemyType == EnemyType::BOSS_1) {
+        baseColor = sf::Color(255, 30, 30);   // Ярко-красный цвет (БОСС 1)
     } else {
         baseColor = isSmartAI ? sf::Color(110, 45, 150) : sf::Color(220, 75, 55);
     }
@@ -2455,7 +2868,8 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     } else if (hurtTimer > 0.0f) {
         body.setFillColor(sf::Color(255, 130, 145)); // Вспышка при получении урона
     } else if (attackState == EnemyAttackState::ATTACKING) {
-        if (enemyType == EnemyType::TANK) body.setFillColor(sf::Color(255, 60, 50));
+        if (enemyId == "lurker" || enemyId == "burrow") body.setFillColor(sf::Color(255, 100, 20));
+        else if (enemyType == EnemyType::TANK) body.setFillColor(sf::Color(255, 60, 50));
         else if (enemyType == EnemyType::DUELIST) body.setFillColor(sf::Color(255, 50, 220));
         else if (enemyType == EnemyType::DUELIST_PASSIVE) body.setFillColor(sf::Color(70, 230, 255));
         else body.setFillColor(sf::Color(220, 120, 120));
@@ -2587,6 +3001,53 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(slash);
     }
 
+    // Предупреждение перед атакой Босса 1 (заменяет замах: красный бейдж [ ! ] и подсвечиваемая зона удара)
+    if (enemyType == EnemyType::BOSS_1) {
+        bool isTelegraphing = (attackState == EnemyAttackState::WINDUP) ||
+                              (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH) ||
+                              (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH);
+        if (isTelegraphing) {
+            // 1. Светящийся бейдж предупреждения [ ! ] над головой босса
+            sf::CircleShape warnBadge(15.0f);
+            warnBadge.setOrigin({15.0f, 15.0f});
+            warnBadge.setPosition({position.x, position.y - halfH - 28.0f});
+            warnBadge.setFillColor(sf::Color(255, 30, 30));
+            warnBadge.setOutlineThickness(2.5f);
+            warnBadge.setOutlineColor(sf::Color(255, 230, 40));
+            window.draw(warnBadge);
+
+            if (_cachedWarnExText) {
+                _cachedWarnExText->setCharacterSize(18);
+                _cachedWarnExText->setStyle(sf::Text::Bold);
+                _cachedWarnExText->setFillColor(sf::Color::White);
+                _cachedWarnExText->setPosition({position.x - 4.0f, position.y - halfH - 40.0f});
+                window.draw(*_cachedWarnExText);
+            }
+
+            // 2. Зона поражения предупреждения (Danger Telegraph Box)
+            float forwardReach = 160.0f;
+            float totalW = halfW * 2.0f + forwardReach;
+            float hbx = isFacingLeft ? (position.x + halfW - totalW) : (position.x - halfW);
+            float hby = position.y - halfH - 65.0f;
+            float hbh = halfH * 2.0f + 85.0f;
+
+            if (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH) {
+                hbx = position.x - 220.0f;
+                totalW = 440.0f;
+                hby = position.y - halfH - 20.0f;
+                hbh = halfH * 2.0f + 40.0f;
+            }
+
+            sf::RectangleShape warnBox({totalW, hbh});
+            warnBox.setPosition({hbx, hby});
+            float pulse = 0.6f + 0.4f * std::sin(attackStateTimer * 28.0f);
+            warnBox.setFillColor(sf::Color(255, 40, 20, static_cast<std::uint8_t>(45 + 45 * pulse)));
+            warnBox.setOutlineThickness(2.0f);
+            warnBox.setOutlineColor(sf::Color(255, 220, 40, static_cast<std::uint8_t>(160 + 80 * pulse)));
+            window.draw(warnBox);
+        }
+    }
+
     // Отрисовка стойки парирования бота
     if (isCounterStanceActive()) {
         sf::CircleShape shield(26.0f * scale);
@@ -2682,6 +3143,43 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         return; // Манекен отрисован, стандартный HUD врагов пропускается
     }
 
+    // Для Босса 1 не рисуем маленькую полоску ХП над головой (у него большой верхний ХП-бар на экране)
+    if (enemyType == EnemyType::BOSS_1) {
+        // Отрисовка спец-эффектов Босса 1
+        // 1. Отрисовка волн пыли на земле (Earthquake Dust Waves)
+        for (const auto& wave : bossDustWaves) {
+            if (!wave.active) continue;
+            sf::CircleShape dust(14.0f);
+            dust.setOrigin({14.0f, 14.0f});
+            dust.setPosition({wave.x, wave.y});
+            dust.setFillColor(sf::Color(180, 140, 95, static_cast<std::uint8_t>(std::clamp(wave.lifetime * 255.0f, 0.0f, 255.0f))));
+            window.draw(dust);
+
+            sf::CircleShape inner(8.0f);
+            inner.setOrigin({8.0f, 8.0f});
+            inner.setPosition({wave.x, wave.y});
+            inner.setFillColor(sf::Color(240, 200, 140, static_cast<std::uint8_t>(std::clamp(wave.lifetime * 255.0f, 0.0f, 255.0f))));
+            window.draw(inner);
+        }
+
+        // 2. Звездочки стана при ударе о стену
+        if (isBossWallStunned()) {
+            static float stunStarAngle = 0.0f;
+            stunStarAngle += 8.0f;
+            for (int s = 0; s < 4; ++s) {
+                float a = (stunStarAngle + s * 90.0f) * 3.14159f / 180.0f;
+                sf::CircleShape star(5.0f);
+                star.setOrigin({5.0f, 5.0f});
+                star.setPosition({position.x + std::cos(a) * 45.0f, position.y - halfH - 22.0f + std::sin(a) * 12.0f});
+                star.setFillColor(sf::Color(255, 230, 60));
+                star.setOutlineThickness(1.0f);
+                star.setOutlineColor(sf::Color(255, 120, 20));
+                window.draw(star);
+            }
+        }
+        return;
+    }
+
     // 2. Полоска здоровья над противником
     float barW = (enemyType == EnemyType::TANK) ? 70.0f : 50.0f;
     float barH = 5.0f;
@@ -2730,10 +3228,44 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(hpBar);
     }
 
+    // Шкала прочности блока (Guard / Poise) над головой врага:
+    if ((canBlock || guardHp < maxGuardHp || isGuardBroken()) && maxGuardHp > 0.0f && enemyType != EnemyType::BOSS_1) {
+        float gBarW = barW;
+        float gBarH = 3.0f;
+        float gBarY = barY + barH + 2.0f;
+
+        sf::RectangleShape gBorder({gBarW + 2.0f, gBarH + 2.0f});
+        gBorder.setPosition({barX - 1.0f, gBarY - 1.0f});
+        gBorder.setFillColor(sf::Color(15, 20, 25, 200));
+        gBorder.setOutlineThickness(1.0f);
+        gBorder.setOutlineColor(sf::Color(50, 70, 90, 180));
+        window.draw(gBorder);
+
+        sf::RectangleShape gBg({gBarW, gBarH});
+        gBg.setPosition({barX, gBarY});
+        gBg.setFillColor(sf::Color(25, 30, 40));
+        window.draw(gBg);
+
+        float curGuardRatio = std::clamp(guardHp / maxGuardHp, 0.0f, 1.0f);
+        sf::RectangleShape gBar({gBarW * curGuardRatio, gBarH});
+        gBar.setPosition({barX, gBarY});
+        if (isGuardBroken()) {
+            gBar.setFillColor(sf::Color(255, 60, 60));
+        } else if (curGuardRatio < 0.35f) {
+            gBar.setFillColor(sf::Color(255, 170, 40));
+        } else {
+            gBar.setFillColor(sf::Color(60, 185, 245));
+        }
+        window.draw(gBar);
+    }
+
     if (font && _cachedNameText) {
         std::string label = "NORMAL";
         sf::Color labelColor = sf::Color(190, 195, 205);
-        if (enemyType == EnemyType::TANK) {
+        if (enemyId == "lurker" || enemyId == "burrow") {
+            label = "LURKER";
+            labelColor = sf::Color(255, 160, 40);
+        } else if (enemyType == EnemyType::TANK) {
             label = "TANK [HEAVY]";
             labelColor = sf::Color(255, 90, 90);
         } else if (enemyType == EnemyType::DUELIST) {
@@ -2758,50 +3290,50 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
                 _cachedPunishText->setStyle(sf::Text::Bold);
                 _cachedPunishText->setFillColor(sf::Color(255, 215, 0));
             }
-            _cachedPunishText->setPosition({position.x - 24.0f, barY - 26.0f});
+            _cachedPunishText->setPosition({position.x - 24.0f, barY - 37.0f});
             window.draw(*_cachedPunishText);
         }
 
         // Индикатор уворота
         if (isDodging && _cachedDodgeText) {
-            _cachedDodgeText->setPosition({position.x - 18.0f, barY - 26.0f});
+            _cachedDodgeText->setPosition({position.x - 18.0f, barY - 37.0f});
             window.draw(*_cachedDodgeText);
         }
 
-        // Индикатор состояния восприятия
+        // Индикатор состояния восприятия (отображается над именем врага, не перекрывая его)
         if (!isDead) {
             if (behaviorState == AIBehaviorState::ALERT || alertEffectTimer > 0.0f) {
                 // Восклицательный знак тревоги [ ! ] ОБНАРУЖЕН!
                 sf::CircleShape alertBadge(8.0f);
                 alertBadge.setOrigin({8.0f, 8.0f});
-                alertBadge.setPosition({position.x, barY - 22.0f});
+                alertBadge.setPosition({position.x, barY - 26.0f});
                 alertBadge.setFillColor(sf::Color(255, 215, 0));
                 alertBadge.setOutlineThickness(1.5f);
                 alertBadge.setOutlineColor(sf::Color(255, 80, 0));
                 window.draw(alertBadge);
 
                 if (_cachedExText) {
-                    _cachedExText->setPosition({position.x - 3.0f, barY - 30.0f});
+                    _cachedExText->setPosition({position.x - 3.0f, barY - 34.0f});
                     window.draw(*_cachedExText);
                 }
                 if (_cachedAlertText) {
-                    _cachedAlertText->setPosition({position.x - 28.0f, barY - 42.0f});
+                    _cachedAlertText->setPosition({position.x - 28.0f, barY - 46.0f});
                     window.draw(*_cachedAlertText);
                 }
             } else if (behaviorState == AIBehaviorState::PATROL) {
                 if (_cachedPatText) {
-                    _cachedPatText->setPosition({barX + barW - 48.0f, barY - 13.0f});
+                    _cachedPatText->setPosition({barX + 2.0f, barY - 24.0f});
                     window.draw(*_cachedPatText);
                 }
             } else if (behaviorState == AIBehaviorState::CHASE) {
                 if (lostSightTimer < EnemyConfig::get().perception.lostSightTimeout - 0.5f) {
                     if (_cachedSearchBadge) {
-                        _cachedSearchBadge->setPosition({barX + barW - 46.0f, barY - 13.0f});
+                        _cachedSearchBadge->setPosition({barX + 2.0f, barY - 24.0f});
                         window.draw(*_cachedSearchBadge);
                     }
                 } else {
                     if (_cachedChaseBadge) {
-                        _cachedChaseBadge->setPosition({barX + barW - 50.0f, barY - 13.0f});
+                        _cachedChaseBadge->setPosition({barX + 2.0f, barY - 24.0f});
                         window.draw(*_cachedChaseBadge);
                     }
                 }
@@ -2848,6 +3380,7 @@ std::vector<EnemyTypeDef> Enemy::scanEnemyFolders(const std::string& baseDir) {
     ensureFolderInList("duelist_aggressive");
     ensureFolderInList("duelist_passive");
     ensureFolderInList("dummy");
+    ensureFolderInList("lurker");
 
     std::sort(discoveredFolders.begin(), discoveredFolders.end());
 
@@ -2856,7 +3389,13 @@ std::vector<EnemyTypeDef> Enemy::scanEnemyFolders(const std::string& baseDir) {
         def.id = folderName;
 
         // Определяем один из 3 основных типов (архетипов)
-        if (folderName.find("tank") != std::string::npos || folderName.find("heavy") != std::string::npos) {
+        if (folderName.find("lurker") != std::string::npos || folderName.find("burrow") != std::string::npos) {
+            def.archetype = EnemyArchetype::NORMAL;
+            def.legacyType = 0;
+            def.scale = 1.0f;
+            def.maxHp = 45.0f;
+            def.displayName = "Скрытень (Засада)";
+        } else if (folderName.find("tank") != std::string::npos || folderName.find("heavy") != std::string::npos) {
             def.archetype = EnemyArchetype::HEAVY;
             def.legacyType = 1;
             def.scale = 1.5f;
@@ -2914,5 +3453,465 @@ std::vector<EnemyTypeDef> Enemy::scanEnemyFolders(const std::string& baseDir) {
     }
 
     return result;
+}
+
+// =========================================================================
+//                  РЕАЛИЗАЦИЯ БОССА 1 ("БОСС 1")
+// =========================================================================
+
+namespace {
+struct BossAttackStep {
+    float windupTime = 0.50f;
+    float activeTime = 0.16f;
+    float recoveryTime = 0.28f;
+    float damage = 18.0f;
+    float knockX = 350.0f;
+    float knockY = -180.0f;
+    float stunTime = 0.45f;
+    HitLevel hitLevel = HitLevel::MID;
+    float hbw = 140.0f;
+    float hbh = 90.0f;
+    float hbyOffset = 0.0f;
+    float lungeSpeed = 60.0f;
+    std::string sfx = "heavy";
+};
+
+struct BossComboDef {
+    std::string name;
+    std::vector<BossAttackStep> steps;
+};
+
+static const BossComboDef s_bossCombos[5] = {
+    // 0: ЗАТЯЖНОЙ ТЯЖЕЛЫЙ СМЭШ (3 удара)
+    {
+        "БОСС 1: ЗАТЯЖНОЙ СМЭШ [3 УДАРА]",
+        {
+            {0.65f, 0.18f, 0.28f,  5.0f, 380.0f, -200.0f, 0.45f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 80.0f, "heavy"},
+            {0.40f, 0.16f, 0.24f,  6.0f, 350.0f, -140.0f, 0.40f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
+            {0.70f, 0.20f, 0.38f,  8.0f, 480.0f, -280.0f, 0.60f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 120.0f, "heavy"}
+        }
+    },
+    // 1: ДВОЙНОЙ КРЕСТОВОЙ РАССЕКАТЕЛЬ (3 удара)
+    {
+        "БОСС 1: КРЕСТОВОЙ РАССЕКАТЕЛЬ [3 УДАРА]",
+        {
+            {0.45f, 0.16f, 0.22f,  4.5f, 320.0f, -130.0f, 0.35f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
+            {0.42f, 0.16f, 0.22f,  5.5f, 340.0f, -130.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
+            {0.60f, 0.18f, 0.35f,  7.5f, 440.0f, -180.0f, 0.50f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 140.0f, "heavy"}
+        }
+    },
+    // 2: НЕИСТОВАЯ ЯРОСТЬ БЕРСЕРКА (4 удара)
+    {
+        "БОСС 1: ЯРОСТЬ БЕРСЕРКА [4 УДАРА]",
+        {
+            {0.38f, 0.15f, 0.20f,  4.0f, 280.0f, -110.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 75.0f, "heavy"},
+            {0.32f, 0.15f, 0.18f,  4.0f, 280.0f, -110.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 75.0f, "heavy"},
+            {0.36f, 0.16f, 0.22f,  5.5f, 320.0f, -130.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 85.0f, "heavy"},
+            {0.65f, 0.20f, 0.38f,  8.0f, 480.0f, -250.0f, 0.55f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 110.0f, "heavy"}
+        }
+    },
+    // 3: СОКРУШИТЕЛЬ ПОЗЫ (2 удара)
+    {
+        "БОСС 1: СОКРУШИТЕЛЬ ПОЗЫ [2 УДАРА]",
+        {
+            {0.85f, 0.22f, 0.35f,  8.5f, 520.0f, -320.0f, 0.65f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 130.0f, "heavy"},
+            {0.42f, 0.18f, 0.30f,  6.0f, 360.0f, -160.0f, 0.40f, HitLevel::MID, 175.0f, 190.0f, 0.0f,  90.0f, "heavy"}
+        }
+    },
+    // 4: СМЕРЧ УДАРОВ (4 удара)
+    {
+        "БОСС 1: СМЕРЧ УДАРОВ [4 УДАРА]",
+        {
+            {0.36f, 0.16f, 0.20f,  4.0f, 290.0f, -110.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 80.0f, "heavy"},
+            {0.42f, 0.16f, 0.20f,  5.0f, 310.0f, -120.0f, 0.35f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 85.0f, "heavy"},
+            {0.40f, 0.16f, 0.22f,  6.0f, 340.0f, -140.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
+            {0.62f, 0.22f, 0.40f,  8.0f, 500.0f, -260.0f, 0.58f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 120.0f, "heavy"}
+        }
+    }
+};
+}
+
+void Enemy::triggerBossBullCharge() {
+    bossSpecialState = Boss1SpecialState::BULL_CHARGE_TELEGRAPH;
+    bossSpecialTimer = 0.6f;
+    velocity = {0.0f, 0.0f};
+    attackState = EnemyAttackState::WINDUP;
+    attackStateTimer = 0.6f;
+    currentComboName = "БОСС 1: СОКРУШИТЕЛЬНЫЙ РАЗБЕГ!";
+    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    SoundManager::get().play("heavy");
+}
+
+void Enemy::triggerBossEarthquake() {
+    bossSpecialState = Boss1SpecialState::EARTHQUAKE_TELEGRAPH;
+    bossSpecialTimer = 0.8f;
+    velocity = {0.0f, 0.0f};
+    attackState = EnemyAttackState::WINDUP;
+    attackStateTimer = 0.8f;
+    currentComboName = "БОСС 1: ДРОЖЬ ЗЕМЛИ (УДАР ПО ПОЛУ)!";
+    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    SoundManager::get().play("heavy");
+}
+
+void Enemy::triggerBossCombo(int comboIndex) {
+    int idx = std::clamp(comboIndex, 0, 4);
+    bossNextComboIndex = idx;
+    bossCurrentComboHit = 0;
+    bossComboTotalHits = static_cast<int>(s_bossCombos[idx].steps.size());
+    currentComboName = s_bossCombos[idx].name;
+
+    const auto& step = s_bossCombos[idx].steps[0];
+    attackState = EnemyAttackState::WINDUP;
+    attackStateTimer = step.windupTime;
+    currentAttackDamage = step.damage;
+    currentAttackKnockX = step.knockX;
+    currentAttackKnockY = step.knockY;
+    currentAttackStun = step.stunTime;
+    currentAttackHitLevel = step.hitLevel;
+    currentHbw = std::max(step.hbw, 175.0f);
+    currentHbh = halfH * 2.0f + 85.0f;
+    currentHbyOffset = -65.0f;
+    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    attackHasHit = false;
+}
+
+void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos) {
+    if (bossNextComboIndex < 0 || bossNextComboIndex >= 5) bossNextComboIndex = 0;
+    const auto& combo = s_bossCombos[bossNextComboIndex];
+    if (bossCurrentComboHit < 0 || bossCurrentComboHit >= static_cast<int>(combo.steps.size())) {
+        attackState = EnemyAttackState::IDLE;
+        bossComboCooldown = 2.0f;
+        currentComboName = "";
+        return;
+    }
+
+    const auto& step = combo.steps[bossCurrentComboHit];
+    float dir = isFacingLeft ? -1.0f : 1.0f;
+
+    if (attackState == EnemyAttackState::WINDUP) {
+        attackStateTimer -= dt;
+        isFacingLeft = (playerPos.x < position.x);
+        velocity.x = 0.0f;
+
+        if (attackStateTimer <= 0.0f) {
+            attackState = EnemyAttackState::ATTACKING;
+            attackStateTimer = step.activeTime;
+            attackHasHit = false;
+            velocity.x = dir * step.lungeSpeed;
+
+            float forwardReach = std::max(step.hbw, 140.0f);
+            float totalW = halfW * 2.0f + forwardReach;
+            float hbx = isFacingLeft ? (position.x + halfW - totalW) : (position.x - halfW);
+            float hbh = halfH * 2.0f + 85.0f; // Задевает и низ и верх одновременно от пола до 65px над головой босса!
+            float hby = position.y - halfH - 65.0f;
+            attackHitbox = sf::FloatRect({hbx, hby}, {totalW, hbh});
+            SoundManager::get().playAttack(step.sfx, "", false, 90.0f);
+        }
+    } else if (attackState == EnemyAttackState::ATTACKING) {
+        attackStateTimer -= dt;
+        float forwardReach = std::max(step.hbw, 140.0f);
+        float totalW = halfW * 2.0f + forwardReach;
+        float hbx = isFacingLeft ? (position.x + halfW - totalW) : (position.x - halfW);
+        float hbh = halfH * 2.0f + 85.0f; // Задевает и низ и верх одновременно!
+        float hby = position.y - halfH - 65.0f;
+        attackHitbox = sf::FloatRect({hbx, hby}, {totalW, hbh});
+
+        if (attackStateTimer <= 0.0f) {
+            attackState = EnemyAttackState::RECOVERY;
+            attackStateTimer = step.recoveryTime;
+            attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+            velocity.x = 0.0f;
+        }
+    } else if (attackState == EnemyAttackState::RECOVERY) {
+        attackStateTimer -= dt;
+        velocity.x = 0.0f;
+
+        if (attackStateTimer <= 0.0f) {
+            if (bossCurrentComboHit + 1 < static_cast<int>(combo.steps.size())) {
+                // Следующий удар текущего комбо
+                bossCurrentComboHit++;
+                const auto& nextStep = combo.steps[bossCurrentComboHit];
+                attackState = EnemyAttackState::WINDUP;
+                attackStateTimer = nextStep.windupTime;
+                currentAttackDamage = nextStep.damage;
+                currentAttackKnockX = nextStep.knockX;
+                currentAttackKnockY = nextStep.knockY;
+                currentAttackStun = nextStep.stunTime;
+                currentAttackHitLevel = nextStep.hitLevel;
+                currentHbw = std::max(nextStep.hbw, 175.0f);
+                currentHbh = halfH * 2.0f + 25.0f;
+                currentHbyOffset = 0.0f;
+                attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+                attackHasHit = false;
+            } else {
+                // Комбо полностью завершено! Входим в кулдаун 2.0 секунды (запрет связки двух комбо)
+                attackState = EnemyAttackState::IDLE;
+                bossComboCooldown = 2.0f;
+                currentComboName = "";
+                attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+                velocity.x = 0.0f;
+            }
+        }
+    }
+}
+
+void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking) {
+    if (isDead) {
+        if (deathFadeTimer > 0.0f) {
+            deathFadeTimer -= dt;
+            if (deathFadeTimer < 0.0f) deathFadeTimer = 0.0f;
+        }
+        return;
+    }
+
+    // 1. Полный иммунитет к форсе от ударов игрока (горизонтальная скорость от атак = 0),
+    // но полноценная гравитация и физика падения на пол!
+    velocity.x = 0.0f;
+
+    // Проверяем нахождение на полу (overlapsSolid по габаритам босса)
+    bool isGrounded = arena.overlapsSolid(position.x, position.y + 2.0f, halfW, halfH, halfH);
+    if (!isGrounded) {
+        velocity.y += GRAVITY * dt;
+        if (velocity.y > 1800.0f) velocity.y = 1800.0f;
+    } else {
+        if (velocity.y > 0.0f) velocity.y = 0.0f;
+    }
+
+    // Движение по вертикали с коллизией
+    float deltaY = velocity.y * dt;
+    if (deltaY != 0.0f) {
+        float nextY = position.y + deltaY;
+        if (deltaY > 0.0f) {
+            // Падение вниз
+            if (arena.overlapsSolid(position.x, nextY, halfW, halfH, halfH)) {
+                float low = position.y;
+                float high = nextY;
+                for (int iter = 0; iter < 6; ++iter) {
+                    float mid = (low + high) * 0.5f;
+                    if (arena.overlapsSolid(position.x, mid, halfW, halfH, halfH)) {
+                        high = mid;
+                    } else {
+                        low = mid;
+                    }
+                }
+                position.y = low;
+                velocity.y = 0.0f;
+                isGrounded = true;
+            } else {
+                position.y = nextY;
+            }
+        } else {
+            if (arena.overlapsSolid(position.x, nextY, halfW, halfH, halfH)) {
+                velocity.y = 0.0f;
+            } else {
+                position.y = nextY;
+            }
+        }
+    }
+
+    isOnGround = isGrounded || arena.overlapsSolid(position.x, position.y + 2.0f, halfW, halfH, halfH);
+
+    // Защита от застревания в полу/стенах (выталкивание наверх)
+    if (arena.overlapsSolid(position.x, position.y, halfW, halfH, halfH)) {
+        for (float dist = 1.0f; dist <= 64.0f; dist += 1.0f) {
+            if (!arena.overlapsSolid(position.x, position.y - dist, halfW, halfH, halfH)) {
+                position.y -= dist;
+                if (velocity.y > 0.0f) velocity.y = 0.0f;
+                isOnGround = true;
+                break;
+            }
+        }
+    }
+
+    // 2. Проверка активности боссфайта:
+    // Босс НЕ агрится до того, как игрок пересечет триггер и зайдет на арену!
+    // Если боссфайт не активирован, босс мирно стоит на месте (IDLE).
+    bool fightActive = arena.isBossFightActive();
+    float distToPlayer = std::abs(playerPos.x - position.x);
+
+    if (!fightActive && hp >= maxHp && distToPlayer > 220.0f) {
+        attackState = EnemyAttackState::IDLE;
+        attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+        velocity.x = 0.0f;
+        isFacingLeft = (playerPos.x < position.x);
+        bossSpecialState = Boss1SpecialState::NONE;
+        return;
+    }
+
+    // 2. Обновление волн пыли от удара о землю
+    for (auto& wave : bossDustWaves) {
+        if (!wave.active) continue;
+        float moveDelta = wave.speed * wave.dir * dt;
+        wave.x += moveDelta;
+        wave.currentDist += std::abs(moveDelta);
+        wave.lifetime -= dt;
+
+        if (arena.isPointSolid(wave.x, wave.y) || wave.currentDist >= wave.maxDist || wave.lifetime <= 0.0f) {
+            wave.active = false;
+        }
+    }
+    bossDustWaves.erase(std::remove_if(bossDustWaves.begin(), bossDustWaves.end(),
+        [](const GroundDustWave& w) { return !w.active; }), bossDustWaves.end());
+
+    // 3. Состояние оглушения о стену (Wall Stun 2.8с)
+    if (bossWallStunTimer > 0.0f) {
+        bossWallStunTimer -= dt;
+        hurtTimer = bossWallStunTimer;
+        attackState = EnemyAttackState::IDLE;
+        attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+        velocity.x = 0.0f;
+        if (bossWallStunTimer <= 0.0f) {
+            bossWallStunTimer = 0.0f;
+            hurtTimer = 0.0f;
+            bossSpecialState = Boss1SpecialState::NONE;
+            bossComboCooldown = 1.0f; // Передышка после стана
+        }
+        return;
+    }
+
+    // Хелпер перемещения босса с проверкой твердых блоков и стен (босс не ходит сквозь блоки!)
+    auto tryBossMoveX = [&](float dx) -> bool {
+        if (std::abs(dx) < 0.0001f) return true;
+        float targetX = position.x + dx;
+        float checkX = (dx > 0.0f) ? (targetX + halfW) : (targetX - halfW);
+        // Проверяем несколько точек по высоте босса (от низа до верха)
+        for (float fy = -halfH + 6.0f; fy <= halfH - 6.0f; fy += halfH * 0.45f) {
+            if (arena.isPointSolid(checkX, position.y + fy)) {
+                return false;
+            }
+        }
+        if (checkX <= 24.0f || checkX >= arena.getWidth() * 64.0f - 24.0f) {
+            return false;
+        }
+        position.x = targetX;
+        return true;
+    };
+
+    // 4. Обработка специальных атак
+    if (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH) {
+        bossSpecialTimer -= dt;
+        isFacingLeft = (playerPos.x < position.x);
+        velocity.x = 0.0f;
+        if (bossSpecialTimer <= 0.0f) {
+            bossSpecialState = Boss1SpecialState::BULL_CHARGE_RUN;
+            bossSpecialTimer = 4.5f;
+            SoundManager::get().playAttack("heavy", "", false, 95.0f);
+        }
+        return;
+    } else if (bossSpecialState == Boss1SpecialState::BULL_CHARGE_RUN) {
+        float dir = isFacingLeft ? -1.0f : 1.0f;
+        float chargeSpeed = 580.0f;
+        velocity.x = dir * chargeSpeed;
+
+        currentAttackDamage = 10.0f; // Сниженный сбалансированный урон
+        currentAttackKnockX = dir * 650.0f;
+        currentAttackKnockY = -320.0f;
+        currentAttackStun = 0.8f;
+        currentAttackHitLevel = HitLevel::MID;
+        float forwardReach = halfW * 1.6f;
+        float totalW = halfW * 2.0f + forwardReach;
+        float hbx = isFacingLeft ? (position.x + halfW - totalW) : (position.x - halfW);
+        currentHbh = halfH * 2.0f + 85.0f; // Задевает и низ и верх одновременно (от пола до 65px над головой)!
+        currentHbyOffset = -65.0f;
+        attackHitbox = sf::FloatRect({hbx, position.y - halfH + currentHbyOffset}, {totalW, currentHbh});
+        attackState = EnemyAttackState::ATTACKING;
+
+        // Перемещение с проверкой коллизии с блоками
+        bool moved = tryBossMoveX(velocity.x * dt);
+
+        bossSpecialTimer -= dt;
+        if (!moved || bossSpecialTimer <= 0.0f) {
+            // ВРЕЗАНИЕ В СТЕНУ ИЛИ БЛОК! Стан на 2.8 секунды!
+            bossSpecialState = Boss1SpecialState::BULL_CHARGE_WALL_STUN;
+            bossWallStunTimer = 2.8f;
+            hurtTimer = 2.8f;
+            velocity.x = 0.0f;
+            attackState = EnemyAttackState::IDLE;
+            attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+            currentComboName = "БОСС 1: ОГЛУШЕНИЕ О СТЕНУ (2.8с)!";
+            SoundManager::get().play("wall_slam", 95.0f);
+            if (CombatSystem::getActive()) {
+                CombatSystem::getActive()->triggerShake(0.35f, 9.0f);
+            }
+        }
+        return;
+    } else if (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH) {
+        bossSpecialTimer -= dt;
+        isFacingLeft = (playerPos.x < position.x);
+        velocity.x = 0.0f;
+        if (bossSpecialTimer <= 0.0f) {
+            bossSpecialState = Boss1SpecialState::EARTHQUAKE_SLAM;
+            bossSpecialTimer = 0.45f;
+
+            float groundY = position.y + halfH;
+            GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 420.0f, 0.0f, 380.0f, true, 1.0f};
+            GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 420.0f, 0.0f, 380.0f, true, 1.0f};
+            bossDustWaves.push_back(waveL);
+            bossDustWaves.push_back(waveR);
+
+            SoundManager::get().playAttack("heavy", "", false, 95.0f);
+            if (CombatSystem::getActive()) {
+                CombatSystem::getActive()->triggerShake(0.28f, 7.5f);
+            }
+        }
+        return;
+    } else if (bossSpecialState == Boss1SpecialState::EARTHQUAKE_SLAM) {
+        bossSpecialTimer -= dt;
+        velocity.x = 0.0f;
+        if (bossSpecialTimer <= 0.0f) {
+            bossSpecialState = Boss1SpecialState::NONE;
+            bossComboCooldown = 2.0f;
+            currentComboName = "";
+        }
+        return;
+    }
+
+    // 5. Кулдауны между действиями
+    if (bossSpecialAttackCooldown > 0.0f) {
+        bossSpecialAttackCooldown -= dt;
+    }
+    if (bossComboCooldown > 0.0f) {
+        bossComboCooldown -= dt;
+        float distToPlayer = std::abs(playerPos.x - position.x);
+        isFacingLeft = (playerPos.x < position.x);
+        if (distToPlayer > 180.0f) {
+            float dir = isFacingLeft ? -1.0f : 1.0f;
+            velocity.x = dir * 110.0f;
+            tryBossMoveX(velocity.x * dt);
+        }
+        attackState = EnemyAttackState::IDLE;
+        attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+        return;
+    }
+
+    // 6. Выбор следующего действия
+    distToPlayer = std::abs(playerPos.x - position.x);
+    isFacingLeft = (playerPos.x < position.x);
+
+    if (bossSpecialAttackCooldown <= 0.0f) {
+        bossSpecialAttackCooldown = 5.5f + static_cast<float>(rand() % 3);
+        int choice = rand() % 2;
+        if (choice == 0 && distToPlayer > 220.0f) {
+            triggerBossBullCharge();
+            return;
+        } else {
+            triggerBossEarthquake();
+            return;
+        }
+    }
+
+    if (attackState == EnemyAttackState::IDLE) {
+        bool playerAboveOrNear = (distToPlayer <= 260.0f) || (playerPos.y < position.y - 15.0f && distToPlayer <= 280.0f);
+        if (playerAboveOrNear) {
+            triggerBossCombo(bossNextComboIndex % 5);
+            bossNextComboIndex++;
+        } else {
+            float dir = isFacingLeft ? -1.0f : 1.0f;
+            velocity.x = dir * 140.0f;
+            tryBossMoveX(velocity.x * dt);
+        }
+    } else {
+        updateBossComboSequence(dt, playerPos);
+    }
 }
 

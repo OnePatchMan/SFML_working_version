@@ -16,24 +16,28 @@ void MenuSystem::init(const sf::Font* font) {
 bool MenuSystem::drawButton(sf::RenderWindow& window, const Button& btn, const sf::Vector2f& mousePos, bool selected) {
     bool hovered = btn.rect.contains(mousePos);
 
-    sf::RectangleShape shape(btn.rect.size);
-    shape.setPosition(btn.rect.position);
+    _cachedButtonRect.setSize(btn.rect.size);
+    _cachedButtonRect.setPosition(btn.rect.position);
 
     sf::Color fillCol = selected ? sf::Color(btn.hoverColor.r, btn.hoverColor.g, btn.hoverColor.b, 255)
                                  : (hovered ? btn.hoverColor : btn.normalColor);
-    shape.setFillColor(fillCol);
-    shape.setOutlineThickness(hovered || selected ? 2.5f : 1.5f);
-    shape.setOutlineColor(hovered || selected ? sf::Color::White : btn.outlineColor);
-    window.draw(shape);
+    _cachedButtonRect.setFillColor(fillCol);
+    _cachedButtonRect.setOutlineThickness(hovered || selected ? MenuTheme::BUTTON_HOVER_OUTLINE : MenuTheme::BUTTON_OUTLINE);
+    _cachedButtonRect.setOutlineColor(hovered || selected ? MenuTheme::TEXT_WHITE : btn.outlineColor);
+    window.draw(_cachedButtonRect);
 
     if (_font) {
-        sf::Text text(*_font, toSfString(btn.label), btn.fontSize);
-        text.setFillColor(sf::Color::White);
-        sf::FloatRect tb = text.getLocalBounds();
-        text.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
-        text.setPosition(sf::Vector2f(btn.rect.position.x + btn.rect.size.x * 0.5f,
-                                     btn.rect.position.y + btn.rect.size.y * 0.5f));
-        window.draw(text);
+        if (!_cachedButtonText.has_value()) {
+            _cachedButtonText.emplace(*_font, "", btn.fontSize);
+        }
+        _cachedButtonText->setCharacterSize(btn.fontSize);
+        _cachedButtonText->setString(toSfString(btn.label));
+        _cachedButtonText->setFillColor(MenuTheme::TEXT_WHITE);
+        sf::FloatRect tb = _cachedButtonText->getLocalBounds();
+        _cachedButtonText->setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
+        _cachedButtonText->setPosition(sf::Vector2f(btn.rect.position.x + btn.rect.size.x * 0.5f,
+                                                    btn.rect.position.y + btn.rect.size.y * 0.5f));
+        window.draw(*_cachedButtonText);
     }
 
     return hovered;
@@ -57,31 +61,39 @@ void MenuSystem::drawKeybindRow(sf::RenderWindow& window, float x, float y, floa
     if (!_font) return;
 
     // Фон строки - темно-серый
-    sf::RectangleShape rowBg({w, 32.0f});
-    rowBg.setPosition(sf::Vector2f(x, y));
-    rowBg.setFillColor(sf::Color(20, 20, 24, 255));
-    rowBg.setOutlineThickness(1.0f);
-    rowBg.setOutlineColor(sf::Color(45, 45, 52));
-    window.draw(rowBg);
+    _cachedRowBg.setSize({w, 32.0f});
+    _cachedRowBg.setPosition(sf::Vector2f(x, y));
+    _cachedRowBg.setFillColor(MenuTheme::ROW_BG);
+    _cachedRowBg.setOutlineThickness(1.0f);
+    _cachedRowBg.setOutlineColor(MenuTheme::OUTLINE_GRAY);
+    window.draw(_cachedRowBg);
+
+    if (!_cachedRowText.has_value()) {
+        _cachedRowText.emplace(*_font, "", 15);
+    }
 
     // Клавиша - чистый белый текст
-    sf::Text keyText(*_font, toSfString(key), 15);
-    keyText.setStyle(sf::Text::Bold);
-    keyText.setFillColor(sf::Color::White);
-    keyText.setPosition(sf::Vector2f(x + 16.0f, y + 5.0f));
-    window.draw(keyText);
+    _cachedRowText->setCharacterSize(15);
+    _cachedRowText->setStyle(sf::Text::Bold);
+    _cachedRowText->setFillColor(MenuTheme::TEXT_WHITE);
+    _cachedRowText->setString(toSfString(key));
+    _cachedRowText->setOrigin({0.0f, 0.0f});
+    _cachedRowText->setPosition(sf::Vector2f(x + 16.0f, y + 5.0f));
+    window.draw(*_cachedRowText);
 
     // Разделитель
     sf::RectangleShape div({2.0f, 22.0f});
     div.setPosition(sf::Vector2f(x + 225.0f, y + 5.0f));
-    div.setFillColor(sf::Color(45, 45, 52));
+    div.setFillColor(MenuTheme::OUTLINE_GRAY);
     window.draw(div);
 
     // Описание - чистый белый текст
-    sf::Text descText(*_font, toSfString(desc), 14);
-    descText.setFillColor(sf::Color::White);
-    descText.setPosition(sf::Vector2f(x + 245.0f, y + 6.0f));
-    window.draw(descText);
+    _cachedRowText->setCharacterSize(14);
+    _cachedRowText->setStyle(sf::Text::Regular);
+    _cachedRowText->setFillColor(MenuTheme::TEXT_WHITE);
+    _cachedRowText->setString(toSfString(desc));
+    _cachedRowText->setPosition(sf::Vector2f(x + 245.0f, y + 6.0f));
+    window.draw(*_cachedRowText);
 }
 
 void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f& mousePos, const sf::Vector2f& winSize) {
@@ -142,6 +154,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
             _isTrainingMode = false;
             if (_onStartGame) _onStartGame();
             _appState = AppState::IN_GAME;
+            SoundManager::get().playGameMusic();
         }
 
         // 2. ТРЕНИРОВКА (Режим с бессмертным манекеном и комбо-счетчиком)
@@ -152,6 +165,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
             _isTrainingMode = true;
             if (_onStartTraining) _onStartTraining();
             _appState = AppState::IN_GAME;
+            SoundManager::get().playGameMusic();
         }
 
         // 3. НАСТРОЙКИ

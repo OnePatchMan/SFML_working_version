@@ -55,7 +55,8 @@ enum class EnemyType {
     TANK,             // Жирный: красный цвет, больше в 1.5 раза, много ХП (110), тяжелая броня, бьет дальше и больнее, медленный
     DUELIST,          // Агрессивный дуэлянт: фиолетовый цвет, ХП 65, быстрый, длинный зацеп с притягиванием, бешеный напор
     DUELIST_PASSIVE,  // Пассивный дуэлянт: голубой цвет, ХП 65, выверенный спейсинг, блок/парирование, невидимость на 1с раз в 7с, паниш станов
-    DUMMY             // Манекен: стоит на месте, чувствителен к форсе, бессмертный, трекер урона (5с) и фрейм-гэпа
+    DUMMY,            // Манекен: стоит на месте, чувствителен к форсе, бессмертный, трекер урона (5с) и фрейм-гэпа
+    BOSS_1            // Босс 1: 4x3 тайла (256x192), ярко-красный, полный иммунитет к форсе, 5 Dark Souls комбо, разбег до стенки, удар по земле
 };
 
 enum class DummyBlockMode {
@@ -198,8 +199,29 @@ public:
         if (!isOnGround) return BlockType::NONE;
         return (blockType != BlockType::NONE) ? blockType : (isBlocking ? BlockType::HIGH : BlockType::NONE); 
     }
+    // Шкала позы / выносливости блока (Poise & Guard Meter / ХП блока)
+    float guardHp = 70.0f;
+    float maxGuardHp = 70.0f;
+    float guardRegenDelay = 0.0f;
+    float guardBrokenTimer = 0.0f;
+    bool isGuardBroken() const { return guardBrokenTimer > 0.0f; }
+    void breakGuard() {
+        guardHp = 0.0f;
+        guardBrokenTimer = 1.5f;
+        isBlocking = false;
+        blockType = BlockType::NONE;
+        triggerStun(1.5f);
+    }
+    void damageGuard(float amount) {
+        guardHp -= amount;
+        guardRegenDelay = 1.2f;
+        if (guardHp <= 0.0f) {
+            breakGuard();
+        }
+    }
+
     void setBlockType(BlockType bt) { 
-        if (!isOnGround && bt != BlockType::NONE) {
+        if ((!isOnGround || isGuardBroken()) && bt != BlockType::NONE) {
             blockType = BlockType::NONE;
             isBlocking = false;
             return;
@@ -208,7 +230,7 @@ public:
         isBlocking = (bt != BlockType::NONE); 
     }
     void setBlocking(bool b) { 
-        if (!isOnGround && b) {
+        if ((!isOnGround || isGuardBroken()) && b) {
             isBlocking = false;
             blockType = BlockType::NONE;
             return;
@@ -339,11 +361,68 @@ public:
     mutable std::string _cachedLabel;
     mutable std::string _cachedComboName;
 
+    // Параметры затаившегося врага (Скрытень / Lurker, прячется в земле с усиками)
+    bool isBurrowed = false;          // Находится под землей
+    bool isErupting = false;          // В фазе атаки / вылезания из земли
+    bool isEruptTelegraph = false;    // В фазе задержки / предупреждения перед вылезанием
+    float eruptDelayTimer = 0.0f;     // Таймер задержки перед выходом (0.42с)
+    sf::Vector2f eruptTargetPos{0.0f, 0.0f}; // Позиция цели при срабатывании усиков
+    float eruptTimer = 0.0f;          // Таймер фазы вылезания
+    float surfaceY = 0.0f;            // Позиция пола, на котором торчат усики
+    bool hasSurfaceY = false;         // Зафиксирована ли поверхность
+    float tendrilTimer = 0.0f;        // Таймер анимации колыхания усиков
+    float tendrilTriggerWidth = 56.0f; // Ширина зоны срабатывания усиков
+
+    // Параметры Босса 1 ("БОСС 1")
+    enum class Boss1SpecialState {
+        NONE,
+        BULL_CHARGE_TELEGRAPH, // Замах / подготовка к разбегу (0.6с, топает, предупреждение)
+        BULL_CHARGE_RUN,       // Неистовый спринт (580 px/s) до столкновения со стеной
+        BULL_CHARGE_WALL_STUN, // Оглушение о стену (2.8с)
+        EARTHQUAKE_TELEGRAPH,  // Подъем рук для удара о землю (0.8с)
+        EARTHQUAKE_SLAM        // Удар по земле, разлет волны пыли
+    };
+
+    struct GroundDustWave {
+        float x = 0.0f;
+        float y = 0.0f;
+        float dir = 1.0f; // -1 = влево, 1 = вправо
+        float speed = 420.0f;
+        float currentDist = 0.0f;
+        float maxDist = 380.0f;
+        bool active = true;
+        float lifetime = 1.0f;
+    };
+
+    Boss1SpecialState bossSpecialState = Boss1SpecialState::NONE;
+    float bossSpecialTimer = 0.0f;
+    float bossWallStunTimer = 0.0f;
+    float bossComboCooldown = 0.0f; // Пауза после комбо (~2.0с, запрет соединения комбо)
+    float bossSpecialAttackCooldown = 3.5f;
+    int bossNextComboIndex = 0;
+    int bossCurrentComboHit = 0;
+    int bossComboTotalHits = 0;
+    std::vector<GroundDustWave> bossDustWaves;
+
+    bool isBoss1() const { return enemyType == EnemyType::BOSS_1; }
+    bool isBossWallStunned() const { return bossWallStunTimer > 0.0f; }
+    void triggerBossBullCharge();
+    void triggerBossEarthquake();
+    void triggerBossCombo(int comboIndex);
+    void updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking);
+    void updateBossComboSequence(float dt, const sf::Vector2f& playerPos);
+
+    bool isBurrowWaiting() const { return isBurrowed && !isErupting; }
+    bool isTelegraphingErupt() const { return isEruptTelegraph; }
+    void setBurrowed(bool b) { isBurrowed = b; if (b) { isErupting = false; isEruptTelegraph = false; } }
+    void triggerBurrowErupt(const sf::Vector2f& targetPos);
+    void cancelBurrowAndStun(float stunTime = 1.25f);
+
     Enemy(sf::Vector2f spawnPos, EnemyType type = EnemyType::NORMAL);
 
     void setType(EnemyType type);
     EnemyType getType() const { return enemyType; }
-    void setEnemyId(const std::string& id) { enemyId = id; }
+    void setEnemyId(const std::string& id);
     const std::string& getEnemyId() const { return enemyId; }
     static std::vector<EnemyTypeDef> scanEnemyFolders(const std::string& baseDir = "assets/sprites/enemies");
     void triggerDodge(float dir = 0.0f);
@@ -361,7 +440,7 @@ public:
     float getStunTimer() const { return hurtTimer; }
     bool isStunned() const { return hurtTimer > 0.0f; }
     void reset();
-    void update(float dt, const Arena& arena, const sf::Vector2f& playerPos = {0.0f, 0.0f}, bool playerIsStunned = false, bool playerIsAttacking = false);
+    void update(float dt, const Arena& arena, const sf::Vector2f& playerPos = {0.0f, 0.0f}, bool playerIsStunned = false, bool playerIsAttacking = false, bool playerIsInvulnerable = false);
     void draw(sf::RenderWindow& window, const sf::Font* font = nullptr);
     void applyAttackStats(const EnemyAttackStats& s, float dirX);
 
@@ -423,6 +502,21 @@ class DuelistPassiveEnemy : public Enemy {
 public:
     DuelistPassiveEnemy(sf::Vector2f spawnPos) : Enemy(spawnPos, EnemyType::DUELIST_PASSIVE) {
         setSmartAI(true);
+    }
+};
+
+class LurkerEnemy : public Enemy {
+public:
+    LurkerEnemy(sf::Vector2f spawnPos) : Enemy(spawnPos, EnemyType::NORMAL) {
+        setEnemyId("lurker");
+        setSmartAI(true);
+    }
+};
+
+class Boss1Enemy : public Enemy {
+public:
+    Boss1Enemy(sf::Vector2f spawnPos) : Enemy(spawnPos, EnemyType::BOSS_1) {
+        setEnemyId("boss_1");
     }
 };
 

@@ -5,6 +5,7 @@
 #include <vector>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 
 class SoundManager {
 public:
@@ -26,9 +27,23 @@ public:
     // Прямое воспроизведение по имени ключа
     void play(const std::string& key, float volume = 42.5f);
 
+    // Управление фоновой музыкой (OST)
+    void playMusic(const std::string& trackName = "", bool loop = true, float volume = 35.0f);
+    void playMenuMusic(float volume = -1.0f);
+    void playGameMusic(float volume = -1.0f);
+    void playBossMusic(const std::string& bossTrack = "Boss1", float volume = -1.0f);
+    void stopMusic();
+    void pauseMusic();
+    void resumeMusic();
+    bool isMusicPlaying() const;
+    const std::string& getCurrentTrackPath() const { return _currentTrackPath; }
+    void setMusicVolume(float volume);
+    float getMusicVolume() const { return _musicBaseVolume; }
+    const std::vector<std::string>& getMusicTracks() const { return _musicTracks; }
+
     bool hasSound(const std::string& key) const;
     size_t getSoundCount() const { return _buffers.size(); }
-    void setMasterVolume(float volume) { _masterVolume = volume; }
+    void setMasterVolume(float volume);
     float getMasterVolume() const { return _masterVolume; }
 
     std::string resolveAttackKey(const std::string& attackType, const std::string& comboPrefix = "", bool inAir = false) const;
@@ -44,4 +59,9 @@ private:
     float _masterVolume = 42.5f;
     std::string _soundDir = "assets/soundeff";
     bool _initialized = false;
+
+    std::unique_ptr<sf::Music> _music;
+    std::vector<std::string> _musicTracks;
+    float _musicBaseVolume = 35.0f;
+    std::string _currentTrackPath = "";
 };

@@ -6,17 +6,17 @@
 
 Player::Player(sf::Vector2f spawnPos)
     : position(spawnPos),
-      _animation("assets/sprites/mainHeroTest.png", true, spawnPos),
-      _rollAnimation("assets/sprites/heroRoll.png", false, spawnPos),
-      _lightAttackAnim("assets/sprites/heroAttackLight.png", false, spawnPos),
-      _heavyAttackAnim("assets/sprites/heroAttackHeavy.png", false, spawnPos),
-      _uppercutAnim("assets/sprites/heroUppercut.png", false, spawnPos),
-      _sweepAnim("assets/sprites/heroSweep.png", false, spawnPos),
-      _dashAttackAnim("assets/sprites/heroDashAttack.png", false, spawnPos),
-      _throwAnim("assets/sprites/heroThrow.png", false, spawnPos),
-      _airAttackAnim("assets/sprites/heroAirAttack.png", false, spawnPos),
-      _diveSlamAnim("assets/sprites/heroDiveSlam.png", false, spawnPos),
-      _turnAttackAnim("assets/sprites/heroTurnAttack.png", false, spawnPos)
+      _animation(resolveAssetPath("assets/sprites/player/mainHeroTest.png"), true, spawnPos),
+      _rollAnimation(resolveAssetPath("assets/sprites/player/heroRoll.png"), false, spawnPos),
+      _lightAttackAnim(resolveAssetPath("assets/sprites/player/heroAttackLight.png"), false, spawnPos),
+      _heavyAttackAnim(resolveAssetPath("assets/sprites/player/heroAttackHeavy.png"), false, spawnPos),
+      _uppercutAnim(resolveAssetPath("assets/sprites/player/heroUppercut.png"), false, spawnPos),
+      _sweepAnim(resolveAssetPath("assets/sprites/player/heroSweep.png"), false, spawnPos),
+      _dashAttackAnim(resolveAssetPath("assets/sprites/player/heroDashAttack.png"), false, spawnPos),
+      _throwAnim(resolveAssetPath("assets/sprites/player/heroThrow.png"), false, spawnPos),
+      _airAttackAnim(resolveAssetPath("assets/sprites/player/heroAirAttack.png"), false, spawnPos),
+      _diveSlamAnim(resolveAssetPath("assets/sprites/player/heroDiveSlam.png"), false, spawnPos),
+      _turnAttackAnim(resolveAssetPath("assets/sprites/player/heroTurnAttack.png"), false, spawnPos)
 {
 }
 
@@ -115,6 +115,8 @@ void Player::reset(sf::Vector2f spawnPos, bool withWeapon) {
     hp = maxHp;
     displayedHp = maxHp;
     isDead = false;
+    healFlasks = 4;
+    maxHealFlasks = 4;
     diveSlamBounce = false;
     diveSlamDir = 1.0f;
     _pendingLunge = 0.0f;
@@ -161,6 +163,8 @@ bool Player::takeDamage(float amount, float knockX, float knockY, float stunTime
     }
 
     if (blockDefended) {
+        float originalAmount = amount;
+        damageGuard(originalAmount * 4.0f);
         amount *= 0.20f;
         hp -= amount;
         if (hp <= 0.0f) {
@@ -227,6 +231,21 @@ void Player::endCounterSuccess() {
     _counterWindowTimer = 0.0f;
 }
 
+bool Player::useHealFlask() {
+    if (isDead || isStunned() || _isAirGrabLocked) return false;
+    if (healFlasks <= 0) return false;
+    if (hp >= maxHp) return false; // Уже полное здоровье, не тратим хилку
+
+    healFlasks--;
+    hp = maxHp;
+    displayedHp = maxHp;
+
+    if (CombatSystem::getActive()) {
+        CombatSystem::getActive()->spawnHealEffect(position, healFlasks);
+    }
+    return true;
+}
+
 void Player::handleInput(const std::optional<sf::Event>& event) {
     if (!event || isDead) return;
     if (isStunned() || _isAirGrabLocked) return;
@@ -240,6 +259,18 @@ void Player::handleInput(const std::optional<sf::Event>& event) {
         // Прыжок (строго на клавишу Пробел / Space)
         if (keyPressed->code == sf::Keyboard::Key::Space) {
             _jumpBuffer = 0.12f;
+        }
+
+        // Взаимодействие с физическими дверьми на кнопку [E]
+        if (keyPressed->code == sf::Keyboard::Key::E) {
+            if (auto* act = Arena::getActive()) {
+                act->interactDoorNear(position, 96.0f);
+            }
+        }
+
+        // Использование хилки (восстановление до макс ХП) на клавишу [R]
+        if (keyPressed->code == sf::Keyboard::Key::R) {
+            useHealFlask();
         }
 
         // Стойка контр-атаки / парирования на кнопку [Q]
@@ -271,6 +302,7 @@ void Player::handleInput(const std::optional<sf::Event>& event) {
                     _dashTimer = pcfg.dashDuration;
                     _dashWindowTimer = pcfg.dashDuration + 0.10f; // Короткое окно атаки в дэше
                     _iframeTimer = pcfg.iframeDuration;
+                    _perfectDodgeWindowTimer = pcfg.perfectDodgeWindow; // Окно идеального уворота при рывке сквозь атаку
                     _dashCooldown = pcfg.dashCooldown;
                     velocity.y = 0.0f;
                     _ghostSpawnTimer = 0.0f;
@@ -313,6 +345,21 @@ bool Player::moveAxis(float& currentCoord, float delta, bool isX, float fixedCoo
         float testY = isX ? fixedCoord : nextCoord;
 
         if (arena.overlapsSolid(testX, testY, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
+            bool steppedUp = false;
+            if (isX && _isOnGround) {
+                constexpr float maxStepUp = 32.0f; // Плавный подъем на полублоки и наклонные лестницы
+                for (float up = 1.0f; up <= maxStepUp; up += 1.0f) {
+                    if (!arena.overlapsSolid(testX, testY - up, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
+                        currentCoord = nextCoord;
+                        position.y -= up;
+                        remaining -= std::abs(step);
+                        steppedUp = true;
+                        break;
+                    }
+                }
+            }
+            if (steppedUp) continue;
+
             collided = true;
             float low = 0.0f;
             float high = step;
@@ -375,14 +422,38 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
         moveX += 1.0f;
     }
 
-    // Обработка блока (F или E) и таймера блок-стана
+    // Обработка блока (F) и таймера блок-стана
     if (_blockStunTimer > 0.0f) {
         _blockStunTimer -= dt;
         moveX = 0.0f; // Персонаж находится в коротком блок-стане от каждого заблокированного удара
     }
 
-    bool wantsBlock = (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::F) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E));
-    if (_isOnGround && wantsBlock && _stunTimer <= 0.0f && _dashTimer <= 0.0f && !_isCounterStance && !_isSpotDodging && !_isAirGrabLocked) {
+    // Взаимодействие с дверьми на клавишу [E]
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E)) {
+        if (auto* act = Arena::getActive()) {
+            act->interactDoorNear(position, 96.0f);
+        }
+    }
+
+    // Шкала прочности блока (Guard / Poise):
+    if (guardBrokenTimer > 0.0f) {
+        guardBrokenTimer -= dt;
+        _blockType = BlockType::NONE;
+        if (guardBrokenTimer <= 0.0f) {
+            guardHp = maxGuardHp * 0.5f; // Восстанавливаем 50% прочности после выхода из стана
+        }
+    } else {
+        if (_blockType == BlockType::NONE && guardHp < maxGuardHp) {
+            if (guardRegenDelay > 0.0f) {
+                guardRegenDelay -= dt;
+            } else {
+                guardHp = std::min(maxGuardHp, guardHp + 35.0f * dt);
+            }
+        }
+    }
+
+    bool wantsBlock = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::F);
+    if (_isOnGround && wantsBlock && _stunTimer <= 0.0f && _dashTimer <= 0.0f && !_isCounterStance && !_isSpotDodging && !_isAirGrabLocked && !isGuardBroken()) {
         if (isHoldingDown()) {
             _blockType = BlockType::LOW;
         } else {
@@ -490,6 +561,21 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
         deltaY = 0.0f;
         velocity.y = 0.0f;
 
+        // Проверка пробивания закрытой двери кувырком
+        if (auto* act = Arena::getActive()) {
+            sf::FloatRect rollHitbox = getBounds();
+            if (_dashDirX > 0.0f) {
+                rollHitbox.size.x += 28.0f;
+            } else {
+                rollHitbox.position.x -= 28.0f;
+                rollHitbox.size.x += 28.0f;
+            }
+            if (act->checkAndBreakDoorOverlap(rollHitbox, sf::Vector2f(_dashDirX * 600.0f, 0.0f), false)) {
+                // Закрытая дверь выбита кувырком! Проносимся сквозь нее
+                position.x += _dashDirX * 36.0f;
+            }
+        }
+
         // Обновляем текущий кадр кувырка по прогрессу рывка
         float progress = std::clamp(1.0f - (_dashTimer / pcfg.dashDuration), 0.0f, 0.999f);
         int frameIdx = static_cast<int>(progress * _rollAnimation.getImageCount());
@@ -528,6 +614,12 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
     // Защита от застревания в стенах при сильных ударах (De-penetration / Unstuck logic)
     if (_collisionEnabled && arena.overlapsSolid(position.x, position.y, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
         for (float dist = 1.0f; dist <= 64.0f; dist += 1.0f) {
+            // В первую очередь выталкиваем ВВЕРХ (из пола или наклонной лестницы), не сдвигая игрока вбок
+            if (!arena.overlapsSolid(position.x, position.y - dist, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
+                position.y -= dist;
+                if (velocity.y > 0.0f) velocity.y = 0.0f; // Гасим только скорость падения, сохраняя скорость прыжка!
+                break;
+            }
             if (!arena.overlapsSolid(position.x - dist, position.y, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
                 position.x -= dist;
                 velocity.x = 0.0f;
@@ -538,8 +630,8 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
                 velocity.x = 0.0f;
                 break;
             }
-            if (!arena.overlapsSolid(position.x, position.y - dist, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
-                position.y -= dist;
+            if (!arena.overlapsSolid(position.x, position.y + dist, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
+                position.y += dist;
                 velocity.y = 0.0f;
                 break;
             }
@@ -556,9 +648,47 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
         _pendingLunge = 0.0f;
     }
 
+    bool wasGroundedBeforeMove = _isOnGround;
     if (_collisionEnabled) {
         bool hitX = moveAxis(position.x, deltaX, true, position.y, arena);
+        if (!hitX && wasGroundedBeforeMove && velocity.y >= 0.0f && std::abs(deltaX) > 0.001f) {
+            // Плавный спуск по ступеням ТОЛЬКО при активном горизонтальном беге и если ноги оторвались от поверхности
+            if (!arena.overlapsSolid(position.x, position.y + 1.0f, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
+                constexpr float maxStepDown = 32.0f;
+                for (float down = 1.0f; down <= maxStepDown; down += 1.0f) {
+                    if (arena.overlapsSolid(position.x, position.y + down, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
+                        float low = down - 1.0f;
+                        float high = down;
+                        for (int iter = 0; iter < 4; ++iter) {
+                            float mid = (low + high) * 0.5f;
+                            if (arena.overlapsSolid(position.x, position.y + mid, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
+                                high = mid;
+                            } else {
+                                low = mid;
+                            }
+                        }
+                        position.y += low;
+                        _isOnGround = true;
+                        break;
+                    }
+                }
+            }
+        }
         if (hitX) {
+            if (_dashTimer > 0.0f) {
+                if (auto* act = Arena::getActive()) {
+                    sf::FloatRect hitBox = getBounds();
+                    if (_dashDirX > 0.0f) hitBox.size.x += 28.0f;
+                    else { hitBox.position.x -= 28.0f; hitBox.size.x += 28.0f; }
+                    if (act->checkAndBreakDoorOverlap(hitBox, sf::Vector2f(_dashDirX * 600.0f, 0.0f), false)) {
+                        position.x += _dashDirX * 36.0f;
+                    }
+                }
+            } else if (_stunTimer > 0.0f) {
+                if (auto* act = Arena::getActive()) {
+                    act->checkAndBreakDoorOverlap(getBounds(), velocity, true);
+                }
+            }
             float preCollisionSpeedX = std::abs(velocity.x);
             float minSpeed = CombatConfig::getWallBounceMinSpeed();
             if (_stunTimer > 0.0f && preCollisionSpeedX >= minSpeed && !_hasWallBounced && !isDead) {
@@ -721,7 +851,18 @@ void Player::draw(sf::RenderWindow& window) {
             if (!_heldMaceSprite.has_value()) {
                 _heldMaceSprite.emplace(_heldMaceTexture);
             }
-            _heldMaceSprite->setOrigin({static_cast<float>(_heldMaceTexture.getSize().x) * 0.5f, 48.0f});
+            float texW = static_cast<float>(_heldMaceTexture.getSize().x);
+            float texH = static_cast<float>(_heldMaceTexture.getSize().y);
+            // Размер булавы в игре: ровно в 1.25 раза больше игрока (высота игрока = 64px, 64 * 1.25 = 80px)
+            constexpr float playerHeight = static_cast<float>(FRAME_SIZE) * SPRITE_SCALE; // 64.0f
+            constexpr float targetMaceH = playerHeight * 1.25f; // 80.0f
+            float scaleY = targetMaceH / (texH > 0.0f ? texH : targetMaceH);
+            float scaleX = scaleY; // Сохраняем идеальные 1:1 пропорции текстуры без искажения пикселей
+
+            // Точка хвата (grip) на рукояти булавы: 48px при канонической высоте 84px (~57.14%)
+            float gripY = texH * (48.0f / 84.0f);
+            _heldMaceSprite->setOrigin({texW * 0.5f, gripY});
+
             float dir = isFacingRight() ? 1.0f : -1.0f;
             // Пологий угол наклона ~15 градусов к горизонту, булава опущена еще ниже к земле
             float rot = isFacingRight() ? -105.0f : 105.0f;
@@ -737,7 +878,7 @@ void Player::draw(sf::RenderWindow& window) {
 
             _heldMaceSprite->setPosition(handPos);
             _heldMaceSprite->setRotation(sf::degrees(rot));
-            _heldMaceSprite->setScale({dir * 1.0f, 1.0f});
+            _heldMaceSprite->setScale({dir * scaleX, scaleY});
             window.draw(*_heldMaceSprite);
         }
     };
