@@ -1646,11 +1646,28 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 }
                 enemy.attackHasHit = false;
 
-                _shakeTimer = 0.14f;
+                _shakeTimer = 0.16f;
                 _shakeIntensity = 5.0f;
-                _comboDisplayName = "PERFECT DODGE! -> [LMB/RMB] COUNTER!";
-                _comboDisplayTimer = 1.4f;
+                _comboDisplayName = "★ PERFECT DODGE! ★ -> [LMB/RMB] COUNTER!";
+                _comboDisplayTimer = 1.5f;
                 _comboDisplayColor = sf::Color(255, 220, 60);
+
+                // Оповещение об идеальном увороте (всплывающий текст над игроком, золотая ударная волна и звук)
+                _specialComboMarkers.push_back({
+                    player.position + sf::Vector2f(0.0f, -55.0f),
+                    "★ PERFECT DODGE! ★",
+                    sf::Color(255, 230, 60),
+                    1.2f, 1.2f, 1.4f, 255.0f
+                });
+                SoundManager::get().play("adw2", 85.0f);
+                _empoweredShockwaves.push_back({
+                    player.position,
+                    12.0f,
+                    80.0f,
+                    0.30f,
+                    0.30f,
+                    sf::Color(255, 225, 70)
+                });
 
                 // Вспышка золотых искр идеального уворота
                 for (int i = 0; i < 24; ++i) {

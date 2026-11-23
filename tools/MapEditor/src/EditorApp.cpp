@@ -15,13 +15,13 @@ struct LeftToolbarButton {
 };
 
 static const std::vector<LeftToolbarButton> s_leftButtons = {
-    {"B",  "Кисть / Блок [B]",    ToolType::PLATFORM,             sf::Color(76, 175, 80)},
-    {"A",  "Авто-тайлинг [A]",    ToolType::AUTOTILE,             sf::Color(0, 220, 255)},
+    {"B",  "Кисть [B]",           ToolType::PLATFORM,             sf::Color(76, 175, 80)},
+    {"T",  "Авто-тайлинг [T]",    ToolType::AUTOTILE,             sf::Color(0, 220, 255)},
     {"M",  "Перемещение [M]",     ToolType::MOVE,                 sf::Color(255, 140, 40)},
     {"X",  "Прямоугольник [X]",   ToolType::BOX_FILL,             sf::Color(100, 180, 255)},
     {"L",  "Линия [L]",           ToolType::LINE,                 sf::Color(80, 220, 160)},
     {"G",  "Ведро / Заливка [G]", ToolType::FLOOD_FILL,           sf::Color(255, 180, 0)},
-    {"E",  "Ластик [Del/E]",      ToolType::EDGE_PASSAGE,         sf::Color(255, 100, 100)},
+    {"E",  "Ластик [E/Del]",      ToolType::EDGE_PASSAGE,         sf::Color(255, 100, 100)},
     {"Q",  "Пипетка [Q]",         ToolType::EYEDROPPER,           sf::Color(200, 100, 255)}
 };
 
@@ -5172,7 +5172,13 @@ void EditorApp::handleEvents() {
                 continue;
             }
             if (kp->code == sf::Keyboard::Key::B && !ctrlHeld) {
-                _currentTool = ToolType::PLATFORM;
+                if (_selectedPaletteIndex >= 0 && _selectedPaletteIndex < static_cast<int>(_paletteSprites.size())) {
+                    _currentTool = _paletteSprites[_selectedPaletteIndex].tool;
+                    _currentTileCode = _paletteSprites[_selectedPaletteIndex].tileCode;
+                } else {
+                    _currentTool = ToolType::PLATFORM;
+                    _currentTileCode = 1;
+                }
                 _statusMessage = "Инструмент: Кисть [B]";
                 _statusTimer = 1.8f;
                 continue;
@@ -5326,45 +5332,16 @@ void EditorApp::handleEvents() {
                 continue;
             }
 
-            // Цифровые инструменты
-            auto selectCardForTool = [this](ToolType t, int code) {
-                _currentTool = t;
-                if (code > 0) _currentTileCode = code;
-                for (size_t i = 0; i < _paletteSprites.size(); ++i) {
-                    if (_paletteSprites[i].tool == t && (code <= 0 || _paletteSprites[i].tileCode == code)) {
-                        _selectedPaletteIndex = static_cast<int>(i);
-                        _activeTab = _paletteSprites[i].tab;
-                        break;
-                    }
-                }
-            };
-
-            if (kp->code == sf::Keyboard::Key::Num1 || kp->code == sf::Keyboard::Key::Numpad1) selectCardForTool(ToolType::PLATFORM, 1);
-            else if (kp->code == sf::Keyboard::Key::Num2 || kp->code == sf::Keyboard::Key::Numpad2) selectCardForTool(ToolType::WALL, 2);
-            else if (kp->code == sf::Keyboard::Key::Num3 || kp->code == sf::Keyboard::Key::Numpad3) selectCardForTool(ToolType::DOOR, 3);
-            else if (kp->code == sf::Keyboard::Key::Num4 || kp->code == sf::Keyboard::Key::Numpad4) selectCardForTool(ToolType::PLAYER_SPAWN, 0);
-            else if (kp->code == sf::Keyboard::Key::Num5 || kp->code == sf::Keyboard::Key::Numpad5) selectCardForTool(ToolType::ENEMY_SPAWN, 0);
-            else if (kp->code == sf::Keyboard::Key::Num6 || kp->code == sf::Keyboard::Key::Numpad6) selectCardForTool(ToolType::ENEMY_TANK, 0);
-            else if (kp->code == sf::Keyboard::Key::Num7 || kp->code == sf::Keyboard::Key::Numpad7) selectCardForTool(ToolType::ENEMY_DUELIST, 0);
-            else if (kp->code == sf::Keyboard::Key::Num8 || kp->code == sf::Keyboard::Key::Numpad8) selectCardForTool(ToolType::ENEMY_DUELIST_PASSIVE, 0);
-            else if (kp->code == sf::Keyboard::Key::Num9 || kp->code == sf::Keyboard::Key::Numpad9) selectCardForTool(ToolType::ENEMY_DUMMY, 0);
-            else if (kp->code == sf::Keyboard::Key::Num0 || kp->code == sf::Keyboard::Key::Numpad0) selectCardForTool(ToolType::LAMP, 4);
-            else if (kp->code == sf::Keyboard::Key::W && !ctrlHeld && !altHeld) selectCardForTool(ToolType::WINDOW, 5);
-            else if (kp->code == sf::Keyboard::Key::Delete) {
+            // Дополнительный вызов ластика [Delete]
+            if (kp->code == sf::Keyboard::Key::Delete) {
                 _currentTool = ToolType::EDGE_PASSAGE;
                 _statusMessage = "Инструмент: Ластик [Delete]";
-                _statusTimer = 2.0f;
-            } else if (kp->code == sf::Keyboard::Key::B && !ctrlHeld) {
-                if (_selectedPaletteIndex >= 0 && _selectedPaletteIndex < static_cast<int>(_paletteSprites.size())) {
-                    _currentTool = _paletteSprites[_selectedPaletteIndex].tool;
-                    _currentTileCode = _paletteSprites[_selectedPaletteIndex].tileCode;
-                } else {
-                    _currentTool = ToolType::PLATFORM;
-                    _currentTileCode = 1;
-                }
-                _statusMessage = "Инструмент: Кисть [B]";
-                _statusTimer = 2.0f;
-            } else if (kp->code == sf::Keyboard::Key::A && !ctrlHeld && !altHeld) {
+                _statusTimer = 1.8f;
+                continue;
+            }
+
+            // Переключение авто-тайлинга [T] и применение ко всей комнате [F4]
+            if (kp->code == sf::Keyboard::Key::T && !ctrlHeld && !altHeld) {
                 _autoTileEnabled = !_autoTileEnabled;
                 _statusMessage = _autoTileEnabled ? "Авто-тайлинг: [ВКЛЮЧЕН]" : "Авто-тайлинг: [ВЫКЛЮЧЕН]";
                 _statusTimer = 2.0f;
@@ -6058,13 +6035,13 @@ void EditorApp::update(float dt) {
         _lastMousePixel = cur;
     } else {
         sf::Vector2f moveDir(0.0f, 0.0f);
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) moveDir.x -= 1.0f;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) moveDir.x += 1.0f;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up)) moveDir.y -= 1.0f;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down)) {
-            bool ctrlHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
-                            sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
-            if (!ctrlHeld) moveDir.y += 1.0f;
+        bool ctrlHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
+                        sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
+        if (!ctrlHeld) {
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) moveDir.x -= 1.0f;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) moveDir.x += 1.0f;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up)) moveDir.y -= 1.0f;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down)) moveDir.y += 1.0f;
         }
 
         if (moveDir.x != 0.0f || moveDir.y != 0.0f) {
@@ -9780,7 +9757,7 @@ void EditorApp::drawUI() {
             coordTxt.setPosition({20.0f, winH - 20.0f});
             _window.draw(coordTxt);
 
-            std::string hotkeyHelp = "[M] Перемещение | [E] Ластик | [B] Кисть | [ПКМ] Свойства | [Esc] Отмена";
+            std::string hotkeyHelp = "[WASD] Камера | [B] Кисть | [E] Ластик | [M] Перемещение | [X] Box | [L] Линия | [G] Заливка | [Q] Пипетка | [T] Авто-тайлинг | [Tab] Тест | [ПКМ] Свойства | [Esc] Отмена";
             sf::Text helpTxt(_font, toSfString(hotkeyHelp), 11);
             helpTxt.setFillColor(sf::Color(130, 150, 175));
             sf::FloatRect hb = helpTxt.getLocalBounds();
