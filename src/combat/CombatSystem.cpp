@@ -1149,6 +1149,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                     // Особые комбо-маркеры и эффекты при попадании усиленной атаки из идеального уворота
                     if (_isEmpoweredStrike) {
+                        if (enemy.getType() == EnemyType::BOSS_1) {
+                            enemy.interruptBossComboAndStun(0.85f);
+                        }
                         _shakeTimer = 0.28f;
                         _shakeIntensity = 9.5f;
 
@@ -1605,6 +1608,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 if (enemy.isBurrowed || enemy.isErupting) {
                     enemy.cancelBurrowAndStun(pcfg.counterEnemyStun);
                 }
+                if (enemy.getType() == EnemyType::BOSS_1) {
+                    enemy.interruptBossComboAndStun(pcfg.counterEnemyStun);
+                }
                 enemy.takeDamage(pcfg.counterDamage, pDir * pcfg.counterKnockX, pcfg.counterKnockY, pcfg.counterEnemyStun);
                 if (!enemyWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f) && Arena::getActive()) {
                     Arena::getActive()->spawnKillBlood(enemy.position, sf::Vector2f(pDir * 0.707f, -0.707f), enemy.maxHp);
@@ -1916,16 +1922,13 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
         // 1. Полет и физика в пространстве арены
         if (!it->grounded) {
             if (it->hasHit) {
-                // Если булава уже попала во врага — она крутится и кратковременно замирает на месте
+                // Если булава уже попала во врага — она крутится и падает на пол по траектории отскока
                 it->rotation += it->angularVelocity * dt;
                 if (it->apexHoverTimer > 0.0f) {
                     it->apexHoverTimer -= dt;
-                    it->velocity = {0.0f, 0.0f}; // Не отлетает от противника, замирает!
-                } else {
-                    // После замирания плавно опускается на пол
-                    it->velocity.y += CombatConfig::getThrowStraightGravity() * 0.65f * dt;
-                    it->velocity.x *= (1.0f - 0.50f * dt);
                 }
+                it->velocity.y += CombatConfig::getThrowStraightGravity() * 0.75f * dt;
+                it->velocity.x *= (1.0f - 0.75f * dt);
             } else if (it->isUpwardThrow) {
                 // Закручивание булавы в воздухе (вверх и вверх-прямо)
                 it->rotation += it->angularVelocity * dt;
@@ -2041,7 +2044,12 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     if (eBounds.contains(it->position) || distToEnemy < 38.0f || segDist < 38.0f) {
                         it->hasHit = true; // Булава нанесла удар и больше в этом броске ударить не может!
                         it->hitCooldown = 999.0f;
-                        it->position = enemyCenter; // Позиционируем оружие точно на противнике
+
+                        // Позиционируем оружие на внешней границе контакта противника (не в его центре!)
+                        float contactX = (it->velocity.x >= 0.0f) ? (eBounds.position.x - 6.0f) : (eBounds.position.x + eBounds.size.x + 6.0f);
+                        float contactY = std::clamp(it->position.y, eBounds.position.y, eBounds.position.y + eBounds.size.y);
+                        it->position = {contactX, contactY};
+
                     // Рассчитываем урон пропорционально скорости полета булавы
                     float speedFactor = std::clamp(speed / 950.0f, 0.20f, 1.25f);
                     if (it->isUpwardThrow) speedFactor = std::max(speedFactor, 0.65f);
@@ -2145,12 +2153,14 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     // Враг всегда начинает крутиться после попадания булавы
                     enemy.triggerSpin(0.70f, (hitDir.x >= 0.0f ? 1.0f : -1.0f) * 900.0f);
 
-                    // Булава чуть замирает на месте попадания, не отлетая от противника, и бешено вращается
-                    it->velocity = sf::Vector2f(0.0f, 0.0f);
-                    float curSpin = (it->angularVelocity != 0.0f) ? ((it->angularVelocity > 0.0f) ? 1.0f : -1.0f) : 1.0f;
-                    it->angularVelocity = curSpin * 1440.0f;
-                    it->apexHoverTimer = 0.22f; // Замирает на 0.22с рядом с противником
-                    it->hitCooldown = 999.0f;   // Больше ударить не может
+                    // Оружие слегка отскакивает от противника, почти полностью теряя скорость,
+                    // а скорость вращения падает, но не столь сильно
+                    it->velocity.x = -hitDir.x * 90.0f;
+                    it->velocity.y = -85.0f;
+                    float baseSpin = (it->angularVelocity != 0.0f) ? it->angularVelocity : ((hitDir.x >= 0.0f ? -1.0f : 1.0f) * 720.0f);
+                    it->angularVelocity = baseSpin * 0.55f;
+                    it->apexHoverTimer = 0.0f; // Никакого зависания в воздухе
+                    it->hitCooldown = 999.0f;  // Больше ударить не может
 
                     _shakeTimer = 0.06f;
                     _shakeIntensity = 3.5f;

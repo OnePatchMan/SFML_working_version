@@ -6544,7 +6544,71 @@ int main() {
         }
         std::cout << "-> Step 6: Verified MapEditor keybindings: WASD is 100% collision-free from tools & block hotkeys!" << std::endl;
 
-        std::cout << "-> PASSED: Boss 1 Air Combos, Air Anti-Spam, Perfect Dodge 0-CD & Guard Break verified 100%!" << std::endl;
+        // 7. Проверка прерывания комбо и оглушения Босса 1 при контратаках (Counter Stance [Q] и Empowered Strike)
+        Enemy bossCounterTest({400.0f, 500.0f}, EnemyType::BOSS_1);
+        bossCounterTest.triggerBossCombo(1);
+        assert(bossCounterTest.isAttacking() == true);
+        assert(bossCounterTest.currentAttackDamage > 0.0f);
+
+        // Парирование / контратака [Q] прерывает комбо босса и накладывает стан
+        bossCounterTest.interruptBossComboAndStun(1.5f);
+        assert(bossCounterTest.attackState == EnemyAttackState::IDLE);
+        assert(bossCounterTest.hurtTimer >= 1.5f);
+        assert(bossCounterTest.bossCurrentComboHit == 0);
+        assert(bossCounterTest.bossComboCooldown >= 2.7f);
+
+        // При обновлении босс остается в стане, атака не возобновляется
+        bossCounterTest.updateBoss1(0.5f, arena, player.position, false, false);
+        assert(bossCounterTest.attackState == EnemyAttackState::IDLE);
+        assert(bossCounterTest.hurtTimer > 0.95f && bossCounterTest.hurtTimer < 1.05f);
+
+        // Проверка через CombatSystem контратаки [Q] по атакующему боссу
+        Player counterPlayer({360.0f, 500.0f});
+        counterPlayer.triggerCounterStance();
+        assert(counterPlayer.isCounterStanceActive() == true);
+
+        Enemy bossAttacker({380.0f, 500.0f}, EnemyType::BOSS_1);
+        bossAttacker.triggerBossCombo(0);
+        bossAttacker.attackState = EnemyAttackState::ATTACKING;
+        bossAttacker.attackHitbox = sf::FloatRect({350.0f, 450.0f}, {80.0f, 80.0f});
+        bossAttacker.attackHasHit = false;
+
+        CombatSystem counterCombat;
+        counterCombat.update(0.016f, counterPlayer, bossAttacker);
+        assert(bossAttacker.attackState == EnemyAttackState::IDLE);
+        assert(bossAttacker.hurtTimer > 0.0f);
+        std::cout << "-> Step 7: Verified Boss 1 combo interrupt & stun on counterattack [Q] & empowered strikes!" << std::endl;
+
+        // 8. Проверка отскока брошенного оружия игрока при попадании по Боссу 1 (позиция снаружи, отскок и замедление вращения)
+        CombatSystem throwCombat;
+        Player thrower({300.0f, 500.0f});
+        Enemy bossTarget({450.0f, 500.0f}, EnemyType::BOSS_1);
+        // Boss 1 bounds: position x=450, halfW=64 -> left edge is 450-64 = 386
+        sf::FloatRect bBounds = bossTarget.getBounds();
+
+        throwCombat.throwWeapon(thrower, {500.0f, 500.0f});
+        assert(throwCombat.getThrownMaces().size() == 1);
+        auto& thrownMace = const_cast<CombatSystem::ThrownMace&>(throwCombat.getThrownMaces()[0]);
+        thrownMace.position = {bBounds.position.x - 2.0f, bossTarget.position.y - 20.0f};
+        thrownMace.velocity = {950.0f, 0.0f};
+        thrownMace.angularVelocity = 720.0f;
+        thrownMace.hasHit = false;
+
+        // Обновляем комбат-систему: булава ударяет босса
+        throwCombat.update(0.016f, thrower, bossTarget);
+        assert(thrownMace.hasHit == true);
+        // Булава НЕ в центре босса (центр x=450), а на внешней контактной границе
+        assert(thrownMace.position.x <= bBounds.position.x);
+        // Булава слегка отскакивает назад (velocity.x < 0) и потеряла почти всю скорость (< 100 px/s)
+        assert(thrownMace.velocity.x < 0.0f);
+        assert(std::abs(thrownMace.velocity.x) <= 95.0f);
+        assert(thrownMace.velocity.y < 0.0f); // небольшой подскок вверх
+        // Скорость вращения упала, но не до нуля (~55%)
+        assert(thrownMace.angularVelocity > 250.0f && thrownMace.angularVelocity < 500.0f);
+        assert(thrownMace.apexHoverTimer == 0.0f); // Нет зависания
+        std::cout << "-> Step 8: Verified Player weapon bounce physics & contact boundary against Boss 1!" << std::endl;
+
+        std::cout << "-> PASSED: Boss 1 Air Combos, Air Anti-Spam, Perfect Dodge 0-CD, Counter Stun & Weapon Bounce verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

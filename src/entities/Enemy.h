@@ -409,6 +409,7 @@ public:
     void triggerBossBullCharge();
     void triggerBossEarthquake();
     void triggerBossCombo(int comboIndex);
+    void interruptBossComboAndStun(float stunTime);
     void updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking);
     void updateBossComboSequence(float dt, const sf::Vector2f& playerPos);
 

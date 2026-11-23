@@ -6380,7 +6380,7 @@ void EditorApp::drawWorldLayout() {
         rBorder.setPosition(cr.offset);
         rBorder.setFillColor(sf::Color::Transparent);
         rBorder.setOutlineColor(isSelected ? sf::Color(255, 215, 0, 250) : sf::Color(70, 90, 125, 180));
-        rBorder.setOutlineThickness(isSelected ? 3.5f : 1.5f);
+        rBorder.setOutlineThickness(isSelected ? -2.5f : -1.0f);
         _window.draw(rBorder);
 
         // Шапка комнаты (для перетаскивания и информации)
@@ -7047,16 +7047,21 @@ void EditorApp::drawWorld() {
         rBg.setFillColor(bgCol);
         _window.draw(rBg);
 
-        // Граница комнаты
+        // Граница комнаты (в режиме ROOM_DETAIL граница не выступает наружу, исключая желтые линии между блоками)
         sf::RectangleShape rBorder({rW, rH});
         rBorder.setPosition(rOff);
         rBorder.setFillColor(sf::Color::Transparent);
-        rBorder.setOutlineColor(isActive ? sf::Color(255, 215, 0, 240) : sf::Color(65, 85, 115, 160));
-        rBorder.setOutlineThickness(isActive ? 3.0f : 1.5f);
+        if (_currentScreen == EditorScreen::ROOM_DETAIL) {
+            rBorder.setOutlineColor(sf::Color::Transparent);
+            rBorder.setOutlineThickness(0.0f);
+        } else {
+            rBorder.setOutlineColor(isActive ? sf::Color(255, 215, 0, 240) : sf::Color(65, 85, 115, 160));
+            rBorder.setOutlineThickness(isActive ? -2.0f : -1.0f);
+        }
         _window.draw(rBorder);
 
-        // Заголовок над комнатой
-        if (_fontLoaded) {
+        // Заголовок над комнатой (только в режиме графа мира)
+        if (_fontLoaded && _currentScreen == EditorScreen::WORLD_LAYOUT) {
             sf::RectangleShape headerBg({rW, 28.0f});
             headerBg.setPosition({rOff.x, rOff.y - 32.0f});
             headerBg.setFillColor(isActive ? sf::Color(35, 50, 75, 235) : sf::Color(18, 24, 34, 200));

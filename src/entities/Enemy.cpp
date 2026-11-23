@@ -448,6 +448,8 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
         // Во время стана о стену босс остается оглушенным и получает урон
         if (bossWallStunTimer > 0.0f) {
             hurtTimer = bossWallStunTimer;
+        } else if (hurtTimer > 0.0f) {
+            // Если босс уже оглушен контратакой — сохраняем стан!
         } else {
             hurtTimer = 0.0f; // Unflinching poise (не сбивается обычными атаками)
             // Если босс в IDLE и игрок атакует его сверху или вблизи — босс моментально реагирует встречной атакой!
@@ -722,6 +724,10 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
 }
 
 void Enemy::dropCombo() {
+    if (enemyType == EnemyType::BOSS_1) {
+        interruptBossComboAndStun(1.2f);
+        return;
+    }
     const auto& ecfg = getEConfig();
     aiComboState = AIComboState::IDLE;
     attackState = EnemyAttackState::RECOVERY;
@@ -3575,6 +3581,20 @@ void Enemy::triggerBossCombo(int comboIndex) {
     attackHasHit = false;
 }
 
+void Enemy::interruptBossComboAndStun(float stunTime) {
+    attackState = EnemyAttackState::IDLE;
+    attackStateTimer = 0.0f;
+    bossCurrentComboHit = 0;
+    bossSpecialState = Boss1SpecialState::NONE;
+    bossWallStunTimer = 0.0f;
+    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    attackHasHit = false;
+    velocity.x = 0.0f;
+    hurtTimer = std::max(hurtTimer, stunTime);
+    bossComboCooldown = std::max(bossComboCooldown, stunTime + 1.2f);
+    currentComboName = "БОСС 1: ПРЕРВАН КОНТРАТАКОЙ (" + std::to_string(stunTime).substr(0, 3) + "с)!";
+}
+
 void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos) {
     if (bossNextComboIndex < 0 || bossNextComboIndex >= 5) bossNextComboIndex = 0;
     const auto& combo = s_bossCombos[bossNextComboIndex];
@@ -3765,6 +3785,19 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             hurtTimer = 0.0f;
             bossSpecialState = Boss1SpecialState::NONE;
             bossComboCooldown = 1.0f; // Передышка после стана
+        }
+        return;
+    }
+
+    // Состояние оглушения контратакой (Counter-Attack Stun)
+    if (hurtTimer > 0.0f && bossWallStunTimer <= 0.0f) {
+        hurtTimer -= dt;
+        attackState = EnemyAttackState::IDLE;
+        attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+        velocity.x = 0.0f;
+        if (hurtTimer <= 0.0f) {
+            hurtTimer = 0.0f;
+            currentComboName = "";
         }
         return;
     }
