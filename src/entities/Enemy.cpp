@@ -454,7 +454,7 @@ bool Enemy::takeDamage(float amount, float knockX, float knockY, float stunTime,
             hurtTimer = 0.0f; // Unflinching poise (не сбивается обычными атаками)
             // Если босс в IDLE и игрок атакует его сверху или вблизи — босс моментально реагирует встречной атакой!
             if (attackState == EnemyAttackState::IDLE && bossComboCooldown <= 0.0f) {
-                triggerBossCombo(bossNextComboIndex % 5);
+                triggerBossCombo(bossNextComboIndex % 6);
                 bossNextComboIndex++;
             }
         }
@@ -2745,6 +2745,12 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     sf::RectangleShape body({halfW * 2.0f, halfH * 2.0f});
     body.setOrigin({halfW, halfH});
     body.setPosition(position);
+    if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
+        // Приседание босса перед прыжком: сжатие по вертикали и расширение в стороны
+        body.setSize({halfW * 2.3f, halfH * 1.5f});
+        body.setOrigin({halfW * 1.15f, halfH * 0.75f});
+        body.setPosition({position.x, position.y + halfH * 0.25f});
+    }
     if (spinTimer > 0.0f) {
         body.setRotation(sf::degrees(spinAngle));
     } else {
@@ -3013,7 +3019,8 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     if (enemyType == EnemyType::BOSS_1) {
         bool isTelegraphing = (attackState == EnemyAttackState::WINDUP) ||
                               (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH) ||
-                              (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH);
+                              (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH) ||
+                              (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH);
         if (isTelegraphing) {
             // 1. Светящийся бейдж предупреждения [ ! ] над головой босса
             sf::CircleShape warnBadge(15.0f);
@@ -3044,6 +3051,11 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
                 totalW = 440.0f;
                 hby = position.y - halfH - 20.0f;
                 hbh = halfH * 2.0f + 40.0f;
+            } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
+                totalW = halfW * 2.0f + 160.0f;
+                hbx = position.x - totalW * 0.5f;
+                hby = position.y - halfH - 200.0f;
+                hbh = halfH * 2.0f + 220.0f;
             }
 
             sf::RectangleShape warnBox({totalW, hbh});
@@ -3053,6 +3065,16 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
             warnBox.setOutlineThickness(2.0f);
             warnBox.setOutlineColor(sf::Color(255, 220, 40, static_cast<std::uint8_t>(160 + 80 * pulse)));
             window.draw(warnBox);
+        }
+
+        // 3. Отрисовка энергетической волны удара с воздуха по полу (Jump Slam Strike)
+        if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_STRIKE && attackHitbox.size.x > 0.0f) {
+            sf::RectangleShape slamBeam(attackHitbox.size);
+            slamBeam.setPosition(attackHitbox.position);
+            slamBeam.setFillColor(sf::Color(255, 60, 40, 110));
+            slamBeam.setOutlineThickness(2.5f);
+            slamBeam.setOutlineColor(sf::Color(255, 230, 80, 220));
+            window.draw(slamBeam);
         }
     }
 
@@ -3489,7 +3511,7 @@ struct BossComboDef {
     std::vector<BossAttackStep> steps;
 };
 
-static const BossComboDef s_bossCombos[5] = {
+static const BossComboDef s_bossCombos[6] = {
     // 0: ЗАТЯЖНОЙ ТЯЖЕЛЫЙ СМЭШ (3 удара)
     {
         "БОСС 1: ЗАТЯЖНОЙ СМЭШ [3 УДАРА]",
@@ -3535,6 +3557,16 @@ static const BossComboDef s_bossCombos[5] = {
             {0.28f, 0.15f, 0.16f, 18.0f, 400.0f, -150.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 310.0f, "heavy"},
             {0.42f, 0.18f, 0.26f, 25.0f, 560.0f, -280.0f, 0.58f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 360.0f, "heavy"}
         }
+    },
+    // 5: ТЕМПОВЫЙ РАЗРЫВ (4 удара: затяг -> пауза -> 2 быстрых -> долгая пауза -> сокрушительный 4-й)
+    {
+        "БОСС 1: ТЕМПОВЫЙ РАЗРЫВ [4 УДАРА]",
+        {
+            {0.65f, 0.18f, 0.45f, 14.0f, 400.0f, -180.0f, 0.45f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 240.0f, "heavy"},
+            {0.12f, 0.12f, 0.08f, 11.0f, 340.0f, -120.0f, 0.30f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 260.0f, "heavy"},
+            {0.10f, 0.12f, 0.75f, 13.0f, 360.0f, -140.0f, 0.35f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 280.0f, "heavy"},
+            {0.32f, 0.20f, 0.35f, 25.0f, 560.0f, -280.0f, 0.60f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 360.0f, "heavy"}
+        }
     }
 };
 }
@@ -3561,8 +3593,19 @@ void Enemy::triggerBossEarthquake() {
     SoundManager::get().play("heavy");
 }
 
+void Enemy::triggerBossJumpSlam() {
+    bossSpecialState = Boss1SpecialState::JUMP_SLAM_TELEGRAPH;
+    bossSpecialTimer = 0.40f;
+    velocity = {0.0f, 0.0f};
+    attackState = EnemyAttackState::WINDUP;
+    attackStateTimer = 0.40f;
+    currentComboName = "БОСС 1: ПРИСЕДАНИЕ И ПРЫЖОК-СЛЭМ!";
+    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+    SoundManager::get().play("heavy");
+}
+
 void Enemy::triggerBossCombo(int comboIndex) {
-    int idx = std::clamp(comboIndex, 0, 4);
+    int idx = std::clamp(comboIndex, 0, 5);
     bossNextComboIndex = idx;
     bossCurrentComboHit = 0;
     bossComboTotalHits = static_cast<int>(s_bossCombos[idx].steps.size());
@@ -3598,7 +3641,7 @@ void Enemy::interruptBossComboAndStun(float stunTime) {
 }
 
 void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos, const Arena* arena) {
-    if (bossNextComboIndex < 0 || bossNextComboIndex >= 5) bossNextComboIndex = 0;
+    if (bossNextComboIndex < 0 || bossNextComboIndex >= 6) bossNextComboIndex = 0;
     const auto& combo = s_bossCombos[bossNextComboIndex];
     if (bossCurrentComboHit < 0 || bossCurrentComboHit >= static_cast<int>(combo.steps.size())) {
         attackState = EnemyAttackState::IDLE;
@@ -3708,13 +3751,19 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
 
     // 1. Полный иммунитет к форсе от ударов игрока (горизонтальная скорость от атак = 0),
     // но полноценная гравитация и физика падения на пол!
-    velocity.x = 0.0f;
+    if (bossSpecialState != Boss1SpecialState::JUMP_SLAM_RISE) {
+        velocity.x = 0.0f;
+    }
 
     // Проверяем нахождение на полу (overlapsSolid по габаритам босса)
     bool isGrounded = arena.overlapsSolid(position.x, position.y + 2.0f, halfW, halfH, halfH);
     if (!isGrounded) {
-        velocity.y += GRAVITY * dt;
-        if (velocity.y > 1800.0f) velocity.y = 1800.0f;
+        if (bossSpecialState != Boss1SpecialState::JUMP_SLAM_STRIKE) {
+            velocity.y += GRAVITY * dt;
+            if (velocity.y > 1800.0f) velocity.y = 1800.0f;
+        } else {
+            velocity.y = 0.0f;
+        }
     } else {
         if (velocity.y > 0.0f) velocity.y = 0.0f;
     }
@@ -3739,6 +3788,24 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
                 position.y = low;
                 velocity.y = 0.0f;
                 isGrounded = true;
+
+                // Приземление после прыжка-слэма
+                if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
+                    bossSpecialState = Boss1SpecialState::NONE;
+                    bossComboCooldown = 0.8f;
+                    currentComboName = "";
+
+                    float groundY = position.y + halfH;
+                    GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
+                    GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
+                    bossDustWaves.push_back(waveL);
+                    bossDustWaves.push_back(waveR);
+
+                    SoundManager::get().play("wall_slam", 95.0f);
+                    if (CombatSystem::getActive()) {
+                        CombatSystem::getActive()->triggerShake(0.30f, 8.0f);
+                    }
+                }
             } else {
                 position.y = nextY;
             }
@@ -3919,6 +3986,70 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             currentComboName = "";
         }
         return;
+    } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
+        bossSpecialTimer -= dt;
+        isFacingLeft = (playerPos.x < position.x);
+        velocity = {0.0f, 0.0f};
+        if (bossSpecialTimer <= 0.0f) {
+            bossSpecialState = Boss1SpecialState::JUMP_SLAM_RISE;
+            velocity.y = -1150.0f; // Прыжок на 3-4 блока вверх!
+            velocity.x = std::clamp((playerPos.x - position.x) * 1.5f, -220.0f, 220.0f);
+            attackState = EnemyAttackState::IDLE;
+            attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+            SoundManager::get().play("adw2", 80.0f);
+        }
+        return;
+    } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_RISE) {
+        if (std::abs(velocity.x) > 0.1f) {
+            tryBossMoveX(velocity.x * dt);
+        }
+        // Как только достиг пика прыжка: бьет под себя и чуть вширь, доставая до пола
+        if (velocity.y >= -30.0f) {
+            bossSpecialState = Boss1SpecialState::JUMP_SLAM_STRIKE;
+            bossSpecialTimer = 0.30f;
+            velocity = {0.0f, 0.0f};
+
+            float floorY = position.y + halfH + 250.0f;
+            for (float cy = position.y + halfH; cy <= position.y + halfH + 600.0f; cy += 16.0f) {
+                if (arena.overlapsSolid(position.x, cy, 20.0f, 10.0f, 10.0f)) {
+                    floorY = cy;
+                    break;
+                }
+            }
+            float hbw = halfW * 2.0f + 160.0f; // чуть вширь!
+            float hbx = position.x - hbw * 0.5f;
+            float hby = position.y - 10.0f;
+            float hbh = std::max(floorY - hby + 32.0f, halfH * 2.0f + 100.0f); // достает прямо до пола!
+            attackHitbox = sf::FloatRect({hbx, hby}, {hbw, hbh});
+
+            currentAttackDamage = 26.0f;
+            currentAttackKnockX = (playerPos.x < position.x ? -1.0f : 1.0f) * 450.0f;
+            currentAttackKnockY = 650.0f;
+            currentAttackStun = 0.9f;
+            currentAttackHitLevel = HitLevel::OVERHEAD;
+            attackState = EnemyAttackState::ATTACKING;
+            attackHasHit = false;
+            currentComboName = "БОСС 1: СОКРУШИТЕЛЬНЫЙ УДАР С ВОЗДУХА ПО ПОЛУ!";
+
+            SoundManager::get().playAttack("heavy", "", true, 95.0f);
+            if (CombatSystem::getActive()) {
+                CombatSystem::getActive()->triggerShake(0.35f, 9.0f);
+            }
+        }
+        return;
+    } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_STRIKE) {
+        bossSpecialTimer -= dt;
+        velocity = {0.0f, 0.0f};
+        if (bossSpecialTimer <= 0.0f) {
+            bossSpecialState = Boss1SpecialState::JUMP_SLAM_FALL;
+            attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+            attackState = EnemyAttackState::IDLE;
+            velocity.y = 1200.0f; // стремительное падение вниз
+        }
+        return;
+    } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
+        // Падение вниз обрабатывается физикой выше
+        return;
     }
 
     // 5. Кулдауны между действиями
@@ -3945,9 +4076,12 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
 
     if (bossSpecialAttackCooldown <= 0.0f) {
         bossSpecialAttackCooldown = 2.8f + static_cast<float>(rand() % 2);
-        int choice = rand() % 2;
+        int choice = rand() % 3;
         if (choice == 0 && distToPlayer > 220.0f) {
             triggerBossBullCharge();
+            return;
+        } else if (choice == 1) {
+            triggerBossJumpSlam();
             return;
         } else {
             triggerBossEarthquake();
@@ -3958,7 +4092,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
     if (attackState == EnemyAttackState::IDLE) {
         bool playerAboveOrNear = (distToPlayer <= 260.0f) || (playerPos.y < position.y - 15.0f && distToPlayer <= 280.0f);
         if (playerAboveOrNear) {
-            triggerBossCombo(bossNextComboIndex % 5);
+            triggerBossCombo(bossNextComboIndex % 6);
             bossNextComboIndex++;
         } else {
             float dir = isFacingLeft ? -1.0f : 1.0f;

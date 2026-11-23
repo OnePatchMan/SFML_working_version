@@ -6761,6 +6761,78 @@ int main() {
 
         std::cout << "-> Step 12: Verified Point-Blank Throw Hit, Non-Teleporting Contact & Single Clean Perfect Dodge!" << std::endl;
 
+        // 13. Проверка нового комбо с темповым разрывом (затяг -> пауза -> 2 быстрых -> долгая пауза -> 4-й удар)
+        // и спец-атаки Jump Slam (приседание -> прыжок вверх на 3-4 блока -> удар на пике под себя вширь до пола -> падение)
+        Enemy newBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        newBoss.triggerBossCombo(5);
+        assert(newBoss.currentComboName.find("ТЕМПОВЫЙ РАЗРЫВ") != std::string::npos);
+        assert(newBoss.bossComboTotalHits == 4);
+        assert(newBoss.attackState == EnemyAttackState::WINDUP);
+        assert(newBoss.attackStateTimer >= 0.60f); // 1-й удар с затягом
+
+        // Шаг сквозь 1-й удар: проверка паузы после него
+        newBoss.updateBossComboSequence(0.66f, player.position, &arena); // завершили виндап 1
+        assert(newBoss.attackState == EnemyAttackState::ATTACKING);
+        newBoss.updateBossComboSequence(0.20f, player.position, &arena); // завершили активную фазу 1
+        assert(newBoss.attackState == EnemyAttackState::RECOVERY);
+        assert(newBoss.attackStateTimer >= 0.40f); // после 1-го удара ждет время (0.45с)
+
+        // 2 и 3 удары идут с минимальным интервалом
+        newBoss.updateBossComboSequence(0.46f, player.position, &arena); // перешли к удару 2
+        assert(newBoss.bossCurrentComboHit == 1);
+        assert(newBoss.attackStateTimer <= 0.15f); // минимальный замах
+        newBoss.updateBossComboSequence(0.25f, player.position, &arena); // завершили 2 удар
+        assert(newBoss.bossCurrentComboHit == 2); // удар 3
+        assert(newBoss.attackStateTimer <= 0.15f); // минимальный интервал между 2 и 3
+
+        newBoss.updateBossComboSequence(0.25f, player.position, &arena); // завершили активную фазу 3 удара
+        assert(newBoss.attackState == EnemyAttackState::RECOVERY);
+        assert(newBoss.attackStateTimer >= 0.70f); // ждет еще большее время чем между 1 и 2 (0.75с > 0.45с!)
+
+        newBoss.updateBossComboSequence(0.76f, player.position, &arena); // перешли к 4-му удару
+        assert(newBoss.bossCurrentComboHit == 3);
+        assert(newBoss.currentAttackDamage >= 24.0f); // мощный 4-й удар
+        std::cout << "-> Verified Boss Combo 5: Delayed Windup -> Pause -> 2 Rapid Strikes -> Extended Pause -> 4th Slam!" << std::endl;
+
+        // б) Проверка спец-атаки Jump Slam
+        Enemy slamBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        slamBoss.triggerBossJumpSlam();
+        assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_TELEGRAPH);
+        assert(slamBoss.currentComboName.find("ПРИСЕДАНИЕ") != std::string::npos);
+
+        // Завершение фазы приседания / телеграфа -> прыжок вверх на 3-4 блока
+        slamBoss.updateBoss1(0.42f, arena, player.position, false, false);
+        assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE);
+        assert(slamBoss.velocity.y < -1000.0f); // мощный толчок вверх
+
+        // Взлет до пика прыжка (apex)
+        while (slamBoss.velocity.y < -30.0f && slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE) {
+            slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        }
+        slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        // Достиг пика высоты -> выполняет удар под себя и вширь, достающий до пола!
+        assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_STRIKE);
+        assert(slamBoss.attackState == EnemyAttackState::ATTACKING);
+        assert(slamBoss.attackHitbox.size.x >= 350.0f); // чуть вширь (шире босса)
+        assert(slamBoss.attackHitbox.size.y >= 250.0f); // достает до пола!
+        assert(slamBoss.currentAttackDamage >= 25.0f);
+
+        // После удара на пике -> переход к быстрому падению вниз
+        slamBoss.updateBoss1(0.32f, arena, player.position, false, false);
+        assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_FALL);
+        assert(slamBoss.velocity.y > 0.0f);
+
+        // Падение до приземления на пол
+        for (int f = 0; f < 30 && slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_FALL; ++f) {
+            slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        }
+        assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::NONE);
+        assert(slamBoss.bossComboCooldown > 0.0f);
+        assert(!slamBoss.bossDustWaves.empty()); // при приземлении создались ударные волны пыли
+        std::cout << "-> Verified Boss Special Jump Slam: Crouch Telegraph -> Rise -> Peak Downward Slam -> Fall & Dust Impact!" << std::endl;
+
+        std::cout << "-> Step 13: Verified Boss Delayed Rhythm Combo & Special Jump Slam Strike!" << std::endl;
+
         std::cout << "-> PASSED: Boss 1 Air Combos, Air Anti-Spam, Perfect Dodge 0-CD, Counter Stun, Weapon Bounce, Sprint & Normal Combos verified 100%!" << std::endl;
     }
 

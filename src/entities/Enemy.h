@@ -382,7 +382,11 @@ public:
         BULL_CHARGE_RUN,       // Неистовый спринт (580 px/s) до столкновения со стеной
         BULL_CHARGE_WALL_STUN, // Оглушение о стену (2.8с)
         EARTHQUAKE_TELEGRAPH,  // Подъем рук для удара о землю (0.8с)
-        EARTHQUAKE_SLAM        // Удар по земле, разлет волны пыли
+        EARTHQUAKE_SLAM,       // Удар по земле, разлет волны пыли
+        JUMP_SLAM_TELEGRAPH,   // Приседание / индикатор перед прыжком
+        JUMP_SLAM_RISE,        // Прыжок на 3-4 блока вверх до пика
+        JUMP_SLAM_STRIKE,      // Удар под себя и вширь, достающий до пола
+        JUMP_SLAM_FALL         // Падение вниз до приземления
     };
 
     struct GroundDustWave {
@@ -410,6 +414,7 @@ public:
     bool isBossWallStunned() const { return bossWallStunTimer > 0.0f; }
     void triggerBossBullCharge();
     void triggerBossEarthquake();
+    void triggerBossJumpSlam();
     void triggerBossCombo(int comboIndex);
     void interruptBossComboAndStun(float stunTime);
     void updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking);
