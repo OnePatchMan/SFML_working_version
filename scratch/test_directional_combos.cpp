@@ -6161,8 +6161,8 @@ int main() {
         assert(player.isStunned() == true);
         assert(player.getStunTimer() >= 1.15f);
         assert(player.hp < prevPlayerHp);
-        assert(std::abs((prevPlayerHp - player.hp) - 12.0f) < 0.1f);
-        std::cout << "-> Step 6: Earthquake slam spawns dust shockwaves dealing 12 dmg & 1.2s stun to grounded player!" << std::endl;
+        assert(std::abs((prevPlayerHp - player.hp) - 18.0f) < 0.1f);
+        std::cout << "-> Step 6: Earthquake slam spawns dust shockwaves dealing 18 dmg & 1.2s stun to grounded player!" << std::endl;
 
         // Проверка: атака босса задевает игрока, находящегося внутри тела босса
         boss.triggerBossCombo(0);
@@ -6709,7 +6709,57 @@ int main() {
         float bStartPosX = mobileBoss.position.x;
         mobileBoss.updateBossComboSequence(0.05f, player.position, &arena);
         assert(mobileBoss.position.x > bStartPosX); // Босс продвинулся вперед во время удара!
-        std::cout << "-> Step 11: Verified Boss 1 boosted damage (9-18 dmg) & dynamic attack lunge mobility!" << std::endl;
+        std::cout << "-> Step 11: Verified Boss 1 boosted damage (12-26 dmg) & dynamic attack lunge mobility!" << std::endl;
+
+        // 12. Проверка: бросок в упор попадает мгновенно, контактная точка без телепортации, одиночный чистый звук уворота
+        // а) Бросок в упор (враг в 10px перед игроком): оружие бьет сразу, не пролетая сквозь
+        Player pbPlayer({200.0f, 500.0f});
+        Enemy pbEnemy({212.0f, 500.0f}, EnemyType::NORMAL); // прямо в упоре
+        CombatSystem pbCombat;
+        pbPlayer.setSimulatedMoveDir(1.0f);
+        pbCombat.throwWeapon(pbPlayer, {250.0f, 500.0f});
+        assert(pbCombat.getThrownMaces().size() == 1);
+        float pbEnemyHpBefore = pbEnemy.hp;
+        pbCombat.update(0.016f, pbPlayer, pbEnemy);
+        // Булава попала в упоре на первом же кадре!
+        assert(pbCombat.getThrownMaces()[0].hasHit == true);
+        assert(pbEnemy.hp < pbEnemyHpBefore);
+
+        // б) Точка контакта без телепортации: бросок сверху вниз в голову босса ударяет в верхнюю грань
+        Enemy bossTopTarget({500.0f, 500.0f}, EnemyType::BOSS_1);
+        sf::FloatRect bTopBounds = bossTopTarget.getBounds();
+        CombatSystem topCombat;
+        Player topPlayer({500.0f, 350.0f}); // игрок над боссом
+        topPlayer.setSimulatedVerticalDir(1.0f); // бросок вниз
+        topCombat.throwWeapon(topPlayer, {500.0f, 500.0f});
+        assert(topCombat.getThrownMaces().size() == 1);
+        auto& topMace = const_cast<CombatSystem::ThrownMace&>(topCombat.getThrownMaces()[0]);
+        topMace.position = {500.0f, bTopBounds.position.y - 15.0f};
+        topMace.velocity = {0.0f, 950.0f}; // летит строго вниз
+        topCombat.update(0.016f, topPlayer, bossTopTarget);
+        assert(topMace.hasHit == true);
+        // Булава НЕ телепортировалась на левую или правую грань (x остался по центру ~500)
+        assert(std::abs(topMace.position.x - 500.0f) < 25.0f);
+        // Позиция контакта находится на верхней границе босса (а не сбоку)
+        assert(std::abs(topMace.position.y - bTopBounds.position.y) < 15.0f);
+
+        // в) Перфект додж потребляет окно и помечает замах врага разрешенным
+        Player pdConsumePlayer({200.0f, 500.0f});
+        Enemy pdAttacker({225.0f, 500.0f}, EnemyType::NORMAL);
+        pdAttacker.attackState = EnemyAttackState::ATTACKING;
+        pdAttacker.attackStateTimer = 0.25f;
+        pdAttacker.attackHitbox = sf::FloatRect({190.0f, 470.0f}, {50.0f, 60.0f});
+        pdAttacker.attackHasHit = false;
+        pdConsumePlayer.triggerSpotDodge();
+        assert(pdConsumePlayer.isPerfectDodgeActive() == true);
+        CombatSystem pdTestCombat;
+        pdTestCombat.update(0.016f, pdConsumePlayer, pdAttacker);
+        // Замах врага разрешен (attackHasHit = true)
+        assert(pdAttacker.attackHasHit == true);
+        // Окно идеального уворота потреблено (не активно)
+        assert(pdConsumePlayer.isPerfectDodgeActive() == false);
+
+        std::cout << "-> Step 12: Verified Point-Blank Throw Hit, Non-Teleporting Contact & Single Clean Perfect Dodge!" << std::endl;
 
         std::cout << "-> PASSED: Boss 1 Air Combos, Air Anti-Spam, Perfect Dodge 0-CD, Counter Stun, Weapon Bounce, Sprint & Normal Combos verified 100%!" << std::endl;
     }

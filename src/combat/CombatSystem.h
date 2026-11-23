@@ -98,6 +98,8 @@ public:
     struct ThrownMace {
         sf::Vector2f position;
         sf::Vector2f velocity;
+        sf::Vector2f prevPosition{0.0f, 0.0f}; // Начальная позиция для непрерывного CCD
+        bool isFirstFrame = true;              // Первый кадр броска для проверки в упоре
         float rotation = 0.0f;          // Угол вращения в градусах
         float angularVelocity = 0.0f;   // Скорость вращения (град/с)
         bool active = true;             // Активен ли в мире

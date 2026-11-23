@@ -111,6 +111,7 @@ public:
         _spotDodgeCooldown = 0.0f;
         _dashTimer = 0.0f;
         _isSpotDodging = false;
+        _perfectDodgeWindowTimer = 0.0f;
     }
     void consumePerfectDodgeEmpower() { _perfectDodgeEmpoweredTimer = 0.0f; }
     bool isDashWindow() const { return _dashWindowTimer > 0.0f; }

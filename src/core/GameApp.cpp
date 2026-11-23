@@ -343,22 +343,25 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
     }
 
     // Во время боссфайта играет Boss1.mp3, а при победе или исследовании локации — саундтрек игры
-    bool bossActive = false;
+    bool bossAlive = false;
+    bool bossEngaged = _arena.isBossFightActive();
     for (const auto& e : _enemies) {
         if (e.getType() == EnemyType::BOSS_1 && !e.isDead && e.hp > 0.0f) {
-            bossActive = true;
+            bossAlive = true;
+            if (e.hp < e.maxHp) bossEngaged = true;
             break;
         }
     }
     if (_arena.isBossFightActive()) {
-        if (!bossActive) {
+        if (!bossAlive) {
             // Босс побежден: убираем барьеры, снимаем фиксацию камеры, деактивируем триггер
             _arena.endBossFight();
+            SoundManager::get().playGameMusic();
         } else {
             SoundManager::get().playBossMusic("Boss1");
         }
     } else {
-        if (bossActive) {
+        if (bossEngaged && bossAlive) {
             SoundManager::get().playBossMusic("Boss1");
         } else {
             SoundManager::get().playGameMusic();
@@ -545,11 +548,14 @@ void GameApp::render() {
     if (_menuSystem.isInMenu()) {
         _menuSystem.draw(_window, mouseScreenPos);
     } else {
-        // Отрисовка грандиозного ХП-бара босса по центру экрана
+        // Отрисовка грандиозного ХП-бара босса по центру экрана только во время активного боя
+        bool showBossHp = _arena.isBossFightActive();
         for (const auto& e : _enemies) {
             if (e.getType() == EnemyType::BOSS_1 && !e.isDead && e.hp > 0.0f) {
-                _combat.drawBossHealthBar(_window, &e);
-                break;
+                if (showBossHp || e.hp < e.maxHp) {
+                    _combat.drawBossHealthBar(_window, &e);
+                    break;
+                }
             }
         }
 

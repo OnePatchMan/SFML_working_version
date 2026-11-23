@@ -7,6 +7,67 @@
 #include <cmath>
 #include <algorithm>
 
+// Непрерывное пересечение отрезка [A, B] с прямоугольником box (AABB Continuous Collision Detection).
+// Возвращает true, если отрезок пересекает box, и вычисляет точку первого контакта outHitPoint и нормаль outNormal.
+static bool raySegmentAABB(const sf::Vector2f& a, const sf::Vector2f& b, const sf::FloatRect& box,
+                           sf::Vector2f& outHitPoint, sf::Vector2f& outNormal) {
+    if (box.contains(a)) {
+        outHitPoint = a;
+        sf::Vector2f diff = b - a;
+        float dLen = std::hypot(diff.x, diff.y);
+        outNormal = (dLen > 0.001f) ? (-diff / dLen) : sf::Vector2f(-1.0f, 0.0f);
+        return true;
+    }
+
+    float dx = b.x - a.x;
+    float dy = b.y - a.y;
+    float tMin = 0.0f;
+    float tMax = 1.0f;
+    sf::Vector2f normalMin(0.0f, 0.0f);
+
+    float boxMinX = box.position.x;
+    float boxMaxX = box.position.x + box.size.x;
+    float boxMinY = box.position.y;
+    float boxMaxY = box.position.y + box.size.y;
+
+    // Ось X
+    if (std::abs(dx) < 1e-6f) {
+        if (a.x < boxMinX || a.x > boxMaxX) return false;
+    } else {
+        float invD = 1.0f / dx;
+        float t1 = (boxMinX - a.x) * invD;
+        float t2 = (boxMaxX - a.x) * invD;
+        sf::Vector2f n1(-1.0f, 0.0f);
+        sf::Vector2f n2(1.0f, 0.0f);
+        if (t1 > t2) { std::swap(t1, t2); std::swap(n1, n2); }
+        if (t1 > tMin) { tMin = t1; normalMin = n1; }
+        if (t2 < tMax) tMax = t2;
+        if (tMin > tMax) return false;
+    }
+
+    // Ось Y
+    if (std::abs(dy) < 1e-6f) {
+        if (a.y < boxMinY || a.y > boxMaxY) return false;
+    } else {
+        float invD = 1.0f / dy;
+        float t1 = (boxMinY - a.y) * invD;
+        float t2 = (boxMaxY - a.y) * invD;
+        sf::Vector2f n1(0.0f, -1.0f);
+        sf::Vector2f n2(0.0f, 1.0f);
+        if (t1 > t2) { std::swap(t1, t2); std::swap(n1, n2); }
+        if (t1 > tMin) { tMin = t1; normalMin = n1; }
+        if (t2 < tMax) tMax = t2;
+        if (tMin > tMax) return false;
+    }
+
+    if (tMin >= 0.0f && tMin <= 1.0f) {
+        outHitPoint = a + sf::Vector2f(dx * tMin, dy * tMin);
+        outNormal = normalMin;
+        return true;
+    }
+    return false;
+}
+
 CombatSystem::CombatSystem() {
     s_active = this;
     std::string fontPath = resolveAssetPath("assets/fonts/font.ttf");
@@ -268,7 +329,9 @@ void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) 
     float totalSpeed = baseThrowSpeed + boost;
 
     ThrownMace mace;
-    mace.position = playerCenter + throwDir * 20.0f;
+    mace.position = playerCenter + throwDir * 8.0f;
+    mace.prevPosition = playerCenter;
+    mace.isFirstFrame = true;
     mace.velocity = throwDir * totalSpeed;
     if (isUpward && targetPoint == sf::Vector2f(0.0f, 0.0f)) {
         // Ограничиваем вертикальную скорость взлета оружия, чтобы оно оставалось в зоне досягаемости комбо
@@ -1652,7 +1715,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 if (enemy.getType() != EnemyType::BOSS_1) {
                     enemy.stagger(0.75f);
                 }
-                enemy.attackHasHit = false;
+                enemy.attackHasHit = true; // Текущий замах успешно разрешен (увернулись), чтобы не триггерить повторно в этом замахе
 
                 _shakeTimer = 0.16f;
                 _shakeIntensity = 5.0f;
@@ -1667,7 +1730,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     sf::Color(255, 230, 60),
                     1.2f, 1.2f, 1.4f, 255.0f
                 });
-                SoundManager::get().play("adw2", 85.0f);
+                SoundManager::get().play("a1", 55.0f);
                 _empoweredShockwaves.push_back({
                     player.position,
                     12.0f,
@@ -1694,7 +1757,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 // Обычный уворот (кадры неуязвимости):
                 // Игрок увернулся! Удар прошел мимо, комбо ИИ мгновенно сбрасывается
                 enemy.dropCombo();
-                enemy.attackHasHit = false;
+                enemy.attackHasHit = true;
 
                 _comboDisplayName = "DODGE!";
                 _comboDisplayTimer = 0.5f;
@@ -1838,10 +1901,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             float waveDistY = std::abs(playerFeetY - wave.y);
             if (waveDistX <= 32.0f && waveDistY <= 26.0f && player.isOnGround()) {
                 if (!player.isInvulnerable() && player.getStunTimer() <= 0.0f) {
-                    player.takeDamage(12.0f, wave.dir * 320.0f, -180.0f, 1.2f); // Стан на 1.2 секунды!
+                    player.takeDamage(18.0f, wave.dir * 320.0f, -180.0f, 1.2f); // Стан на 1.2 секунды!
                     DamageNumber dn;
                     dn.position = player.position;
-                    dn.text = "-12 [СТАН!]";
+                    dn.text = "-18 [СТАН!]";
                     dn.color = sf::Color(255, 80, 40);
                     _damageNumbers.push_back(dn);
                     triggerShake(0.25f, 6.0f);
@@ -1963,7 +2026,9 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 }
             }
 
-            startPos = it->position;
+            startPos = it->isFirstFrame ? it->prevPosition : it->position;
+            it->isFirstFrame = false;
+            it->prevPosition = it->position;
             sf::Vector2f targetPos = it->position + it->velocity * dt;
             sf::Vector2f hitPoint, hitNormal;
             sf::Vector2i hitTile;
@@ -2029,28 +2094,17 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     if (enemy.isDead || enemy.hp <= 0.0f) continue;
 
                     sf::FloatRect eBounds = enemy.getBounds();
-                    sf::Vector2f enemyCenter = {enemy.position.x, enemy.position.y - Enemy::HALF_H};
-                    float distToEnemy = std::hypot(enemyCenter.x - it->position.x, enemyCenter.y - it->position.y);
+                    // Расширяем хитбокс противника на 8px (радиус ударной части булавы)
+                    sf::FloatRect expandedBox({eBounds.position.x - 8.0f, eBounds.position.y - 8.0f},
+                                              {eBounds.size.x + 16.0f, eBounds.size.y + 16.0f});
 
-                    // Проверка непрерывной коллизии по отрезку перемещения за кадр
-                    auto distToSeg = [](const sf::Vector2f& p, const sf::Vector2f& a, const sf::Vector2f& b) {
-                        sf::Vector2f ab = b - a;
-                        float lenSq = ab.x * ab.x + ab.y * ab.y;
-                        if (lenSq < 0.0001f) return std::hypot(p.x - a.x, p.y - a.y);
-                        float t = std::clamp(((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / lenSq, 0.0f, 1.0f);
-                        sf::Vector2f proj = a + t * ab;
-                        return std::hypot(p.x - proj.x, p.y - proj.y);
-                    };
-                    float segDist = distToSeg(enemyCenter, startPos, it->position);
-
-                    if (eBounds.contains(it->position) || distToEnemy < 38.0f || segDist < 38.0f) {
+                    sf::Vector2f hitPoint, hitNormal;
+                    if (raySegmentAABB(startPos, it->position, expandedBox, hitPoint, hitNormal)) {
                         it->hasHit = true; // Булава нанесла удар и больше в этом броске ударить не может!
                         it->hitCooldown = 999.0f;
 
-                        // Позиционируем оружие на внешней границе контакта противника (не в его центре!)
-                        float contactX = (it->velocity.x >= 0.0f) ? (eBounds.position.x - 6.0f) : (eBounds.position.x + eBounds.size.x + 6.0f);
-                        float contactY = std::clamp(it->position.y, eBounds.position.y, eBounds.position.y + eBounds.size.y);
-                        it->position = {contactX, contactY};
+                        // Позиционируем оружие строго в точке контакта на поверхности врага (без телепортации в бок)
+                        it->position = hitPoint;
 
                     // Рассчитываем урон пропорционально скорости полета булавы
                     float speedFactor = std::clamp(speed / 950.0f, 0.20f, 1.25f);
