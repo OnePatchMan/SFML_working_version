@@ -166,6 +166,8 @@ public:
     bool canDodge = false;
     float aggressiveness = 0.65f;
     float intelligence = 0.85f;
+    float getIntelligence() const { return intelligence; }
+    void setIntelligence(float intel) { intelligence = intel; }
 
     // Параметры уворота / доджа дуэлянта
     bool isDodging = false;
@@ -411,7 +413,7 @@ public:
     void triggerBossCombo(int comboIndex);
     void interruptBossComboAndStun(float stunTime);
     void updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking);
-    void updateBossComboSequence(float dt, const sf::Vector2f& playerPos);
+    void updateBossComboSequence(float dt, const sf::Vector2f& playerPos, const Arena* arena = nullptr);
 
     bool isBurrowWaiting() const { return isBurrowed && !isErupting; }
     bool isTelegraphingErupt() const { return isEruptTelegraph; }

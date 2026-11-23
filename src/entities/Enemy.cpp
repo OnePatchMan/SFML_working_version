@@ -685,7 +685,9 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
                 allowAirFollowup = (forcedHitLimit >= 3);
             } else {
                 if (enemyType == EnemyType::NORMAL) {
-                    maxComboHits = 1;
+                    // Обычный враг проводит 1-2 комбо; вероятность продолжения до 2 ударов зависит от интеллекта
+                    float comboRoll = static_cast<float>(rand() % 1000) / 1000.0f;
+                    maxComboHits = (comboRoll < intelligence) ? 2 : 1;
                     allowAirFollowup = false;
                 } else if (enemyType == EnemyType::TANK) {
                     maxComboHits = 2;
@@ -3492,46 +3494,46 @@ static const BossComboDef s_bossCombos[5] = {
     {
         "БОСС 1: ЗАТЯЖНОЙ СМЭШ [3 УДАРА]",
         {
-            {0.65f, 0.18f, 0.28f,  5.0f, 380.0f, -200.0f, 0.45f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 80.0f, "heavy"},
-            {0.40f, 0.16f, 0.24f,  6.0f, 350.0f, -140.0f, 0.40f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
-            {0.70f, 0.20f, 0.38f,  8.0f, 480.0f, -280.0f, 0.60f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 120.0f, "heavy"}
+            {0.55f, 0.18f, 0.24f,  9.0f, 420.0f, -220.0f, 0.45f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 180.0f, "heavy"},
+            {0.36f, 0.16f, 0.20f, 11.0f, 400.0f, -160.0f, 0.40f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 210.0f, "heavy"},
+            {0.60f, 0.20f, 0.32f, 16.0f, 520.0f, -300.0f, 0.60f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 260.0f, "heavy"}
         }
     },
     // 1: ДВОЙНОЙ КРЕСТОВОЙ РАССЕКАТЕЛЬ (3 удара)
     {
         "БОСС 1: КРЕСТОВОЙ РАССЕКАТЕЛЬ [3 УДАРА]",
         {
-            {0.45f, 0.16f, 0.22f,  4.5f, 320.0f, -130.0f, 0.35f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
-            {0.42f, 0.16f, 0.22f,  5.5f, 340.0f, -130.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
-            {0.60f, 0.18f, 0.35f,  7.5f, 440.0f, -180.0f, 0.50f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 140.0f, "heavy"}
+            {0.40f, 0.16f, 0.20f,  8.5f, 360.0f, -140.0f, 0.35f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 190.0f, "heavy"},
+            {0.38f, 0.16f, 0.20f, 10.5f, 380.0f, -140.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 220.0f, "heavy"},
+            {0.52f, 0.18f, 0.30f, 15.0f, 480.0f, -200.0f, 0.50f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 280.0f, "heavy"}
         }
     },
     // 2: НЕИСТОВАЯ ЯРОСТЬ БЕРСЕРКА (4 удара)
     {
         "БОСС 1: ЯРОСТЬ БЕРСЕРКА [4 УДАРА]",
         {
-            {0.38f, 0.15f, 0.20f,  4.0f, 280.0f, -110.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 75.0f, "heavy"},
-            {0.32f, 0.15f, 0.18f,  4.0f, 280.0f, -110.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 75.0f, "heavy"},
-            {0.36f, 0.16f, 0.22f,  5.5f, 320.0f, -130.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 85.0f, "heavy"},
-            {0.65f, 0.20f, 0.38f,  8.0f, 480.0f, -250.0f, 0.55f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 110.0f, "heavy"}
+            {0.34f, 0.15f, 0.18f,  7.5f, 320.0f, -120.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 170.0f, "heavy"},
+            {0.30f, 0.15f, 0.16f,  7.5f, 320.0f, -120.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 180.0f, "heavy"},
+            {0.32f, 0.16f, 0.18f, 11.0f, 360.0f, -140.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 210.0f, "heavy"},
+            {0.55f, 0.20f, 0.32f, 15.0f, 520.0f, -270.0f, 0.55f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 250.0f, "heavy"}
         }
     },
     // 3: СОКРУШИТЕЛЬ ПОЗЫ (2 удара)
     {
         "БОСС 1: СОКРУШИТЕЛЬ ПОЗЫ [2 УДАРА]",
         {
-            {0.85f, 0.22f, 0.35f,  8.5f, 520.0f, -320.0f, 0.65f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 130.0f, "heavy"},
-            {0.42f, 0.18f, 0.30f,  6.0f, 360.0f, -160.0f, 0.40f, HitLevel::MID, 175.0f, 190.0f, 0.0f,  90.0f, "heavy"}
+            {0.68f, 0.22f, 0.28f, 17.0f, 560.0f, -340.0f, 0.65f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 240.0f, "heavy"},
+            {0.36f, 0.18f, 0.24f, 13.0f, 400.0f, -180.0f, 0.40f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 210.0f, "heavy"}
         }
     },
     // 4: СМЕРЧ УДАРОВ (4 удара)
     {
         "БОСС 1: СМЕРЧ УДАРОВ [4 УДАРА]",
         {
-            {0.36f, 0.16f, 0.20f,  4.0f, 290.0f, -110.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 80.0f, "heavy"},
-            {0.42f, 0.16f, 0.20f,  5.0f, 310.0f, -120.0f, 0.35f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 85.0f, "heavy"},
-            {0.40f, 0.16f, 0.22f,  6.0f, 340.0f, -140.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 90.0f, "heavy"},
-            {0.62f, 0.22f, 0.40f,  8.0f, 500.0f, -260.0f, 0.58f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 120.0f, "heavy"}
+            {0.32f, 0.16f, 0.18f,  8.0f, 330.0f, -120.0f, 0.32f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 180.0f, "heavy"},
+            {0.36f, 0.16f, 0.18f, 10.0f, 350.0f, -130.0f, 0.35f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 190.0f, "heavy"},
+            {0.35f, 0.16f, 0.18f, 12.0f, 380.0f, -150.0f, 0.38f, HitLevel::MID, 175.0f, 190.0f, 0.0f, 220.0f, "heavy"},
+            {0.55f, 0.22f, 0.32f, 16.0f, 540.0f, -280.0f, 0.58f, HitLevel::MID, 185.0f, 190.0f, 0.0f, 260.0f, "heavy"}
         }
     }
 };
@@ -3539,10 +3541,10 @@ static const BossComboDef s_bossCombos[5] = {
 
 void Enemy::triggerBossBullCharge() {
     bossSpecialState = Boss1SpecialState::BULL_CHARGE_TELEGRAPH;
-    bossSpecialTimer = 0.6f;
+    bossSpecialTimer = 0.45f;
     velocity = {0.0f, 0.0f};
     attackState = EnemyAttackState::WINDUP;
-    attackStateTimer = 0.6f;
+    attackStateTimer = 0.45f;
     currentComboName = "БОСС 1: СОКРУШИТЕЛЬНЫЙ РАЗБЕГ!";
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
     SoundManager::get().play("heavy");
@@ -3595,12 +3597,12 @@ void Enemy::interruptBossComboAndStun(float stunTime) {
     currentComboName = "БОСС 1: ПРЕРВАН КОНТРАТАКОЙ (" + std::to_string(stunTime).substr(0, 3) + "с)!";
 }
 
-void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos) {
+void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos, const Arena* arena) {
     if (bossNextComboIndex < 0 || bossNextComboIndex >= 5) bossNextComboIndex = 0;
     const auto& combo = s_bossCombos[bossNextComboIndex];
     if (bossCurrentComboHit < 0 || bossCurrentComboHit >= static_cast<int>(combo.steps.size())) {
         attackState = EnemyAttackState::IDLE;
-        bossComboCooldown = 2.0f;
+        bossComboCooldown = 1.3f; // Снижен кулдаун для высокой мобильности босса
         currentComboName = "";
         return;
     }
@@ -3636,6 +3638,26 @@ void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos) {
         float hby = position.y - halfH - 65.0f;
         attackHitbox = sf::FloatRect({hbx, hby}, {totalW, hbh});
 
+        // Динамический выпад вперед во время удара (босс мобилен и не стоит на месте во время серии)
+        if (std::abs(velocity.x) > 0.1f) {
+            float dx = velocity.x * dt;
+            if (arena) {
+                float targetX = position.x + dx;
+                float checkX = (dx > 0.0f) ? (targetX + halfW) : (targetX - halfW);
+                bool canMove = true;
+                for (float fy = -halfH + 6.0f; fy <= halfH - 6.0f; fy += halfH * 0.45f) {
+                    if (arena->isPointSolid(checkX, position.y + fy)) {
+                        canMove = false;
+                        break;
+                    }
+                }
+                if (checkX <= 24.0f || checkX >= arena->getWidth() * 64.0f - 24.0f) canMove = false;
+                if (canMove) position.x = targetX;
+            } else {
+                position.x += dx;
+            }
+        }
+
         if (attackStateTimer <= 0.0f) {
             attackState = EnemyAttackState::RECOVERY;
             attackStateTimer = step.recoveryTime;
@@ -3664,9 +3686,9 @@ void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos) {
                 attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
                 attackHasHit = false;
             } else {
-                // Комбо полностью завершено! Входим в кулдаун 2.0 секунды (запрет связки двух комбо)
+                // Комбо полностью завершено! Входим в кулдаун 1.3 секунды (высокая мобильность босса)
                 attackState = EnemyAttackState::IDLE;
-                bossComboCooldown = 2.0f;
+                bossComboCooldown = 1.3f;
                 currentComboName = "";
                 attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
                 velocity.x = 0.0f;
@@ -3833,10 +3855,10 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         return;
     } else if (bossSpecialState == Boss1SpecialState::BULL_CHARGE_RUN) {
         float dir = isFacingLeft ? -1.0f : 1.0f;
-        float chargeSpeed = 580.0f;
+        float chargeSpeed = 720.0f;
         velocity.x = dir * chargeSpeed;
 
-        currentAttackDamage = 10.0f; // Сниженный сбалансированный урон
+        currentAttackDamage = 18.0f; // Повышенный сокрушительный урон тарана
         currentAttackKnockX = dir * 650.0f;
         currentAttackKnockY = -320.0f;
         currentAttackStun = 0.8f;
@@ -3874,11 +3896,11 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         velocity.x = 0.0f;
         if (bossSpecialTimer <= 0.0f) {
             bossSpecialState = Boss1SpecialState::EARTHQUAKE_SLAM;
-            bossSpecialTimer = 0.45f;
+            bossSpecialTimer = 0.40f;
 
             float groundY = position.y + halfH;
-            GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 420.0f, 0.0f, 380.0f, true, 1.0f};
-            GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 420.0f, 0.0f, 380.0f, true, 1.0f};
+            GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
+            GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
             bossDustWaves.push_back(waveL);
             bossDustWaves.push_back(waveR);
 
@@ -3893,7 +3915,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         velocity.x = 0.0f;
         if (bossSpecialTimer <= 0.0f) {
             bossSpecialState = Boss1SpecialState::NONE;
-            bossComboCooldown = 2.0f;
+            bossComboCooldown = 1.2f;
             currentComboName = "";
         }
         return;
@@ -3909,7 +3931,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         isFacingLeft = (playerPos.x < position.x);
         if (distToPlayer > 180.0f) {
             float dir = isFacingLeft ? -1.0f : 1.0f;
-            velocity.x = dir * 110.0f;
+            velocity.x = dir * 200.0f; // Мобильное маневрирование босса во время отдыха
             tryBossMoveX(velocity.x * dt);
         }
         attackState = EnemyAttackState::IDLE;
@@ -3922,7 +3944,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
     isFacingLeft = (playerPos.x < position.x);
 
     if (bossSpecialAttackCooldown <= 0.0f) {
-        bossSpecialAttackCooldown = 5.5f + static_cast<float>(rand() % 3);
+        bossSpecialAttackCooldown = 3.2f + static_cast<float>(rand() % 2);
         int choice = rand() % 2;
         if (choice == 0 && distToPlayer > 220.0f) {
             triggerBossBullCharge();
@@ -3940,11 +3962,11 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             bossNextComboIndex++;
         } else {
             float dir = isFacingLeft ? -1.0f : 1.0f;
-            velocity.x = dir * 140.0f;
+            velocity.x = dir * 280.0f; // Высокая скорость сближения и преследования (мобильный босс!)
             tryBossMoveX(velocity.x * dt);
         }
     } else {
-        updateBossComboSequence(dt, playerPos);
+        updateBossComboSequence(dt, playerPos, &arena);
     }
 }
 

@@ -71,7 +71,7 @@ public:
     Player(sf::Vector2f spawnPos);
 
     void handleInput(const std::optional<sf::Event>& event);
-    void update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld);
+    void update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld = {0.0f, 0.0f});
     void draw(sf::RenderWindow& window);
     void reset(sf::Vector2f spawnPos, bool withWeapon = true);
     bool takeDamage(float amount, float knockX, float knockY, float stunTime, 
@@ -88,6 +88,8 @@ public:
     bool isFacingRight() const { return _animation.isFacingRight(); }
     bool isDashing() const { return _dashTimer > 0.0f; }
     void cancelDash() { _dashTimer = 0.0f; }
+    bool isSprinting() const { return _isSprinting; }
+    void cancelSprint() { _isSprinting = false; _sprintDirX = 0.0f; }
     bool isSpotDodging() const { return _isSpotDodging; }
     void triggerSpotDodge() {
         const auto& pcfg = PlayerConfig::get();
@@ -250,6 +252,10 @@ private:
     float _iframeTimer = 0.0f;
     float _dashDirX = 1.0f;
     float _ghostSpawnTimer = 0.0f;
+
+    bool _isSprinting = false;       // Бег после рывка на земле
+    float _sprintDirX = 0.0f;        // Направление ускоренного бега
+    float _sprintGhostTimer = 0.0f;  // Таймер шлейфа скорости бега
 
     bool _isSpotDodging = false;
     float _spotDodgeTimer = 0.0f;

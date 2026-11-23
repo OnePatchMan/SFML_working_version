@@ -239,7 +239,7 @@ private:
     mutable std::optional<sf::Text> _bossHpText;
 
     void updateInternal(float dt, Player& player, const std::vector<Enemy*>& enemiesList);
-    void triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld);
+    void triggerAttack(AttackInput input, Player& player, const sf::Vector2f& mouseWorld = {0.0f, 0.0f});
 
     inline static CombatSystem* s_active = nullptr;
 };

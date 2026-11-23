@@ -51,6 +51,9 @@ const Animation* Player::getAttackAnimation(AttackAnimType animType) const {
 }
 
 void Player::triggerAttackAnimation(AttackAnimType animType, float duration) {
+    if (animType != AttackAnimType::NONE) {
+        cancelSprint(); // Атака сбивает разгон/бег
+    }
     _currentAttackAnim = animType;
     _attackAnimDuration = std::max(0.01f, duration);
     _attackAnimTimer = _attackAnimDuration;
@@ -219,6 +222,7 @@ void Player::lunge(float distance) {
 
 void Player::triggerCounterStance() {
     if (isDead || isStunned() || _isCounterStance || _dashTimer > 0.0f || _isSpotDodging || _counterCooldown > 0.0f) return;
+    cancelSprint();
     const auto& pcfg = PlayerConfig::get();
     _isCounterStance = true;
     _counterWindowTimer = pcfg.counterWindow;
@@ -309,7 +313,17 @@ void Player::handleInput(const std::optional<sf::Event>& event) {
                     _animation.setFacing(_dashDirX > 0.0f);
                     _rollAnimation.setFacing(_dashDirX > 0.0f);
                     _rollAnimation.setCurrentFrame(0);
+
+                    // Бег/разгон после рывка: если рывок на земле — активируем ускорение в сторону рывка
+                    if (_isOnGround) {
+                        _isSprinting = true;
+                        _sprintDirX = _dashDirX;
+                        _sprintGhostTimer = 0.0f;
+                    } else {
+                        cancelSprint();
+                    }
                 } else {
+                    cancelSprint();
                     // 2. Уворот на месте при отсутствии движения (Spot Dodge на земле)
                     const auto& pcfg = PlayerConfig::get();
                     _isSpotDodging = true;
@@ -460,8 +474,20 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
             _blockType = BlockType::HIGH;
         }
         moveX *= 0.35f; // Замедленное передвижение с поднятым блоком
+        cancelSprint();
     } else {
         _blockType = BlockType::NONE;
+    }
+
+    // Разгон после рывка: сбивается остановкой, атакой и разворотом в другую сторону
+    if (_isSprinting) {
+        if (moveX == 0.0f) {
+            cancelSprint(); // Остановка сбивает разгон
+        } else if ((moveX > 0.0f) != (_sprintDirX > 0.0f)) {
+            cancelSprint(); // Разворот в другую сторону сбивает разгон
+        } else if (isStunned() || isGuardBroken() || isCounterStanceActive() || isDead) {
+            cancelSprint();
+        }
     }
 
     if (_isOnGround) {
@@ -588,8 +614,21 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
             _dashGhosts.back().sprite.setColor(sf::Color(120, 200, 255, 180));
         }
     } else {
-        deltaX = (moveX * pcfg.moveSpeed + velocity.x) * dt;
+        float currentSpeed = (_isSprinting && moveX != 0.0f && ((moveX > 0.0f) == (_sprintDirX > 0.0f)))
+                             ? pcfg.sprintSpeed
+                             : pcfg.moveSpeed;
+        deltaX = (moveX * currentSpeed + velocity.x) * dt;
         deltaY = velocity.y * dt;
+
+        // Шлейф скорости при беге после рывка
+        if (_isSprinting && _isOnGround && moveX != 0.0f) {
+            _sprintGhostTimer -= dt;
+            if (_sprintGhostTimer <= 0.0f) {
+                _sprintGhostTimer = 0.065f;
+                _dashGhosts.emplace_back(_animation.getCurrentSprite(), 110.0f, 0.12f);
+                _dashGhosts.back().sprite.setColor(sf::Color(140, 215, 255, 120));
+            }
+        }
 
         // Затухание горизонтальной форсы отброса (экспоненциальное трение)
         float friction = _isOnGround ? 10.0f : 4.0f;
@@ -1013,7 +1052,10 @@ sf::Vector2f Player::getEffectiveVelocity() const {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right) || _simulatedMoveDir > 0.1f) {
             moveX += 1.0f;
         }
-        vx += moveX * PlayerConfig::get().moveSpeed;
+        float spd = (_isSprinting && moveX != 0.0f && ((moveX > 0.0f) == (_sprintDirX > 0.0f)))
+                    ? PlayerConfig::get().sprintSpeed
+                    : PlayerConfig::get().moveSpeed;
+        vx += moveX * spd;
     }
     return {vx, velocity.y};
 }

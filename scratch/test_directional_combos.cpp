@@ -6129,12 +6129,12 @@ int main() {
         assert(boss.velocity.x == 0.0f && boss.velocity.y == 0.0f);
         std::cout << "-> Step 3: Boss 1 has total force immunity (velocity remains 0 on damage)!" << std::endl;
 
-        // 5. Ограничение комбо: босс выполняет 1 комбо из 2-4 атак и уходит в кулдаун ~2.0с без возможности линкования
+        // 5. Ограничение комбо: босс выполняет 1 комбо из 2-4 атак и уходит в кулдаун ~1.3с без возможности линкования
         boss.triggerBossCombo(0);
         assert(boss.isAttacking == true);
         assert(boss.bossComboTotalHits >= 2 && boss.bossComboTotalHits <= 4);
-        assert(boss.bossComboCooldown >= 1.8f);
-        std::cout << "-> Step 4: Boss 1 executes single 2-4 hit combo with strict 2.0s cooldown and zero chaining!" << std::endl;
+        assert(boss.bossComboCooldown >= 1.0f);
+        std::cout << "-> Step 4: Boss 1 executes single 2-4 hit combo with strict cooldown and zero chaining!" << std::endl;
 
         // 6. Уникальная атака 1: Разбег до стенки (Bull Charge) с оглушением на 2.8с
         boss.triggerBossBullCharge();
@@ -6161,8 +6161,8 @@ int main() {
         assert(player.isStunned() == true);
         assert(player.getStunTimer() >= 1.15f);
         assert(player.hp < prevPlayerHp);
-        assert(std::abs((prevPlayerHp - player.hp) - 7.0f) < 0.1f);
-        std::cout << "-> Step 6: Earthquake slam spawns dust shockwaves dealing 7 dmg & 1.2s stun to grounded player!" << std::endl;
+        assert(std::abs((prevPlayerHp - player.hp) - 12.0f) < 0.1f);
+        std::cout << "-> Step 6: Earthquake slam spawns dust shockwaves dealing 12 dmg & 1.2s stun to grounded player!" << std::endl;
 
         // Проверка: атака босса задевает игрока, находящегося внутри тела босса
         boss.triggerBossCombo(0);
@@ -6608,7 +6608,110 @@ int main() {
         assert(thrownMace.apexHoverTimer == 0.0f); // Нет зависания
         std::cout << "-> Step 8: Verified Player weapon bounce physics & contact boundary against Boss 1!" << std::endl;
 
-        std::cout << "-> PASSED: Boss 1 Air Combos, Air Anti-Spam, Perfect Dodge 0-CD, Counter Stun & Weapon Bounce verified 100%!" << std::endl;
+        // 9. Проверка системы бега после рывка (ускорение в сторону рывка, сбивание остановкой, атакой и разворотом)
+        Player sprintPlayer({200.0f, 500.0f});
+        assert(sprintPlayer.isSprinting() == false);
+        // Зажимаем направление вправо (D) и нажимаем Shift
+        sprintPlayer.setSimulatedMoveDir(1.0f);
+        sf::Event::KeyPressed kpShift;
+        kpShift.code = sf::Keyboard::Key::LShift;
+        sf::Event shiftEv(kpShift);
+        sprintPlayer.handleInput(shiftEv);
+        assert(sprintPlayer.isDashing() == true);
+        assert(sprintPlayer.isSprinting() == true);
+
+        // Обновляем до завершения рывка — переходит в ускоренный бег со скоростью 600px/s
+        const auto& pcfg = PlayerConfig::get();
+        for (int f = 0; f < 10; ++f) {
+            sprintPlayer.update(0.016f, arena);
+        }
+        assert(sprintPlayer.isDashing() == false);
+        assert(sprintPlayer.isSprinting() == true);
+        sf::Vector2f velSprint = sprintPlayer.getEffectiveVelocity();
+        assert(std::abs(velSprint.x - pcfg.sprintSpeed) < 5.0f);
+
+        // а) Сбивание остановкой (moveX = 0)
+        sprintPlayer.setSimulatedMoveDir(0.0f);
+        sprintPlayer.update(0.016f, arena);
+        assert(sprintPlayer.isSprinting() == false);
+        assert(std::abs(sprintPlayer.getEffectiveVelocity().x) < 5.0f);
+
+        // б) Сбивание разворотом в противоположную сторону
+        sprintPlayer.cancelDash();
+        sprintPlayer.triggerPerfectDodge(); // сброс кулдауна рывка для теста
+        sprintPlayer.setSimulatedMoveDir(1.0f);
+        sprintPlayer.handleInput(shiftEv);
+        assert(sprintPlayer.isSprinting() == true);
+        // Резко жмем влево (-1.0f) — разворот сбивает разгон!
+        sprintPlayer.setSimulatedMoveDir(-1.0f);
+        sprintPlayer.update(0.016f, arena);
+        assert(sprintPlayer.isSprinting() == false);
+
+        // в) Сбивание атакой
+        sprintPlayer.cancelDash();
+        sprintPlayer.triggerPerfectDodge();
+        sprintPlayer.setSimulatedMoveDir(1.0f);
+        sprintPlayer.handleInput(shiftEv);
+        assert(sprintPlayer.isSprinting() == true);
+        // Атака сбивает разгон
+        CombatSystem atkCombat;
+        triggerLight(atkCombat, sprintPlayer);
+        assert(sprintPlayer.isSprinting() == false);
+        std::cout << "-> Step 9: Verified Post-Dash Sprint system (600px/s, cancelled by stop, turn & attack)!" << std::endl;
+
+        // 10. Проверка 1-2 комбо обычного врага (EnemyType::NORMAL) в зависимости от интеллекта
+        Enemy smartNormal({300.0f, 500.0f}, EnemyType::NORMAL);
+        // При интеллекте 1.0f враг ВСЕГДА выполняет 2 удара в комбо
+        smartNormal.setIntelligence(1.0f);
+        for (int i = 0; i < 10; ++i) {
+            smartNormal.dropCombo();
+            smartNormal.triggerComboSequence();
+            assert(smartNormal.maxComboHits == 2);
+        }
+
+        // При интеллекте 0.0f враг ВСЕГДА ограничивается 1 одиночным ударом
+        smartNormal.setIntelligence(0.0f);
+        for (int i = 0; i < 10; ++i) {
+            smartNormal.dropCombo();
+            smartNormal.triggerComboSequence();
+            assert(smartNormal.maxComboHits == 1);
+        }
+
+        // При интеллекте 0.5f враг дает как 1, так и 2 комбо
+        smartNormal.setIntelligence(0.5f);
+        int hitCount1 = 0;
+        int hitCount2 = 0;
+        for (int i = 0; i < 60; ++i) {
+            smartNormal.dropCombo();
+            smartNormal.triggerComboSequence();
+            if (smartNormal.maxComboHits == 1) hitCount1++;
+            else if (smartNormal.maxComboHits == 2) hitCount2++;
+        }
+        assert(hitCount1 > 0 && hitCount2 > 0);
+        std::cout << "-> Step 10: Verified Normal Enemy 1-2 combos scaled by intelligence (0.0=1-hit, 1.0=2-hit, 0.5=dynamic mix)!" << std::endl;
+
+        // 11. Проверка увеличенного урона и мобильности Босса 1
+        Enemy mobileBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        mobileBoss.triggerBossCombo(0);
+        assert(mobileBoss.currentAttackDamage >= 9.0f); // Увеличенный урон смэша (было 5.0)
+
+        // Проверка повышенного урона тарана
+        mobileBoss.triggerBossBullCharge();
+        mobileBoss.bossSpecialTimer = 0.0f;
+        mobileBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        assert(mobileBoss.currentAttackDamage >= 18.0f); // Увеличенный сокрушительный урон тарана (было 10.0)
+
+        // Проверка выпада вперед во время атаки (динамический выпад при ударе)
+        mobileBoss.triggerBossCombo(0);
+        mobileBoss.attackState = EnemyAttackState::ATTACKING;
+        mobileBoss.attackStateTimer = 0.2f;
+        mobileBoss.velocity.x = 200.0f;
+        float bStartPosX = mobileBoss.position.x;
+        mobileBoss.updateBossComboSequence(0.05f, player.position, &arena);
+        assert(mobileBoss.position.x > bStartPosX); // Босс продвинулся вперед во время удара!
+        std::cout << "-> Step 11: Verified Boss 1 boosted damage (9-18 dmg) & dynamic attack lunge mobility!" << std::endl;
+
+        std::cout << "-> PASSED: Boss 1 Air Combos, Air Anti-Spam, Perfect Dodge 0-CD, Counter Stun, Weapon Bounce, Sprint & Normal Combos verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

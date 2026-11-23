@@ -10,6 +10,7 @@
 struct PlayerStatsConfig {
     float maxHp = 100.0f;
     float moveSpeed = 400.0f;
+    float sprintSpeed = 600.0f; // Ускорение (бег) после рывка на земле
     float gravity = 3000.0f;
     float jumpSpeed = 900.0f;
     float maxFallSpeed = 1800.0f;
@@ -94,6 +95,7 @@ public:
                             if (section == "Stats") {
                                 if (key == "max_hp" || key == "maxhp") _config.maxHp = std::stof(val);
                                 else if (key == "move_speed" || key == "movespeed") _config.moveSpeed = std::stof(val);
+                                else if (key == "sprint_speed" || key == "sprintspeed") _config.sprintSpeed = std::stof(val);
                                 else if (key == "gravity") _config.gravity = std::stof(val);
                                 else if (key == "jump_speed" || key == "jumpspeed") _config.jumpSpeed = std::stof(val);
                                 else if (key == "max_fall_speed" || key == "maxfallspeed") _config.maxFallSpeed = std::stof(val);

@@ -209,6 +209,7 @@ void CombatSystem::spawnHealEffect(const sf::Vector2f& playerPos, int remainingF
 
 void CombatSystem::throwWeapon(Player& player, const sf::Vector2f& targetPoint) {
     if (!player.hasWeapon() || player.isDead || player.isStunned() || player.isBlocking() || _isAirGrabActive) return;
+    player.cancelSprint();
 
     sf::Vector2f playerCenter = player.position + sf::Vector2f(0.0f, -Player::HALF_H);
 
@@ -319,6 +320,7 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     if (player.isDashing()) {
         player.cancelDash();
     }
+    player.cancelSprint();
     player.clearDashWindow();
 
     _isAirAttack = inAir;
@@ -1836,10 +1838,10 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
             float waveDistY = std::abs(playerFeetY - wave.y);
             if (waveDistX <= 32.0f && waveDistY <= 26.0f && player.isOnGround()) {
                 if (!player.isInvulnerable() && player.getStunTimer() <= 0.0f) {
-                    player.takeDamage(7.0f, wave.dir * 320.0f, -180.0f, 1.2f); // Стан на 1.2 секунды!
+                    player.takeDamage(12.0f, wave.dir * 320.0f, -180.0f, 1.2f); // Стан на 1.2 секунды!
                     DamageNumber dn;
                     dn.position = player.position;
-                    dn.text = "-7 [СТАН!]";
+                    dn.text = "-12 [СТАН!]";
                     dn.color = sf::Color(255, 80, 40);
                     _damageNumbers.push_back(dn);
                     triggerShake(0.25f, 6.0f);
