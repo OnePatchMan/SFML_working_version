@@ -654,41 +654,71 @@ void EditorApp::scanTileSprites() {
     }
     // 4. ВКЛАДКА: 👾 ВРАГИ (отдельная папка assets/tiles/enemies/ и assets/sprites/enemies/)
     _scannedEnemies = Enemy::scanEnemyFolders(resolveAssetPath("assets/sprites/enemies"));
-    for (const auto& edef : _scannedEnemies) {
+
+    struct EnemyPaletteEntry {
+        std::string name;
+        std::string filename;
+        std::string enemyId;
+        ToolType tool;
+    };
+
+    const std::vector<EnemyPaletteEntry> standardEnemies = {
+        {"Обычный", "enemy_normal.png", "normal", ToolType::ENEMY_SPAWN},
+        {"Танк", "enemy_tank.png", "tank", ToolType::ENEMY_TANK},
+        {"Дуэл.Агр", "enemy_duelist.png", "duelist_aggressive", ToolType::ENEMY_DUELIST},
+        {"Дуэл.Пасс", "enemy_duelist_passive.png", "duelist_passive", ToolType::ENEMY_DUELIST_PASSIVE},
+        {"Манекен", "enemy_dummy.png", "dummy", ToolType::ENEMY_DUMMY},
+        {"Скрытень", "enemy_lurker.png", "lurker", ToolType::ENEMY_SPAWN},
+        {"БОСС 1", "enemy_boss.png", "boss_1", ToolType::ENEMY_BOSS_1}
+    };
+
+    std::string enemiesTilesDir = resolveAssetPath("assets/tiles/enemies");
+    for (const auto& se : standardEnemies) {
         TileSpriteItem item;
-        item.name = edef.displayName;
-        item.filename = edef.id;
-        item.enemyId = edef.id;
+        item.name = se.name;
+        item.filename = se.filename;
+        item.enemyId = se.enemyId;
         item.tileCode = 0;
-        item.tool = (edef.legacyType == 1) ? ToolType::ENEMY_TANK :
-                    (edef.legacyType == 2) ? ToolType::ENEMY_DUELIST :
-                    (edef.legacyType == 3) ? ToolType::ENEMY_DUELIST_PASSIVE :
-                    (edef.legacyType == 4) ? ToolType::ENEMY_DUMMY : ToolType::ENEMY_SPAWN;
+        item.tool = se.tool;
         item.tab = PaletteTab::ENEMIES;
-        if (edef.previewTexture) {
-            item.texture = edef.previewTexture;
-            item.sprite = std::make_unique<sf::Sprite>(*edef.previewTexture);
-            float sx = 32.0f / static_cast<float>(edef.previewTexture->getSize().x);
-            float sy = 32.0f / static_cast<float>(edef.previewTexture->getSize().y);
+
+        std::string tilePath = enemiesTilesDir + "/" + se.filename;
+        if (!std::filesystem::exists(tilePath)) {
+            tilePath = "assets/tiles/enemies/" + se.filename;
+        }
+        auto tex = std::make_shared<sf::Texture>();
+        if (tex->loadFromFile(tilePath)) {
+            tex->setSmooth(false);
+            item.texture = tex;
+            item.sprite = std::make_unique<sf::Sprite>(*tex);
+            float sx = 32.0f / static_cast<float>(tex->getSize().x);
+            float sy = 32.0f / static_cast<float>(tex->getSize().y);
             item.sprite->setScale({sx, sy});
         }
         _paletteSprites.push_back(std::move(item));
     }
-    std::string enemiesTilesDir = resolveAssetPath("assets/tiles/enemies");
+
     if (std::filesystem::exists(enemiesTilesDir)) {
         for (const auto& entry : std::filesystem::directory_iterator(enemiesTilesDir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".png") {
                 std::string fname = entry.path().filename().string();
+                if (fname == "enemy_spawn.png") continue;
                 bool exists = false;
                 for (const auto& pi : _paletteSprites) {
                     if (pi.filename == fname) { exists = true; break; }
                 }
                 if (!exists) {
+                    std::string stem = entry.path().stem().string();
                     TileSpriteItem item;
-                    item.name = "Враг (" + entry.path().stem().string() + ")";
+                    item.name = "Враг (" + stem + ")";
                     item.filename = fname;
                     item.tileCode = 0;
-                    item.tool = ToolType::ENEMY_SPAWN;
+                    if (stem.find("tank") != std::string::npos) item.tool = ToolType::ENEMY_TANK;
+                    else if (stem.find("duelist") != std::string::npos && stem.find("pass") != std::string::npos) item.tool = ToolType::ENEMY_DUELIST_PASSIVE;
+                    else if (stem.find("duelist") != std::string::npos) item.tool = ToolType::ENEMY_DUELIST;
+                    else if (stem.find("dummy") != std::string::npos) item.tool = ToolType::ENEMY_DUMMY;
+                    else if (stem.find("boss") != std::string::npos) item.tool = ToolType::ENEMY_BOSS_1;
+                    else item.tool = ToolType::ENEMY_SPAWN;
                     item.tab = PaletteTab::ENEMIES;
                     auto tex = std::make_shared<sf::Texture>();
                     if (tex->loadFromFile(entry.path().string())) {
@@ -702,16 +732,6 @@ void EditorApp::scanTileSprites() {
                 }
             }
         }
-    }
-    {
-        TileSpriteItem item;
-        item.name = "БОСС 1 (4x3)";
-        item.filename = "boss_1";
-        item.enemyId = "boss_1";
-        item.tileCode = 0;
-        item.tool = ToolType::ENEMY_BOSS_1;
-        item.tab = PaletteTab::ENEMIES;
-        _paletteSprites.push_back(std::move(item));
     }
     {
         TileSpriteItem item;
@@ -1068,12 +1088,36 @@ bool EditorApp::eyedropAt(int tx, int ty) {
 
     for (const auto& es : _enemySpawns) {
         if (es.x == tx && es.y == ty) {
-            if (es.type == 1) _currentTool = ToolType::ENEMY_TANK;
-            else if (es.type == 2) _currentTool = ToolType::ENEMY_DUELIST;
-            else if (es.type == 3) _currentTool = ToolType::ENEMY_DUELIST_PASSIVE;
-            else _currentTool = ToolType::ENEMY_SPAWN;
+            if (es.type == static_cast<int>(EnemyType::BOSS_1) || es.type == 5 || es.enemyId == "boss_1") {
+                _currentTool = ToolType::ENEMY_BOSS_1;
+            } else if (es.type == 1) {
+                _currentTool = ToolType::ENEMY_TANK;
+            } else if (es.type == 2) {
+                _currentTool = ToolType::ENEMY_DUELIST;
+            } else if (es.type == 3) {
+                _currentTool = ToolType::ENEMY_DUELIST_PASSIVE;
+            } else if (es.type == 4) {
+                _currentTool = ToolType::ENEMY_DUMMY;
+            } else {
+                _currentTool = ToolType::ENEMY_SPAWN;
+            }
 
-            std::string tName = (es.type == 1) ? "Танк" : (es.type == 2) ? "Дуэлянт Агр" : (es.type == 3) ? "Дуэлянт Пасс" : "Обычный";
+            _activeTab = PaletteTab::ENEMIES;
+            for (size_t i = 0; i < _paletteSprites.size(); ++i) {
+                if (_paletteSprites[i].tab == PaletteTab::ENEMIES && _paletteSprites[i].tool == _currentTool) {
+                    if (es.enemyId.empty() || _paletteSprites[i].enemyId == es.enemyId) {
+                        _selectedPaletteIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+            }
+
+            std::string tName = (es.type == static_cast<int>(EnemyType::BOSS_1) || es.type == 5 || es.enemyId == "boss_1") ? "БОСС 1" :
+                                (es.type == 1) ? "Танк" :
+                                (es.type == 2) ? "Дуэлянт Агр" :
+                                (es.type == 3) ? "Дуэлянт Пасс" :
+                                (es.type == 4) ? "Манекен" :
+                                (es.enemyId == "lurker") ? "Скрытень" : "Обычный";
             _statusMessage = "Пипетка: Враг [" + tName + "]";
             _statusTimer = 2.0f;
             return true;
@@ -5164,6 +5208,56 @@ void EditorApp::handleEvents() {
                 continue;
             }
 
+            auto selectToolByToolType = [&](ToolType tt, const std::string& enemyId = "") {
+                for (size_t i = 0; i < _paletteSprites.size(); ++i) {
+                    if (_paletteSprites[i].tool == tt) {
+                        if (enemyId.empty() || _paletteSprites[i].enemyId == enemyId) {
+                            _selectedPaletteIndex = static_cast<int>(i);
+                            _currentTool = _paletteSprites[i].tool;
+                            _currentTileCode = _paletteSprites[i].tileCode;
+                            _activeTab = _paletteSprites[i].tab;
+                            _statusMessage = "Инструмент: " + _paletteSprites[i].name;
+                            _statusTimer = 1.8f;
+                            return;
+                        }
+                    }
+                }
+            };
+
+            if (!ctrlHeld && !altHeld) {
+                if (kp->code == sf::Keyboard::Key::Num1 || kp->code == sf::Keyboard::Key::Numpad1) {
+                    selectToolByToolType(ToolType::PLATFORM);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num2 || kp->code == sf::Keyboard::Key::Numpad2) {
+                    selectToolByToolType(ToolType::WALL);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num3 || kp->code == sf::Keyboard::Key::Numpad3) {
+                    selectToolByToolType(ToolType::DOOR);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num4 || kp->code == sf::Keyboard::Key::Numpad4) {
+                    selectToolByToolType(ToolType::PLAYER_SPAWN);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num5 || kp->code == sf::Keyboard::Key::Numpad5) {
+                    selectToolByToolType(ToolType::ENEMY_SPAWN, "normal");
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num6 || kp->code == sf::Keyboard::Key::Numpad6) {
+                    selectToolByToolType(ToolType::ENEMY_TANK);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num7 || kp->code == sf::Keyboard::Key::Numpad7) {
+                    selectToolByToolType(ToolType::ENEMY_DUELIST);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num8 || kp->code == sf::Keyboard::Key::Numpad8) {
+                    selectToolByToolType(ToolType::ENEMY_DUELIST_PASSIVE);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num9 || kp->code == sf::Keyboard::Key::Numpad9) {
+                    selectToolByToolType(ToolType::ENEMY_DUMMY);
+                    continue;
+                } else if (kp->code == sf::Keyboard::Key::Num0 || kp->code == sf::Keyboard::Key::Numpad0) {
+                    selectToolByToolType(ToolType::LAMP);
+                    continue;
+                }
+            }
+
             // Быстрый выбор Ластика [E] и Кисти [B]
             if (kp->code == sf::Keyboard::Key::E && !ctrlHeld) {
                 _currentTool = ToolType::EDGE_PASSAGE;
@@ -7627,15 +7721,16 @@ void EditorApp::drawWorld() {
                 float th = static_cast<float>(def->previewTexture->getSize().y);
                 spr.setOrigin({tw * 0.5f, th});
                 spr.setPosition({centerX, floorY});
-                float sc = def->scale;
-                if (!es.facingRight) sc = -sc;
-                spr.setScale({sc, def->scale});
+                float targetH = isBoss1 ? 160.0f : ((es.type == 1) ? 75.0f : 50.0f);
+                float scY = targetH / th;
+                float scX = (es.facingRight ? 1.0f : -1.0f) * scY;
+                spr.setScale({scX, scY});
                 _window.draw(spr);
 
                 if (_fontLoaded) {
                     sf::Text tBadge(_font, toSfString(def->displayName + " #" + std::to_string(i + 1)), 10);
                     tBadge.setFillColor(sf::Color(255, 235, 120));
-                    tBadge.setPosition({centerX - 35.0f, floorY - th * def->scale - 16.0f});
+                    tBadge.setPosition({centerX - 35.0f, floorY - targetH - 16.0f});
                     _window.draw(tBadge);
                 }
                 continue;
@@ -7975,8 +8070,14 @@ void EditorApp::drawWorld() {
         } else if (_currentTool == ToolType::ENEMY_SPAWN) {
             brushRect.setSize({_tileSize, _tileSize});
             brushRect.setPosition({actOffset.x + static_cast<float>(_lastHoverTile.x) * _tileSize, actOffset.y + static_cast<float>(_lastHoverTile.y) * _tileSize});
-            brushRect.setFillColor(sf::Color(160, 160, 160, 90));
-            brushRect.setOutlineColor(sf::Color(210, 210, 210, 255));
+            bool isLurker = (_selectedPaletteIndex >= 0 && _selectedPaletteIndex < static_cast<int>(_paletteSprites.size()) && _paletteSprites[_selectedPaletteIndex].enemyId == "lurker");
+            if (isLurker) {
+                brushRect.setFillColor(sf::Color(240, 140, 40, 90));
+                brushRect.setOutlineColor(sf::Color(255, 170, 70, 255));
+            } else {
+                brushRect.setFillColor(sf::Color(160, 160, 160, 90));
+                brushRect.setOutlineColor(sf::Color(210, 210, 210, 255));
+            }
         } else if (_currentTool == ToolType::ENEMY_TANK) {
             brushRect.setSize({_tileSize * 1.5f, _tileSize * 1.5f});
             brushRect.setPosition({actOffset.x + static_cast<float>(_lastHoverTile.x) * _tileSize - _tileSize * 0.25f, actOffset.y + static_cast<float>(_lastHoverTile.y) * _tileSize - _tileSize * 0.5f});
@@ -7992,6 +8093,11 @@ void EditorApp::drawWorld() {
             brushRect.setPosition({actOffset.x + static_cast<float>(_lastHoverTile.x) * _tileSize, actOffset.y + static_cast<float>(_lastHoverTile.y) * _tileSize});
             brushRect.setFillColor(sf::Color(35, 150, 225, 90));
             brushRect.setOutlineColor(sf::Color(45, 185, 245, 255));
+        } else if (_currentTool == ToolType::ENEMY_DUMMY) {
+            brushRect.setSize({_tileSize, _tileSize});
+            brushRect.setPosition({actOffset.x + static_cast<float>(_lastHoverTile.x) * _tileSize, actOffset.y + static_cast<float>(_lastHoverTile.y) * _tileSize});
+            brushRect.setFillColor(sf::Color(220, 175, 75, 90));
+            brushRect.setOutlineColor(sf::Color(240, 195, 95, 255));
         } else if (_currentTool == ToolType::EDGE_PASSAGE) {
             brushRect.setFillColor(sf::Color(220, 50, 50, 60));
             brushRect.setOutlineColor(sf::Color(255, 60, 60, 220));
@@ -9573,7 +9679,10 @@ void EditorApp::drawUI() {
             else if (_paletteSprites[i].tool == ToolType::WALL && _paletteSprites[i].tileCode == 2) hotkeyStr = "[2]";
             else if (_paletteSprites[i].tool == ToolType::DOOR) hotkeyStr = "[3]";
             else if (_paletteSprites[i].tool == ToolType::PLAYER_SPAWN) hotkeyStr = "[4]";
-            else if (_paletteSprites[i].tool == ToolType::ENEMY_SPAWN) hotkeyStr = "[5]";
+            else if (_paletteSprites[i].tool == ToolType::ENEMY_SPAWN) {
+                if (_paletteSprites[i].enemyId == "lurker") hotkeyStr = "[Lurk]";
+                else hotkeyStr = "[5]";
+            }
             else if (_paletteSprites[i].tool == ToolType::ENEMY_TANK) hotkeyStr = "[6]";
             else if (_paletteSprites[i].tool == ToolType::ENEMY_DUELIST) hotkeyStr = "[7]";
             else if (_paletteSprites[i].tool == ToolType::ENEMY_DUELIST_PASSIVE) hotkeyStr = "[8]";
@@ -9584,7 +9693,7 @@ void EditorApp::drawUI() {
             else if (_paletteSprites[i].tool == ToolType::BG_DECOR) hotkeyStr = "[B]";
             else if (_paletteSprites[i].tool == ToolType::MOVE) hotkeyStr = "[M]";
             else if (_paletteSprites[i].tool == ToolType::BARRIER) hotkeyStr = "";
-            else if (_paletteSprites[i].tool == ToolType::ENEMY_BOSS_1) hotkeyStr = "";
+            else if (_paletteSprites[i].tool == ToolType::ENEMY_BOSS_1) hotkeyStr = "[B1]";
             else if (_paletteSprites[i].tool == ToolType::TRIGGER_BOSS_FIGHT) hotkeyStr = "";
 
             if (!hotkeyStr.empty()) {
@@ -9664,9 +9773,11 @@ void EditorApp::drawUI() {
         }
 
         if (_fontLoaded) {
-            std::string label = _paletteSprites[i].name;
-            if (label.size() > 9) label = label.substr(0, 8) + ".";
-            sf::Text cardTxt(_font, toSfString(label), 10);
+            sf::String sfLabel = toSfString(_paletteSprites[i].name);
+            if (sfLabel.getSize() > 9) {
+                sfLabel = sfLabel.substring(0, 8) + ".";
+            }
+            sf::Text cardTxt(_font, sfLabel, 10);
             cardTxt.setFillColor(isSelected ? sf::Color(255, 235, 120) : sf::Color(180, 195, 215));
             cardTxt.setPosition({cardX + 4.0f, cardY + 58.0f});
             _window.draw(cardTxt);

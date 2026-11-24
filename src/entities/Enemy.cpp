@@ -3642,6 +3642,7 @@ std::vector<EnemyTypeDef> Enemy::scanEnemyFolders(const std::string& baseDir) {
     ensureFolderInList("duelist_passive");
     ensureFolderInList("dummy");
     ensureFolderInList("lurker");
+    ensureFolderInList("boss");
 
     std::sort(discoveredFolders.begin(), discoveredFolders.end());
 
@@ -3690,9 +3691,11 @@ std::vector<EnemyTypeDef> Enemy::scanEnemyFolders(const std::string& baseDir) {
         // Определение ранга: Обычный / Элитный / Босс
         if (folderName.find("boss") != std::string::npos) {
             def.rank = EnemyRank::BOSS;
+            def.legacyType = 5;
             def.scale *= 1.35f;
             def.maxHp *= 3.0f;
-            def.displayName = "БОСС: " + def.displayName;
+            def.displayName = "БОСС 1 (Мутант)";
+            def.id = "boss_1";
         } else if (folderName.find("elite") != std::string::npos) {
             def.rank = EnemyRank::ELITE;
             def.scale *= 1.15f;
