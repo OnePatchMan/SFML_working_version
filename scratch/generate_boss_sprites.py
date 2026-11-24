@@ -1,434 +1,385 @@
-import math
-import os
+import numpy as np
 from PIL import Image, ImageDraw
 
 FRAME_W = 128
 FRAME_H = 96
 NUM_FRAMES = 8
+GROUND_Y = 95
 
-# Palette based on Image 2 (Sachiel/Angel aesthetic: sleek pale lavender carapace, dark slate core, bone ribs):
-CLR_TRANS = (0, 0, 0, 0)
-CLR_OUTLINE = (22, 25, 34, 255)         # Crisp dark silhouette
+# Authentic Pixel Art Palette (Sachiel/Angel aesthetic + Golem shading):
+C_TRANS = (0, 0, 0, 0)
+C_OUT = (18, 20, 28, 255)            # Deep dark outline
+C_SHADOW_DEEP = (50, 58, 76, 255)    # Deepest carapace shadow / cavity
+C_SHADOW = (94, 104, 128, 255)       # Mid carapace shadow
+C_MID = (156, 168, 192, 255)         # Base pale lavender carapace
+C_LIGHT = (212, 222, 240, 255)       # Lit carapace surface
+C_HI = (252, 254, 255, 255)          # Bright rim light / specular glint
 
-# Sleek Pale Carapace / Shoulder Hood (Upper body, smooth & faceless):
-CLR_CARAPACE_HI = (248, 250, 255, 255)  # Glossy rim light along sleek upper hood
-CLR_CARAPACE_LIGHT = (222, 226, 238, 255) # Light pale lavender-tinted bone
-CLR_CARAPACE_MID = (176, 182, 202, 255)   # Mid carapace
-CLR_CARAPACE_SHADOW = (120, 128, 150, 255)# Deep carapace shadow
+# Dark abdominal core (slender dark waist):
+C_CORE_VOID = (12, 14, 20, 255)
+C_CORE_DARK = (24, 30, 42, 255)
+C_CORE_MID = (42, 52, 70, 255)
+C_CORE_LIGHT = (68, 82, 106, 255)
 
-# Dark Sinewy Inner Body / Under-chest & flanks:
-CLR_CORE_DARK = (28, 36, 46, 255)       # Deepest shadow
-CLR_CORE_MID = (46, 58, 72, 255)        # Dark teal-slate muscle
-CLR_CORE_LIGHT = (72, 88, 106, 255)     # Highlight on core
+# Ivory Bone Ribs:
+C_RIB_DARK = (110, 116, 108, 255)
+C_RIB_MID = (180, 186, 176, 255)
+C_RIB_LIGHT = (244, 246, 238, 255)
 
-# Bone Ribs / Spines (Emerging from sides of chest):
-CLR_RIB_LIGHT = (245, 246, 240, 255)    # Ivory bone
-CLR_RIB_MID = (195, 198, 190, 255)      # Mid bone
-CLR_RIB_DARK = (130, 135, 128, 255)     # Bone shadow
+# Claws / Talons:
+C_CLAW_DARK = (116, 120, 112, 255)
+C_CLAW_MID = (186, 190, 180, 255)
+C_CLAW_HI = (250, 252, 246, 255)
 
-# Hands / Knuckles / Claws:
-CLR_HAND_BASE = (176, 182, 202, 255)
-CLR_CLAW = (245, 246, 240, 255)
-
-def draw_angel_mutant_frame(draw, ox, frame_idx):
+def draw_boss_frame(draw, ox, frame_idx):
     """
-    Renders 1 frame of the Angel-like Pale Mutant Boss:
-    - Inspired directly by Image 2 (Sachiel aesthetic)
-    - Side profile / 3/4 combat stance facing LEFT towards player
-    - Sleek arched shoulder hood curving forward
-    - WHERE NECK WOULD BE: Completely smooth, seamless organic surface
-    - NO EYE, NO ANGEL CORE
-    - EXTREMELY PINCHED, skinny hourglass waist with visible bone ribs
-    - Long gorilla arms resting firmly on the floor
-    - BOTH hands and feet firmly planted at ground_y = 95 with ZERO gap!
+    Renders 1 frame of the Pale Mutant Boss:
+    - 3/4 turn towards screen (showing both shoulders, chest angled forward-down)
+    - Massive curved hunched back arching high (dome peaking at Y=10..14)
+    - Downward-angled 'searchlight' cowl looking down towards floor at an acute angle
+    - Headless, neckless, eyeless smooth organic carapace
+    - Extremely pinched Sachiel-style waist with ivory ribs
+    - Long gorilla arms reaching to floor
+    - BOTH hands and feet firmly on ground_y = 95 with ZERO GAP!
     """
-    ground_y = 95  # Baseline floor contact level: exactly at bottom of hitbox
-
-    # Frame-specific offsets
-    cx = ox + 68
-    cy = 51
-
-    lean_x = 0
+    dx = ox
     bob_y = 0
-    l_arm_fx = -34
-    l_arm_fy = ground_y
-    r_arm_fx = 24
-    r_arm_fy = ground_y
     rear_up = False
     slam = False
     jumping = False
     hurt = False
 
+    # Near Arm anchors
+    na_sx, na_sy = 34, 38
+    na_ex, na_ey = 20, 62
+    na_kx, na_ky = 15, GROUND_Y
+
+    # Far Arm anchors
+    fa_sx, fa_sy = 60, 36
+    fa_ex, fa_ey = 54, 62
+    fa_kx, fa_ky = 46, GROUND_Y
+
+    # Near Leg anchors
+    nl_hip = (80, 60)
+    nl_knee = (96, 74)
+    nl_foot = (84, GROUND_Y)
+
+    # Far Leg anchors
+    fl_hip = (86, 60)
+    fl_knee = (100, 72)
+    fl_foot = (90, GROUND_Y)
+
+    # Frame-specific pose adjustments
     if frame_idx == 0:
-        # Idle low: firmly grounded
-        bob_y = 0
-        l_arm_fx = -34
-        l_arm_fy = ground_y
-        r_arm_fx = 24
-        r_arm_fy = ground_y
+        # Idle low
+        pass
     elif frame_idx == 1:
-        # Idle breathing: slight chest rise
+        # Idle breath: arched spine rises slightly, chest expands
         bob_y = -2
-        l_arm_fx = -33
-        l_arm_fy = ground_y
-        r_arm_fx = 25
-        r_arm_fy = ground_y
+        na_sy -= 1
+        fa_sy -= 1
     elif frame_idx == 2:
-        # Knuckle walk 1: Front (left) arm reaches forward-left
-        bob_y = -1
-        lean_x = -4
-        l_arm_fx = -46
-        l_arm_fy = ground_y - 12  # Reaching forward in stride
-        r_arm_fx = 20
-        r_arm_fy = ground_y       # Planted firmly on floor
+        # Knuckle walk 1: Near arm reaches forward-left, Far arm & feet planted
+        na_ex -= 6
+        na_kx -= 8
+        nl_knee = (92, 72)
+        nl_foot = (80, GROUND_Y)
+        fl_foot = (94, GROUND_Y)
     elif frame_idx == 3:
-        # Knuckle walk 2: Rear (right) arm swings forward
-        bob_y = -1
-        lean_x = -1
-        l_arm_fx = -36
-        l_arm_fy = ground_y       # Planted firmly on floor
-        r_arm_fx = 12
-        r_arm_fy = ground_y - 10  # Swinging forward
+        # Knuckle walk 2: Far arm reaches forward-left, Near arm & feet planted
+        fa_ex -= 6
+        fa_kx -= 8
+        nl_foot = (88, GROUND_Y)
+        fl_foot = (84, GROUND_Y)
     elif frame_idx == 4:
-        # Attack windup: Rearing up on hind legs, arms raised high!
+        # Attack windup: Reared back on hind legs, fists raised overhead!
         rear_up = True
-        bob_y = -14
-        lean_x = 8
-        l_arm_fx = -24
-        l_arm_fy = cy - 24
-        r_arm_fx = 28
-        r_arm_fy = cy - 28
+        bob_y = -10
+        na_sy = 30
+        na_ex, na_ey = 24, 18
+        na_kx, na_ky = 26, 8
+        fa_sy = 28
+        fa_ex, fa_ey = 50, 16
+        fa_kx, fa_ky = 52, 8
+        nl_hip = (76, 56)
+        nl_knee = (94, 72)
+        nl_foot = (80, GROUND_Y)
+        fl_hip = (82, 56)
+        fl_knee = (98, 70)
+        fl_foot = (88, GROUND_Y)
     elif frame_idx == 5:
-        # Attack slam: Fists smashed into the floor in front!
+        # Attack slam: Fists smashed down into floor in front, body lunging forward-down!
         slam = True
-        bob_y = 4
-        lean_x = -8
-        l_arm_fx = -50
-        l_arm_fy = ground_y
-        r_arm_fx = 14
-        r_arm_fy = ground_y
+        bob_y = 2
+        na_sx, na_sy = 32, 42
+        na_ex, na_ey = 18, 64
+        na_kx, na_ky = 12, GROUND_Y
+        fa_sx, fa_sy = 54, 40
+        fa_ex, fa_ey = 36, 66
+        fa_kx, fa_ky = 30, GROUND_Y
+        nl_hip = (82, 62)
+        nl_knee = (100, 76)
+        nl_foot = (88, GROUND_Y)
+        fl_hip = (88, 62)
+        fl_knee = (104, 74)
+        fl_foot = (94, GROUND_Y)
     elif frame_idx == 6:
         # Jump slam: Coiled mid-air
         jumping = True
-        bob_y = -24
-        lean_x = -4
-        l_arm_fx = -34
-        l_arm_fy = cy + 18
-        r_arm_fx = 18
-        r_arm_fy = cy + 16
+        bob_y = -22
+        nl_foot = (80, GROUND_Y - 24)
+        fl_foot = (88, GROUND_Y - 26)
+        na_ex, na_ey = 22, 54
+        na_kx, na_ky = 20, 80
+        fa_ex, fa_ey = 50, 52
+        fa_kx, fa_ky = 46, 78
     elif frame_idx == 7:
-        # Hurt / stunned: Flinched back
+        # Hurt / stunned: Flinched backward, recoiling
         hurt = True
-        bob_y = -4
-        lean_x = 10
-        l_arm_fx = -20
-        l_arm_fy = cy + 14
-        r_arm_fx = 34
-        r_arm_fy = cy + 6
+        bob_y = -3
+        na_sx += 4
+        na_ex += 6
+        na_kx += 6
+        fa_sx += 4
+        fa_ex += 6
+        fa_kx += 6
+        nl_foot = (88, GROUND_Y)
+        fl_foot = (94, GROUND_Y)
 
-    tx = cx + lean_x
-    ty = cy + bob_y
+    # 1. FAR HIND LEG
+    f_hock = (fl_foot[0] + 4, fl_foot[1] - 8)
+    draw.polygon([
+        (dx + fl_hip[0]-4, fl_hip[1] + bob_y),
+        (dx + fl_hip[0]+6, fl_hip[1] + bob_y),
+        (dx + fl_knee[0]+4, fl_knee[1] + bob_y),
+        (dx + fl_knee[0]-3, fl_knee[1]+3 + bob_y)
+    ], fill=C_SHADOW, outline=C_OUT)
+    draw.polygon([
+        (dx + fl_knee[0]+4, fl_knee[1] + bob_y),
+        (dx + fl_knee[0]-3, fl_knee[1]+3 + bob_y),
+        (dx + f_hock[0]-3, f_hock[1]),
+        (dx + f_hock[0]+3, f_hock[1])
+    ], fill=C_SHADOW, outline=C_OUT)
+    draw.polygon([
+        (dx + f_hock[0]-3, f_hock[1]),
+        (dx + f_hock[0]+3, f_hock[1]),
+        (dx + fl_foot[0]+5, fl_foot[1]-4),
+        (dx + fl_foot[0]+5, fl_foot[1]),
+        (dx + fl_foot[0]-6, fl_foot[1])
+    ], fill=C_SHADOW, outline=C_OUT)
+    draw.line([(dx + fl_foot[0]-5, fl_foot[1]-3), (dx + fl_foot[0]+4, fl_foot[1]-3)], fill=C_MID, width=2)
+    for c in range(3):
+        cx = dx + fl_foot[0] - 5 + c * 4
+        draw.polygon([(cx, fl_foot[1]-2), (cx-2, fl_foot[1]), (cx+1, fl_foot[1])], fill=C_CLAW_MID, outline=C_OUT)
 
-    # ========================================================
-    # 1. FAR (RIGHT) HIND LEG (Background leg)
-    # ========================================================
-    draw_hind_leg(draw, tx + 14, ty + 12, ground_y, is_near=False, rear_up=rear_up, jumping=jumping, step_fwd=frame_idx==3)
-
-    # ========================================================
-    # 2. FAR (RIGHT) GORILLA ARM (Background arm)
-    # ========================================================
-    draw_gorilla_arm(draw, tx + 18, ty - 8, tx + r_arm_fx, r_arm_fy, is_near=False, rear_up=rear_up, slam=slam, jumping=jumping)
-
-    # ========================================================
-    # 3. EXTREMELY PINCHED HOURGLASS WAIST & CORE (Image 2 style)
-    # ========================================================
-    draw_hourglass_waist(draw, tx, ty, rear_up=rear_up, slam=slam, hurt=hurt)
-
-    # ========================================================
-    # 4. NEAR (LEFT) HIND LEG (Foreground leg - firmly on ground_y!)
-    # ========================================================
-    draw_hind_leg(draw, tx - 2, ty + 14, ground_y, is_near=True, rear_up=rear_up, jumping=jumping, step_fwd=frame_idx==2)
-
-    # ========================================================
-    # 5. SLEEK PALE CARAPACE HOOD & CHEST (Headless, smooth surface)
-    # ========================================================
-    draw_sleek_hood_and_chest(draw, tx, ty, rear_up=rear_up, slam=slam, hurt=hurt)
-
-    # ========================================================
-    # 6. NEAR (LEFT) GORILLA ARM (Foreground arm - firmly on ground_y!)
-    # ========================================================
-    draw_gorilla_arm(draw, tx - 22, ty - 4, tx + l_arm_fx, l_arm_fy, is_near=True, rear_up=rear_up, slam=slam, jumping=jumping)
-
-def draw_sleek_hood_and_chest(draw, tx, ty, rear_up, slam, hurt):
-    """
-    Draws the iconic sweeping aerodynamic carapace hood of Image 2:
-    - Arches over the entire upper body from rear-right to front-left
-    - Front slopes down smoothly into the chest
-    - WHERE NECK WOULD BE: Completely smooth, seamless organic surface!
-    - NO HEAD, NO NECK, NO HOLE, NO EYE.
-    - Bone ribs emerging along the side of the chest.
-    """
-    # 1. Dark muscular under-chest (visible under the pale hood)
-    under_chest = [
-        (tx - 26, ty - 4),
-        (tx + 12, ty - 4),
-        (tx + 6, ty + 6),
-        (tx - 8, ty + 6)
+    # 2. PELVIS & SLENDER DARK CORE
+    pelvis_pts = [
+        (dx + 72, 60 + bob_y),
+        (dx + 90, 60 + bob_y),
+        (dx + 88, 70 + bob_y),
+        (dx + 80, 74 + bob_y),
+        (dx + 74, 70 + bob_y)
     ]
-    draw.polygon(under_chest, fill=CLR_CORE_MID, outline=CLR_OUTLINE)
-    draw.line([(tx - 24, ty - 3), (tx + 10, ty - 3)], fill=CLR_CORE_LIGHT, width=1)
+    draw.polygon(pelvis_pts, fill=C_MID, outline=C_OUT)
+    draw.line([(dx + 74, 62 + bob_y), (dx + 80, 64 + bob_y), (dx + 88, 62 + bob_y)], fill=C_LIGHT, width=2)
 
-    # 2. Sleek Sweeping Carapace Hood (Upper back & shoulders)
-    # Sweeps from high rear-right peak (tx + 22, ty - 26) forward to front snout (tx - 34, ty - 12)
-    hood_pts = [
-        (tx - 34, ty - 12),  # Front-most prow of the sleek hood (forward-sloping beak)
-        (tx - 26, ty - 22),  # Front curve
-        (tx - 10, ty - 28),  # Mid top curve
-        (tx + 12, ty - 28),  # Upper ridge
-        (tx + 26, ty - 22),  # Rear high peak (angel dorsal fin)
-        (tx + 22, ty - 8),   # Rear latissimus
-        (tx + 8, ty - 2),    # Lower rear connect
-        (tx - 12, ty - 2),   # Under chest connect
-        (tx - 28, ty - 6)    # Front prow underside
+    core_pts = [
+        (dx + 44, 46 + bob_y),
+        (dx + 74, 44 + bob_y),
+        (dx + 86, 60 + bob_y),
+        (dx + 72, 60 + bob_y),
+        (dx + 56, 52 + bob_y)
     ]
-    draw.polygon(hood_pts, fill=CLR_CARAPACE_MID, outline=CLR_OUTLINE)
+    draw.polygon(core_pts, fill=C_CORE_VOID, outline=C_OUT)
+    draw.line([(dx + 58, 48 + bob_y), (dx + 76, 46 + bob_y)], fill=C_CORE_MID, width=2)
+    draw.line([(dx + 62, 54 + bob_y), (dx + 80, 54 + bob_y)], fill=C_CORE_DARK, width=2)
 
-    # Highlight facet along the top aerodynamic curve (smooth, glossy rim)
-    draw.polygon([
-        (tx - 32, ty - 13),
-        (tx - 24, ty - 21),
-        (tx - 9, ty - 27),
-        (tx + 11, ty - 27),
-        (tx + 24, ty - 21),
-        (tx + 20, ty - 17),
-        (tx + 8, ty - 24),
-        (tx - 8, ty - 24),
-        (tx - 22, ty - 18)
-    ], fill=CLR_CARAPACE_LIGHT)
-    draw.line([(tx - 30, ty - 14), (tx - 22, ty - 22), (tx - 8, ty - 27), (tx + 10, ty - 27), (tx + 22, ty - 22)], fill=CLR_CARAPACE_HI, width=2)
-
-    # Underside shadow of the sleek hood
-    draw.polygon([
-        (tx - 33, ty - 11),
-        (tx - 26, ty - 6),
-        (tx - 10, ty - 3),
-        (tx + 7, ty - 3),
-        (tx + 20, ty - 7),
-        (tx + 12, ty - 6),
-        (tx - 10, ty - 5),
-        (tx - 24, ty - 8)
-    ], fill=CLR_CARAPACE_SHADOW)
-
-    # WHERE NECK WOULD BE: A completely smooth, seamless surface!
-    # A soft, elegant gradient curve blending into the chest with ZERO aperture, zero eye, zero core.
-    draw.line([(tx - 22, ty - 10), (tx - 12, ty - 4)], fill=CLR_CARAPACE_LIGHT, width=2)
-    draw.line([(tx - 20, ty - 9), (tx - 10, ty - 3)], fill=CLR_CARAPACE_MID, width=1)
-
-    # 3. Bone Ribs / Spines (3 sleek white claws/ribs curving along the chest from Image 2!)
-    rib_curves = [
-        [(tx - 16, ty - 2), (tx - 8, ty + 1), (tx - 2, ty - 1)],   # Rib 1 (top)
-        [(tx - 14, ty + 2), (tx - 6, ty + 5), (tx + 1, ty + 3)],   # Rib 2 (mid)
-        [(tx - 12, ty + 6), (tx - 4, ty + 9), (tx + 3, ty + 7)]    # Rib 3 (lower)
+    # Ivory Bone Ribs
+    ribs = [
+        (76, 44, 64, 46, 52, 45),
+        (78, 48, 66, 51, 55, 50),
+        (80, 53, 69, 56, 59, 55),
+        (82, 58, 72, 61, 64, 60)
     ]
-    for pts in rib_curves:
-        draw.line(pts, fill=CLR_OUTLINE, width=3)
-        draw.line(pts, fill=CLR_RIB_LIGHT, width=2)
-        # Tip of rib is sharp ivory
-        draw.point(pts[-1], fill=CLR_CARAPACE_HI)
+    for rx0, ry0, rx1, ry1, rx2, ry2 in ribs:
+        draw.line([(dx + rx0, ry0 + bob_y), (dx + rx1, ry1 + bob_y), (dx + rx2, ry2 + bob_y)], fill=C_RIB_LIGHT, width=2)
+        draw.line([(dx + rx0, ry0 + 1 + bob_y), (dx + rx1, ry1 + 1 + bob_y), (dx + rx2, ry2 + 1 + bob_y)], fill=C_RIB_DARK, width=1)
+        draw.point((dx + rx2 - 1, ry2 + bob_y), fill=C_RIB_LIGHT)
 
-def draw_hourglass_waist(draw, tx, ty, rear_up, slam, hurt):
-    """
-    Extremely pinched, narrow hourglass waist from Image 2:
-    - Red arrows in Image 2 explicitly emphasize the radical inward taper!
-    - Waist narrows down to only ~8-10 pixels wide at the center
-    - Flares smoothly into the pelvis and groin arch below
-    - NO ANGEL CORE (user said: "рисовать ядро ангела ему не надо")
-    """
-    # Upper ribcage width: ~22px (tx - 11 to tx + 11 at ty + 6)
-    # Narrow waist width: ~8px (tx - 4 to tx + 4 at ty + 12)
-    # Lower hips/pelvis width: ~20px (tx - 10 to tx + 10 at ty + 20)
-
-    waist_poly = [
-        (tx - 11, ty + 6),   # Upper front
-        (tx + 11, ty + 6),   # Upper rear
-        (tx + 4, ty + 12),   # Pinched rear waist
-        (tx + 10, ty + 20),  # Flared pelvis rear
-        (tx - 10, ty + 20),  # Flared pelvis front
-        (tx - 4, ty + 12)    # Pinched front waist
+    # 3. MASSIVE ARCHED HUNCHBACK & SEARCHLIGHT PROW
+    hunch_pts = [
+        (dx + 24, 46 + bob_y),   # Front searchlight nose
+        (dx + 22, 38 + bob_y),   # Lower front slope
+        (dx + 26, 28 + bob_y),   # Upper front slope
+        (dx + 38, 18 + bob_y),   # Ascending chest
+        (dx + 54, 12 + bob_y),   # Rising spine arch
+        (dx + 72, 10 + bob_y),   # PEAK OF THE ARCHED SPINE (Highest point Y=10)
+        (dx + 85, 14 + bob_y),   # Descending back arch
+        (dx + 95, 23 + bob_y),   # Upper rear back
+        (dx + 98, 36 + bob_y),   # Mid rear back
+        (dx + 95, 52 + bob_y),   # Lower back into hip
+        (dx + 86, 56 + bob_y),   # Hip junction
+        (dx + 76, 50 + bob_y),   # Spine junction
+        (dx + 58, 46 + bob_y),   # Upper waist
+        (dx + 40, 48 + bob_y),   # Under chest
+        (dx + 26, 48 + bob_y)
     ]
-    draw.polygon(waist_poly, fill=CLR_CORE_DARK, outline=CLR_OUTLINE)
+    draw.polygon(hunch_pts, fill=C_MID, outline=C_OUT)
 
-    # Pinched abdominal tendon highlight down the center (taut sinewy core)
-    draw.polygon([
-        (tx - 3, ty + 7),
-        (tx + 3, ty + 7),
-        (tx + 2, ty + 14),
-        (tx - 2, ty + 14)
-    ], fill=CLR_CORE_MID)
-    draw.line([(tx, ty + 7), (tx, ty + 14)], fill=CLR_CORE_LIGHT, width=1)
+    # Top rim light along arched spine
+    spine_rim = [(dx + 23, 37 + bob_y), (dx + 27, 27 + bob_y), (dx + 39, 17 + bob_y), (dx + 55, 11 + bob_y), (dx + 72, 11 + bob_y), (dx + 85, 15 + bob_y), (dx + 94, 24 + bob_y), (dx + 97, 36 + bob_y)]
+    draw.line(spine_rim, fill=C_HI, width=2)
+    spine_light = [(dx + 25, 39 + bob_y), (dx + 30, 29 + bob_y), (dx + 41, 19 + bob_y), (dx + 57, 13 + bob_y), (dx + 73, 13 + bob_y), (dx + 86, 17 + bob_y), (dx + 94, 26 + bob_y), (dx + 97, 38 + bob_y)]
+    draw.line(spine_light, fill=C_LIGHT, width=3)
 
-    # Pelvic groin cowl / arch (matching the curved pale pelvic arch from Image 2!)
-    pelvis_arch = [
-        (tx - 9, ty + 18),
-        (tx + 9, ty + 18),
-        (tx + 6, ty + 23),
-        (tx, ty + 24),
-        (tx - 6, ty + 23)
+    # Curved contour shadow on the rear dome
+    for y in range(24, 53):
+        cur_y = y + bob_y
+        x_r = 98 if y < 40 else (98 - (y - 40) // 3)
+        x_s = x_r - (10 if y < 42 else 14)
+        draw.line([(dx + x_s, cur_y), (dx + x_r - 2, cur_y)], fill=C_SHADOW, width=1)
+        draw.line([(dx + x_r - 5, cur_y), (dx + x_r - 2, cur_y)], fill=C_SHADOW_DEEP, width=1)
+
+    # Searchlight Cowl (Smooth faceless oval looking down at acute angle)
+    spotlight_rim = [
+        (dx + 23, 40 + bob_y), (dx + 32, 32 + bob_y), (dx + 38, 42 + bob_y), (dx + 28, 47 + bob_y)
     ]
-    draw.polygon(pelvis_arch, fill=CLR_CARAPACE_MID, outline=CLR_OUTLINE)
-    draw.line([(tx - 8, ty + 19), (tx, ty + 20), (tx + 8, ty + 19)], fill=CLR_CARAPACE_LIGHT, width=2)
-    draw.line([(tx - 6, ty + 19), (tx, ty + 20)], fill=CLR_CARAPACE_HI, width=1)
+    draw.polygon(spotlight_rim, fill=C_LIGHT, outline=C_OUT)
+    draw.line([(dx + 24, 40 + bob_y), (dx + 28, 47 + bob_y)], fill=C_HI, width=2)
+    draw.line([(dx + 29, 35 + bob_y), (dx + 35, 43 + bob_y)], fill=C_MID, width=2)
 
-def draw_gorilla_arm(draw, sx, sy, hx, hy, is_near, rear_up, slam, jumping):
-    """
-    Long, sleek gorilla arm:
-    - Extends from wide shoulder hood down to the floor
-    - Both hands rest firmly on ground_y = 95 (no gap!)
-    - Articulated claws/knuckles touching the floor
-    """
-    c_out = CLR_OUTLINE
-    c_hi = CLR_CARAPACE_HI if is_near else CLR_CARAPACE_LIGHT
-    c_light = CLR_CARAPACE_LIGHT if is_near else CLR_CARAPACE_MID
-    c_mid = CLR_CARAPACE_MID if is_near else CLR_CARAPACE_SHADOW
-    c_shadow = CLR_CARAPACE_SHADOW if is_near else CLR_CORE_DARK
-
-    # Elbow joint
-    if rear_up:
-        ex = (sx + hx) // 2 - (10 if is_near else -6)
-        ey = min(sy, hy) - 8
-    elif slam:
-        ex = (sx + hx) // 2 - 12
-        ey = (sy + hy) // 2 - 2
-    elif jumping:
-        ex = (sx + hx) // 2 - 12
-        ey = (sy + hy) // 2
-    else:
-        # Natural gorilla knuckle walk forward bend
-        ex = (sx + hx) // 2 - 8
-        ey = (sy + hy) // 2 - 4
-
-    # 1. Upper Arm (Sleek, muscular bicep)
-    u_thick = 14 if is_near else 10
+    # 4. NEAR HIND LEG
+    n_hock = (nl_foot[0] + 4, nl_foot[1] - 8)
     draw.polygon([
-        (sx - u_thick // 2, sy),
-        (sx + u_thick // 2, sy),
-        (ex + u_thick // 2 - 1, ey + 2),
-        (ex - u_thick // 2 + 1, ey - 2)
-    ], fill=c_mid, outline=c_out)
-    draw.line([(sx - u_thick // 2 + 1, sy + 1), (ex - u_thick // 2 + 2, ey - 1)], fill=c_light, width=2)
-    draw.line([(sx - u_thick // 2 + 2, sy + 1), (ex - u_thick // 2 + 3, ey - 1)], fill=c_hi, width=1)
+        (dx + nl_hip[0]-5, nl_hip[1] + bob_y),
+        (dx + nl_hip[0]+6, nl_hip[1] + bob_y),
+        (dx + nl_knee[0]+5, nl_knee[1] + bob_y),
+        (dx + nl_knee[0]-3, nl_knee[1]+4 + bob_y)
+    ], fill=C_MID, outline=C_OUT)
+    draw.line([(dx + nl_hip[0]-2, nl_hip[1]+1 + bob_y), (dx + nl_knee[0]+2, nl_knee[1]-1 + bob_y)], fill=C_LIGHT, width=2)
+    draw.line([(dx + nl_hip[0]-1, nl_hip[1]+1 + bob_y), (dx + nl_knee[0]+1, nl_knee[1]-1 + bob_y)], fill=C_HI, width=1)
 
-    # 2. Forearm (Tapers into heavy knuckle wrist)
-    f_thick = 16 if is_near else 12
-    f_wrist = 18 if is_near else 13
     draw.polygon([
-        (ex - f_thick // 2, ey - 2),
-        (ex + f_thick // 2, ey + 2),
-        (hx + f_wrist // 2, hy - 6),
-        (hx - f_wrist // 2, hy - 10)
-    ], fill=c_mid, outline=c_out)
-    draw.line([(ex - f_thick // 2 + 1, ey - 1), (hx - f_wrist // 2 + 1, hy - 9)], fill=c_light, width=2)
-    draw.line([(ex - f_thick // 2 + 2, ey - 1), (hx - f_wrist // 2 + 2, hy - 9)], fill=c_hi, width=1)
-    draw.line([(ex + f_thick // 2 - 1, ey + 2), (hx + f_wrist // 2 - 1, hy - 5)], fill=c_shadow, width=2)
+        (dx + nl_knee[0]+5, nl_knee[1] + bob_y),
+        (dx + nl_knee[0]-3, nl_knee[1]+4 + bob_y),
+        (dx + n_hock[0]-4, n_hock[1]),
+        (dx + n_hock[0]+4, n_hock[1])
+    ], fill=C_MID, outline=C_OUT)
+    draw.line([(dx + nl_knee[0]+1, nl_knee[1]+2 + bob_y), (dx + n_hock[0]-1, n_hock[1]-1)], fill=C_LIGHT, width=2)
 
-    # 3. Clawed Hand / Knuckles firmly resting on ground_y!
-    hand_w = 20 if is_near else 15
-    hand_h = 12 if is_near else 9
-
-    # Hand base
-    draw.rounded_rectangle([hx - hand_w // 2, hy - hand_h, hx + hand_w // 2, hy - 2], radius=2, fill=c_mid, outline=c_out)
-    draw.line([(hx - hand_w // 2 + 1, hy - hand_h + 1), (hx + hand_w // 2 - 1, hy - hand_h + 1)], fill=c_light, width=1)
-
-    # Articulated claws/knuckles touching floor exactly at hy!
-    num_claws = 4 if is_near else 3
-    spacing = hand_w // num_claws
-    for k in range(num_claws):
-        kx = hx - hand_w // 2 + 2 + k * spacing
-        ky_base = hy - 4
-        # Claw tip reaches ground level hy!
-        draw.polygon([
-            (kx - 1, ky_base),
-            (kx + 2, ky_base),
-            (kx + 1, hy),
-            (kx - 1, hy)
-        ], fill=c_light, outline=c_out)
-        draw.point((kx, hy), fill=CLR_CLAW)
-
-def draw_hind_leg(draw, hx, hy, ground_y, is_near, rear_up, jumping, step_fwd):
-    """
-    Digitigrade leg:
-    - Feet rest FIRMLY on ground_y = 95 (same baseline as knuckles, ZERO gap!)
-    """
-    c_out = CLR_OUTLINE
-    c_hi = CLR_CARAPACE_HI if is_near else CLR_CARAPACE_LIGHT
-    c_light = CLR_CARAPACE_LIGHT if is_near else CLR_CARAPACE_MID
-    c_mid = CLR_CARAPACE_MID if is_near else CLR_CARAPACE_SHADOW
-    c_shadow = CLR_CARAPACE_SHADOW if is_near else CLR_CORE_DARK
-
-    # Knee position
-    kx = hx - (10 if not step_fwd else 16)
-    ky = hy + 12
-
-    # Foot position: fx, fy
-    fx = hx + (2 if not step_fwd else -8)
-    # ZERO GAP TO FLOOR: fy = ground_y (exactly 95!)
-    fy = ground_y if not jumping else (hy + 26)
-
-    # 1. Thigh
     draw.polygon([
-        (hx - 5, hy - 2),
-        (hx + 7, hy - 1),
-        (kx + 6, ky + 2),
-        (kx - 4, ky + 1)
-    ], fill=c_mid, outline=c_out)
-    draw.line([(hx - 3, hy), (kx - 2, ky)], fill=c_light, width=2)
-    draw.line([(hx - 2, hy), (kx - 1, ky)], fill=c_hi, width=1)
-    draw.line([(hx + 5, hy), (kx + 4, ky)], fill=c_shadow, width=2)
+        (dx + n_hock[0]-4, n_hock[1]),
+        (dx + n_hock[0]+4, n_hock[1]),
+        (dx + nl_foot[0]+6, nl_foot[1]-4),
+        (dx + nl_foot[0]+6, nl_foot[1]),
+        (dx + nl_foot[0]-8, nl_foot[1])
+    ], fill=C_MID, outline=C_OUT)
+    draw.line([(dx + nl_foot[0]-7, nl_foot[1]-3), (dx + nl_foot[0]+5, nl_foot[1]-3)], fill=C_LIGHT, width=2)
+    draw.line([(dx + nl_foot[0]-6, nl_foot[1]-2), (dx + nl_foot[0]+4, nl_foot[1]-2)], fill=C_HI, width=1)
+    for c in range(3):
+        cx = dx + nl_foot[0] - 7 + c * 4
+        draw.polygon([(cx, nl_foot[1]-3), (cx-3, nl_foot[1]), (cx+1, nl_foot[1])], fill=C_CLAW_HI, outline=C_OUT)
 
-    # 2. Calf / Shin
+    # 5. FAR ARM (Descends from Far Shoulder at X=60, Y=36 down to floor)
+    # Far shoulder: rounded deltoid in 3/4 perspective
+    f_sh_r = 7
+    draw.ellipse([dx + fa_sx - f_sh_r, fa_sy - f_sh_r + bob_y, dx + fa_sx + f_sh_r, fa_sy + f_sh_r + bob_y], fill=C_MID, outline=C_OUT)
+    draw.arc([dx + fa_sx - f_sh_r + 1, fa_sy - f_sh_r + 1 + bob_y, dx + fa_sx + f_sh_r - 1, fa_sy + f_sh_r - 1 + bob_y], 160, 330, fill=C_LIGHT, width=2)
+
+    # Far upper arm
     draw.polygon([
-        (kx - 4, ky),
-        (kx + 5, ky + 1),
-        (fx + 5, fy - 4),
-        (fx - 4, fy - 4)
-    ], fill=c_mid, outline=c_out)
-    draw.line([(kx - 2, ky + 1), (fx - 2, fy - 4)], fill=c_light, width=2)
+        (dx + fa_sx - 4, fa_sy + 4 + bob_y),
+        (dx + fa_sx + 5, fa_sy + 4 + bob_y),
+        (dx + fa_ex + 5, fa_ey + bob_y),
+        (dx + fa_ex - 5, fa_ey + bob_y)
+    ], fill=C_SHADOW, outline=C_OUT)
+    draw.line([(dx + fa_sx - 2, fa_sy + 5 + bob_y), (dx + fa_ex - 3, fa_ey - 2 + bob_y)], fill=C_MID, width=2)
 
-    # 3. Clawed Foot resting solidly on ground_y (fy)!
-    foot_w = 14 if is_near else 10
-    draw.rectangle([fx - foot_w // 2, fy - 4, fx + foot_w // 2, fy], fill=c_mid, outline=c_out)
-    draw.line([(fx - foot_w // 2 + 1, fy - 3), (fx + foot_w // 2 - 1, fy - 3)], fill=c_light, width=1)
-    # Claws planted right on the ground line (fy)!
-    draw.polygon([(fx - foot_w // 2, fy - 2), (fx - foot_w // 2 - 3, fy), (fx - foot_w // 2, fy)], fill=CLR_CLAW, outline=c_out)
-    draw.polygon([(fx - 1, fy - 2), (fx - 4, fy), (fx - 1, fy)], fill=CLR_CLAW, outline=c_out)
+    # Far forearm
+    draw.polygon([
+        (dx + fa_ex - 5, fa_ey + bob_y),
+        (dx + fa_ex + 6, fa_ey + bob_y),
+        (dx + fa_kx + 6, fa_ky - 8),
+        (dx + fa_kx - 6, fa_ky - 8)
+    ], fill=C_SHADOW, outline=C_OUT)
+    draw.line([(dx + fa_ex - 3, fa_ey + 2 + bob_y), (dx + fa_kx - 4, fa_ky - 9)], fill=C_MID, width=2)
+    draw.line([(dx + fa_ex - 4, fa_ey + 8 + bob_y), (dx + fa_ex + 5, fa_ey + 8 + bob_y)], fill=C_MID, width=1)
 
-def create_sprite_sheet():
-    img = Image.new("RGBA", (FRAME_W * NUM_FRAMES, FRAME_H), CLR_TRANS)
-    draw = ImageDraw.Draw(img)
+    # Far knuckle fist & claws on floor (fa_ky)
+    draw.rectangle([dx + fa_kx - 6, fa_ky - 8, dx + fa_kx + 6, fa_ky - 4], fill=C_SHADOW, outline=C_OUT)
+    draw.line([(dx + fa_kx - 5, fa_ky - 7), (dx + fa_kx + 5, fa_ky - 7)], fill=C_MID, width=1)
+    draw.rectangle([dx + fa_kx - 7, fa_ky - 4, dx + fa_kx + 7, fa_ky - 1], fill=C_SHADOW, outline=C_OUT)
+    for c in range(3):
+        cx = dx + fa_kx - 5 + c * 4
+        draw.polygon([(cx, fa_ky - 2), (cx-2, fa_ky), (cx+1, fa_ky)], fill=C_CLAW_MID, outline=C_OUT)
 
+    # 6. NEAR ARM & SHOULDER (Foreground: deltoid at X=34, Y=38)
+    sh_x, sh_y, sh_r = na_sx, na_sy + bob_y, 9
+    draw.ellipse([dx + sh_x - sh_r, sh_y - sh_r, dx + sh_x + sh_r, sh_y + sh_r], fill=C_MID, outline=C_OUT)
+    draw.arc([dx + sh_x - sh_r + 1, sh_y - sh_r + 1, dx + sh_x + sh_r - 1, sh_y + sh_r - 1], 160, 330, fill=C_LIGHT, width=2)
+    draw.arc([dx + sh_x - sh_r + 2, sh_y - sh_r + 2, dx + sh_x + sh_r - 2, sh_y + sh_r - 2], 190, 300, fill=C_HI, width=2)
+    draw.arc([dx + sh_x - sh_r + 1, sh_y - sh_r + 1, dx + sh_x + sh_r - 1, sh_y + sh_r - 1], 20, 140, fill=C_SHADOW_DEEP, width=2)
+
+    # Upper Arm:
+    draw.polygon([
+        (dx + sh_x - 5, sh_y + 6),
+        (dx + sh_x + 6, sh_y + 6),
+        (dx + na_ex + 5, na_ey + bob_y),
+        (dx + na_ex - 6, na_ey + bob_y)
+    ], fill=C_MID, outline=C_OUT)
+    draw.line([(dx + sh_x - 3, sh_y + 8), (dx + na_ex - 3, na_ey - 2 + bob_y)], fill=C_LIGHT, width=2)
+    draw.line([(dx + sh_x - 2, sh_y + 8), (dx + na_ex - 2, na_ey - 2 + bob_y)], fill=C_HI, width=1)
+
+    # Forearm Gauntlet:
+    draw.polygon([
+        (dx + na_ex - 6, na_ey + bob_y),
+        (dx + na_ex + 6, na_ey + bob_y),
+        (dx + na_kx + 8, na_ky - 8),
+        (dx + na_kx - 8, na_ky - 8)
+    ], fill=C_MID, outline=C_OUT)
+    draw.line([(dx + na_ex - 4, na_ey + 2 + bob_y), (dx + na_kx - 6, na_ky - 9)], fill=C_LIGHT, width=2)
+    draw.line([(dx + na_ex - 3, na_ey + 2 + bob_y), (dx + na_kx - 5, na_ky - 9)], fill=C_HI, width=1)
+    # Gauntlet band ridges:
+    draw.line([(dx + na_ex - 4, na_ey + 8 + bob_y), (dx + na_ex + 5, na_ey + 8 + bob_y)], fill=C_LIGHT, width=2)
+    draw.line([(dx + na_ex - 4, na_ey + 9 + bob_y), (dx + na_ex + 5, na_ey + 9 + bob_y)], fill=C_OUT, width=1)
+    draw.line([(dx + na_kx - 7, na_ky - 12), (dx + na_kx + 7, na_ky - 12)], fill=C_LIGHT, width=2)
+    draw.line([(dx + na_kx - 7, na_ky - 11), (dx + na_kx + 7, na_ky - 11)], fill=C_OUT, width=1)
+
+    # Heavy Knuckle Fist planted on floor (na_ky)
+    draw.rectangle([dx + na_kx - 8, na_ky - 8, dx + na_kx + 8, na_ky - 4], fill=C_MID, outline=C_OUT)
+    draw.line([(dx + na_kx - 7, na_ky - 7), (dx + na_kx + 7, na_ky - 7)], fill=C_HI, width=1)
+    draw.rectangle([dx + na_kx - 9, na_ky - 4, dx + na_kx + 9, na_ky - 1], fill=C_MID, outline=C_OUT)
+    # 4 distinct claws touching na_ky exactly:
+    for i in range(4):
+        cx = dx + na_kx - 7 + i * 4
+        draw.polygon([(cx, na_ky - 2), (cx-3, na_ky), (cx+1, na_ky)], fill=C_CLAW_HI, outline=C_OUT)
+        draw.point((cx - 1, na_ky), fill=C_CLAW_DARK)
+
+def generate_full_sheet():
+    sheet = Image.new("RGBA", (FRAME_W * NUM_FRAMES, FRAME_H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(sheet)
     for f in range(NUM_FRAMES):
-        ox = f * FRAME_W
-        draw_angel_mutant_frame(draw, ox, f)
+        draw_boss_frame(draw, f * FRAME_W, f)
+    
+    sheet.save("assets/sprites/enemies/boss/boss_pale_mutant.png")
+    print("Saved assets/sprites/enemies/boss/boss_pale_mutant.png (1024x96)")
 
-    img.save("assets/sprites/enemies/boss/boss_pale_mutant.png")
-    print("Generated 8-frame angel-mutant boss_pale_mutant.png (1024x96)!")
-
-    # Generate editor preview icons from Frame 0
-    frame0 = img.crop((0, 0, FRAME_W, FRAME_H))
-
-    # 64x64 icon
-    icon64 = Image.new("RGBA", (64, 64), CLR_TRANS)
-    resized64 = frame0.resize((64, 48), Image.Resampling.LANCZOS)
-    icon64.paste(resized64, (0, 8))
+    # Editor preview icons:
+    f0 = sheet.crop((0, 0, FRAME_W, FRAME_H))
+    
+    # 64x64 preview icon
+    icon64 = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    icon_sub = f0.resize((64, 48), Image.Resampling.LANCZOS)
+    icon64.paste(icon_sub, (0, 8), icon_sub)
     icon64.save("assets/tiles/enemy_boss.png")
+    icon64.save("assets/tiles/tools/enemy_boss.png")
 
-    # 32x32 icons
-    icon32 = Image.new("RGBA", (32, 32), CLR_TRANS)
-    resized32 = frame0.resize((32, 24), Image.Resampling.LANCZOS)
-    icon32.paste(resized32, (0, 4))
-    icon32.save("assets/tiles/tools/enemy_boss.png")
+    # 32x32 preview icon
+    icon32 = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    icon_sub32 = f0.resize((32, 24), Image.Resampling.LANCZOS)
+    icon32.paste(icon_sub32, (0, 4), icon_sub32)
     icon32.save("assets/tiles/enemies/enemy_boss.png")
-    print("Generated editor icons!")
+    print("Updated editor preview icons.")
 
 if __name__ == "__main__":
-    create_sprite_sheet()
+    generate_full_sheet()
