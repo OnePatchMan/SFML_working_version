@@ -181,8 +181,8 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
         }
 
         float scale = (eType == 5) ? 3.3f : ((eType == 1) ? 1.5f : 1.0f);
-        float halfW = (eType == 5) ? 120.0f : (24.0f * scale);
-        float halfH = (eType == 5) ? 92.0f : (21.0f * scale);
+        float halfW = (eType == 5) ? 120.0f : (16.0f * scale);
+        float halfH = (eType == 5) ? 92.0f : (28.0f * scale);
 
         float posX = eSpawn.x;
         float posY = eSpawn.y;
@@ -232,60 +232,98 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             badgeColor = sf::Color(210, 215, 225);
         }
 
-        static sf::Texture s_editorBossTex;
-        static bool s_editorBossLoaded = false;
-        static bool s_editorBossAttempted = false;
-        if (!s_editorBossAttempted) {
-            s_editorBossAttempted = true;
-            s_editorBossLoaded = s_editorBossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+        static sf::Texture s_edBossTex;
+        static sf::Texture s_edNormalTex;
+        static sf::Texture s_edTankTex;
+        static sf::Texture s_edDuelistAggroTex;
+        static sf::Texture s_edDuelistPassTex;
+        static sf::Texture s_edDummyTex;
+        static bool s_edTexAttempted = false;
+        if (!s_edTexAttempted) {
+            s_edTexAttempted = true;
+            s_edBossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+            s_edNormalTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/normal/normal_mutant.png"));
+            s_edTankTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/tank/tank_mutant.png"));
+            s_edDuelistAggroTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png"));
+            s_edDuelistPassTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_passive/duelist_passive.png"));
+            s_edDummyTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/dummy/dummy_mutant.png"));
         }
 
-        if (eType == 5 && s_editorBossLoaded) {
-            sf::Sprite bSp(s_editorBossTex);
-            bSp.setTextureRect(sf::IntRect({0, 0}, {128, 96}));
-            bSp.setOrigin({64.0f, 48.0f});
-            bSp.setScale({(halfW * 2.0f) / 128.0f, (halfH * 2.0f) / 96.0f});
-            bSp.setPosition({posX, posY});
-            window.draw(bSp);
+        sf::Texture* pEdTex = nullptr;
+        int fw = 48, fh = 64;
+        float origX = 24.0f, origY = 33.0f;
+        float refW = 32.0f, refH = 56.0f;
+
+        if (eType == 5) {
+            pEdTex = &s_edBossTex;
+            fw = 128; fh = 96;
+            origX = 64.0f; origY = 48.0f;
+            refW = 128.0f; refH = 96.0f;
+        } else if (eType == 1) {
+            pEdTex = &s_edTankTex;
+            fw = 72; fh = 96;
+            origX = 36.0f; origY = 51.0f;
+            refW = 48.0f; refH = 84.0f;
+        } else if (eType == 2) {
+            pEdTex = &s_edDuelistAggroTex;
+        } else if (eType == 3) {
+            pEdTex = &s_edDuelistPassTex;
+        } else if (eType == 4) {
+            pEdTex = &s_edDummyTex;
+        } else {
+            pEdTex = &s_edNormalTex;
+        }
+
+        bool drewEditorSprite = false;
+        if (pEdTex && pEdTex->getSize().x > 0) {
+            sf::Sprite eSp(*pEdTex);
+            eSp.setTextureRect(sf::IntRect({0, 0}, {fw, fh}));
+            eSp.setOrigin({origX, origY});
+            eSp.setScale({(halfW * 2.0f) / refW, (halfH * 2.0f) / refH});
+            eSp.setPosition({posX, posY});
+            window.draw(eSp);
+            drewEditorSprite = true;
         } else {
             body.setFillColor(baseColor);
             window.draw(body);
         }
 
-        // 3. Мишень / визор на теле
-        if (eType == 4) {
-            sf::CircleShape ringOuter(10.0f * scale);
-            ringOuter.setOrigin({10.0f * scale, 10.0f * scale});
-            ringOuter.setPosition({posX, posY});
-            ringOuter.setFillColor(sf::Color(185, 45, 40));
-            ringOuter.setOutlineThickness(1.5f);
-            ringOuter.setOutlineColor(sf::Color(255, 255, 255, 220));
-            window.draw(ringOuter);
+        // 3. Мишень / визор на теле (рисуется только при отсутствии текстуры спрайта)
+        if (!drewEditorSprite) {
+            if (eType == 4) {
+                sf::CircleShape ringOuter(10.0f * scale);
+                ringOuter.setOrigin({10.0f * scale, 10.0f * scale});
+                ringOuter.setPosition({posX, posY});
+                ringOuter.setFillColor(sf::Color(185, 45, 40));
+                ringOuter.setOutlineThickness(1.5f);
+                ringOuter.setOutlineColor(sf::Color(255, 255, 255, 220));
+                window.draw(ringOuter);
 
-            sf::CircleShape ringMid(5.0f * scale);
-            ringMid.setOrigin({5.0f * scale, 5.0f * scale});
-            ringMid.setPosition({posX, posY});
-            ringMid.setFillColor(sf::Color(255, 255, 255, 240));
-            window.draw(ringMid);
+                sf::CircleShape ringMid(5.0f * scale);
+                ringMid.setOrigin({5.0f * scale, 5.0f * scale});
+                ringMid.setPosition({posX, posY});
+                ringMid.setFillColor(sf::Color(255, 255, 255, 240));
+                window.draw(ringMid);
 
-            sf::CircleShape ringDot(2.0f * scale);
-            ringDot.setOrigin({2.0f * scale, 2.0f * scale});
-            ringDot.setPosition({posX, posY});
-            ringDot.setFillColor(sf::Color(185, 45, 40));
-            window.draw(ringDot);
-        } else if (eType != 5) {
-            sf::RectangleShape target({14.0f * scale, 14.0f * scale});
-            target.setOrigin({7.0f * scale, 7.0f * scale});
-            target.setPosition({posX, posY});
-            target.setFillColor(sf::Color(40, 40, 50, 160));
-            window.draw(target);
+                sf::CircleShape ringDot(2.0f * scale);
+                ringDot.setOrigin({2.0f * scale, 2.0f * scale});
+                ringDot.setPosition({posX, posY});
+                ringDot.setFillColor(sf::Color(185, 45, 40));
+                window.draw(ringDot);
+            } else if (eType != 5) {
+                sf::RectangleShape target({14.0f * scale, 14.0f * scale});
+                target.setOrigin({7.0f * scale, 7.0f * scale});
+                target.setPosition({posX, posY});
+                target.setFillColor(sf::Color(40, 40, 50, 160));
+                window.draw(target);
 
-            sf::RectangleShape eye({4.0f * scale, 4.0f * scale});
-            eye.setPosition({posX + 3.0f * scale, posY - 14.0f * scale});
-            sf::Color eyeColor = (eType == 1) ? sf::Color(255, 50, 60) :
-                                 (eType == 2) ? sf::Color(255, 225, 0) : sf::Color(60, 220, 255);
-            eye.setFillColor(eyeColor);
-            window.draw(eye);
+                sf::RectangleShape eye({4.0f * scale, 4.0f * scale});
+                eye.setPosition({posX + 3.0f * scale, posY - 14.0f * scale});
+                sf::Color eyeColor = (eType == 1) ? sf::Color(255, 50, 60) :
+                                     (eType == 2) ? sf::Color(255, 225, 0) : sf::Color(60, 220, 255);
+                eye.setFillColor(eyeColor);
+                window.draw(eye);
+            }
         }
 
         // 4. Текстовый бейдж архетипа над головой с подложкой

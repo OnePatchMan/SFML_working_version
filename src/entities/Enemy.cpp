@@ -790,6 +790,7 @@ void Enemy::stagger(float duration) {
 }
 
 void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking, bool playerIsInvulnerable) {
+    bossAnimTimer += dt;
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             deathFadeTimer -= dt;
@@ -2799,27 +2800,89 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     body.setOutlineThickness(2.0f);
     body.setOutlineColor(sf::Color(25, 25, 30, 230));
 
+    // Текстуры спрайтов всех мутантов
+    static sf::Texture s_bossTex;
+    static sf::Texture s_normalTex;
+    static sf::Texture s_tankTex;
+    static sf::Texture s_duelistAggroTex;
+    static sf::Texture s_duelistPassTex;
+    static sf::Texture s_dummyTex;
+    static sf::Texture s_lurkerTex;
+    static bool s_texAttempted = false;
+    if (!s_texAttempted) {
+        s_texAttempted = true;
+        s_bossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+        s_normalTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/normal/normal_mutant.png"));
+        s_tankTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/tank/tank_mutant.png"));
+        s_duelistAggroTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png"));
+        s_duelistPassTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_passive/duelist_passive.png"));
+        s_dummyTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/dummy/dummy_mutant.png"));
+        s_lurkerTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/lurker/lurker_mutant.png"));
+    }
+
+    auto getMutantSpec = [&](sf::Texture*& outTex, int& outFw, int& outFh, float& outOx, float& outOy, float& outRw, float& outRh, int& outDeadF) {
+        if (enemyType == EnemyType::BOSS_1) {
+            outTex = &s_bossTex;
+            outFw = 128; outFh = 96;
+            outOx = 64.0f; outOy = 48.0f;
+            outRw = 128.0f; outRh = 96.0f;
+            outDeadF = 7;
+        } else if (enemyType == EnemyType::TANK) {
+            outTex = &s_tankTex;
+            outFw = 72; outFh = 96;
+            outOx = 36.0f; outOy = 51.0f;
+            outRw = 48.0f; outRh = 84.0f;
+            outDeadF = 5;
+        } else if (enemyType == EnemyType::DUELIST) {
+            outTex = &s_duelistAggroTex;
+            outFw = 48; outFh = 64;
+            outOx = 24.0f; outOy = 33.0f;
+            outRw = 32.0f; outRh = 56.0f;
+            outDeadF = 5;
+        } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
+            outTex = &s_duelistPassTex;
+            outFw = 48; outFh = 64;
+            outOx = 24.0f; outOy = 33.0f;
+            outRw = 32.0f; outRh = 56.0f;
+            outDeadF = 5;
+        } else if (enemyType == EnemyType::DUMMY) {
+            outTex = &s_dummyTex;
+            outFw = 48; outFh = 64;
+            outOx = 24.0f; outOy = 33.0f;
+            outRw = 32.0f; outRh = 56.0f;
+            outDeadF = 5;
+        } else if (enemyId == "lurker" || enemyId == "burrow") {
+            outTex = &s_lurkerTex;
+            outFw = 48; outFh = 64;
+            outOx = 24.0f; outOy = 33.0f;
+            outRw = 32.0f; outRh = 56.0f;
+            outDeadF = 5;
+        } else {
+            outTex = &s_normalTex;
+            outFw = 48; outFh = 64;
+            outOx = 24.0f; outOy = 33.0f;
+            outRw = 32.0f; outRh = 56.0f;
+            outDeadF = 5;
+        }
+    };
+
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             float alpha = std::clamp((deathFadeTimer / 0.6f) * 160.0f, 0.0f, 255.0f);
-            if (enemyType == EnemyType::BOSS_1) {
-                static sf::Texture s_bossDeathTex;
-                static bool s_bossDeathLoaded = false;
-                static bool s_bossDeathAttempted = false;
-                if (!s_bossDeathAttempted) {
-                    s_bossDeathAttempted = true;
-                    s_bossDeathLoaded = s_bossDeathTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
-                }
-                if (s_bossDeathLoaded) {
-                    sf::Sprite bSp(s_bossDeathTex);
-                    bSp.setTextureRect(sf::IntRect({7 * 128, 0}, {128, 96}));
-                    bSp.setOrigin({64.0f, 48.0f});
-                    float dirX = isFacingLeft ? 1.0f : -1.0f;
-                    bSp.setScale({((halfW * 2.0f) / 128.0f) * dirX, (halfH * 2.0f) / 96.0f});
-                    bSp.setPosition(position);
-                    bSp.setColor(sf::Color(100, 100, 115, static_cast<std::uint8_t>(alpha)));
-                    window.draw(bSp);
-                }
+            sf::Texture* dTex = nullptr;
+            int dfw = 48, dfh = 64, dFrame = 5;
+            float dox = 24.0f, doy = 33.0f, drw = 32.0f, drh = 56.0f;
+            getMutantSpec(dTex, dfw, dfh, dox, doy, drw, drh, dFrame);
+
+            if (dTex && dTex->getSize().x > 0) {
+                sf::Sprite dSp(*dTex);
+                dSp.setTextureRect(sf::IntRect({dFrame * dfw, 0}, {dfw, dfh}));
+                dSp.setOrigin({dox, doy});
+                float dirX = isFacingLeft ? 1.0f : -1.0f;
+                dSp.setScale({((halfW * 2.0f) / drw) * dirX, (halfH * 2.0f) / drh});
+                dSp.setPosition(position);
+                dSp.setColor(sf::Color(100, 100, 115, static_cast<std::uint8_t>(alpha)));
+                window.draw(dSp);
             } else {
                 body.setFillColor(sf::Color(100, 100, 115, static_cast<std::uint8_t>(alpha)));
                 body.setOutlineColor(sf::Color(40, 40, 45, static_cast<std::uint8_t>(alpha)));
@@ -2929,10 +2992,77 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         baseColor = isSmartAI ? sf::Color(110, 45, 150) : sf::Color(220, 75, 55);
     }
 
+    sf::Texture* mTex = nullptr;
+    int mfw = 48, mfh = 64, mdead = 5;
+    float mox = 24.0f, moy = 33.0f, mrw = 32.0f, mrh = 56.0f;
+    getMutantSpec(mTex, mfw, mfh, mox, moy, mrw, mrh, mdead);
+
+    int frameIdx = 0;
+    if (enemyType == EnemyType::BOSS_1) {
+        if (hurtTimer > 0.0f || isBossWallStunned()) {
+            frameIdx = 7;
+        } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
+            frameIdx = 0; // Присед перед прыжком
+        } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_RISE || 
+                   bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
+            frameIdx = 6; // В воздухе
+        } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_STRIKE || 
+                   bossSpecialState == Boss1SpecialState::EARTHQUAKE_SLAM ||
+                   bossSpecialState == Boss1SpecialState::BULL_CHARGE_RUN) {
+            frameIdx = 5; // Удар по полу / разбег
+        } else if (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH ||
+                   bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH ||
+                   attackState == EnemyAttackState::WINDUP) {
+            frameIdx = 4; // Замах / стойка перед комбо-ударом
+        } else if (attackState == EnemyAttackState::ATTACKING) {
+            frameIdx = 5; // Удар кулаками
+        } else if (std::abs(velocity.x) > 10.0f) {
+            int step = static_cast<int>(std::abs(position.x) / 32.0f) % 2;
+            frameIdx = 2 + step; // Ходьба с опорой на руки
+        } else {
+            int breath = static_cast<int>(bossAnimTimer * 2.2f) % 2;
+            frameIdx = breath; // Дыхание на месте
+        }
+    } else {
+        if (hurtTimer > 0.0f || isGuardBroken() || isBlockStunned()) {
+            frameIdx = 5;
+        } else if (enemyType == EnemyType::DUMMY) {
+            if (blockType == BlockType::HIGH) frameIdx = 2;
+            else if (blockType == BlockType::LOW) frameIdx = 3;
+            else if (hurtTimer > 0.0f) frameIdx = 4;
+            else {
+                int breath = static_cast<int>(bossAnimTimer * 2.0f) % 2;
+                frameIdx = breath;
+            }
+        } else if (attackState == EnemyAttackState::WINDUP || isCounterStanceActive()) {
+            frameIdx = 3;
+        } else if (attackState == EnemyAttackState::ATTACKING) {
+            frameIdx = 4;
+        } else if (isBlocking) {
+            frameIdx = 3;
+        } else if (std::abs(velocity.x) > 10.0f) {
+            int step = static_cast<int>(std::abs(position.x) / 16.0f) % 2;
+            frameIdx = 1 + step;
+        } else {
+            frameIdx = 0;
+        }
+    }
+
     if (isInvisible()) {
-        body.setFillColor(sf::Color(45, 185, 245, 30));
-        body.setOutlineColor(sf::Color(70, 220, 255, 60));
-        window.draw(body);
+        if (mTex && mTex->getSize().x > 0) {
+            sf::Sprite invSp(*mTex);
+            invSp.setTextureRect(sf::IntRect({frameIdx * mfw, 0}, {mfw, mfh}));
+            invSp.setOrigin({mox, moy});
+            float dirX = isFacingLeft ? 1.0f : -1.0f;
+            invSp.setScale({((halfW * 2.0f) / mrw) * dirX, (halfH * 2.0f) / mrh});
+            invSp.setPosition(position);
+            invSp.setColor(sf::Color(45, 185, 245, 30));
+            window.draw(invSp);
+        } else {
+            body.setFillColor(sf::Color(45, 185, 245, 30));
+            body.setOutlineColor(sf::Color(70, 220, 255, 60));
+            window.draw(body);
+        }
         return; // Полная невидимость: скрываем полоску ХП и маркеры!
     }
 
@@ -2960,89 +3090,46 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         body.setFillColor(dCol);
     }
 
-    if (enemyType == EnemyType::BOSS_1) {
-        // Отрисовка уникальной спрайтовой модели Бледного Мутанта (Горилла без шеи и головы)
-        static sf::Texture s_bossTex;
-        static bool s_bossLoaded = false;
-        static bool s_bossAttempted = false;
-        if (!s_bossAttempted) {
-            s_bossAttempted = true;
-            s_bossLoaded = s_bossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
-        }
+    bool drewMutantSprite = false;
+    if (mTex && mTex->getSize().x > 0) {
+        // Овальная тень под ногами мутанта
+        sf::CircleShape shadow(halfW * 0.72f);
+        shadow.setScale({1.0f, 0.24f});
+        shadow.setOrigin({shadow.getRadius(), shadow.getRadius()});
+        shadow.setPosition({position.x, position.y + halfH - 2.0f});
+        shadow.setFillColor(sf::Color(10, 12, 18, 125));
+        window.draw(shadow);
 
-        if (s_bossLoaded) {
-            // Тень под ногами
-            sf::CircleShape shadow(halfW * 0.72f);
-            shadow.setScale({1.0f, 0.22f});
-            shadow.setOrigin({shadow.getRadius(), shadow.getRadius()});
-            shadow.setPosition({position.x, position.y + halfH - 2.0f});
-            shadow.setFillColor(sf::Color(10, 12, 18, 125));
-            window.draw(shadow);
+        sf::Sprite mSprite(*mTex);
+        mSprite.setTextureRect(sf::IntRect({frameIdx * mfw, 0}, {mfw, mfh}));
+        mSprite.setOrigin({mox, moy});
 
-            // Определение активного кадра анимации
-            // 0: Idle low
-            // 1: Idle breath high
-            // 2: Knuckle walk 1
-            // 3: Knuckle walk 2
-            // 4: Attack windup (rearing back on hind legs)
-            // 5: Attack slam (knuckle crash)
-            // 6: Jump slam (coiled mid-air / descending strike)
-            // 7: Hurt / stunned
-            int frameIdx = 0;
-            if (hurtTimer > 0.0f || isBossWallStunned()) {
-                frameIdx = 7;
-            } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
-                frameIdx = 0; // Присед перед прыжком
-            } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_RISE || 
-                       bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
-                frameIdx = 6; // В воздухе
-            } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_STRIKE || 
-                       bossSpecialState == Boss1SpecialState::EARTHQUAKE_SLAM ||
-                       bossSpecialState == Boss1SpecialState::BULL_CHARGE_RUN) {
-                frameIdx = 5; // Удар по полу / разбег
-            } else if (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH ||
-                       bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH ||
-                       attackState == EnemyAttackState::WINDUP) {
-                frameIdx = 4; // Замах / стойка перед комбо-ударом
-            } else if (attackState == EnemyAttackState::ATTACKING) {
-                frameIdx = 5; // Удар кулаками
-            } else if (std::abs(velocity.x) > 10.0f) {
-                int step = static_cast<int>(std::abs(position.x) / 32.0f) % 2;
-                frameIdx = 2 + step; // Ходьба с опорой на руки
-            } else {
-                int breath = static_cast<int>(bossAnimTimer * 2.2f) % 2;
-                frameIdx = breath; // Дыхание на месте
-            }
+        float dirX = isFacingLeft ? 1.0f : -1.0f;
+        float scaleY = (halfH * 2.0f) / mrh;
+        float scaleX = ((halfW * 2.0f) / mrw) * dirX;
 
-            sf::Sprite bossSprite(s_bossTex);
-            bossSprite.setTextureRect(sf::IntRect({frameIdx * 128, 0}, {128, 96}));
-            bossSprite.setOrigin({64.0f, 48.0f});
-
-            // Направление взгляда (по умолчанию спрайт смотрит влево)
-            float dirX = isFacingLeft ? 1.0f : -1.0f;
-            float scaleY = (halfH * 2.0f) / 96.0f;
-            float scaleX = ((halfW * 2.0f) / 128.0f) * dirX;
-            if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
-                // Приседание: сжатие по высоте и расширение вширь
-                scaleX *= 1.15f;
-                scaleY *= 0.85f;
-                bossSprite.setPosition({position.x, position.y + halfH * 0.15f});
-            } else {
-                bossSprite.setPosition(position);
-            }
-            bossSprite.setScale({scaleX, scaleY});
-
-            if (hurtTimer > 0.0f) {
-                bossSprite.setColor(sf::Color(255, 140, 155));
-            } else if (isBossWallStunned()) {
-                bossSprite.setColor(sf::Color(255, 230, 130));
-            } else {
-                bossSprite.setColor(sf::Color::White);
-            }
-            window.draw(bossSprite);
+        if (enemyType == EnemyType::BOSS_1 && bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
+            scaleX *= 1.15f;
+            scaleY *= 0.85f;
+            mSprite.setPosition({position.x, position.y + halfH * 0.15f});
         } else {
-            window.draw(body);
+            mSprite.setPosition(position);
         }
+        mSprite.setScale({scaleX, scaleY});
+
+        if (isDodging) {
+            mSprite.setColor(sf::Color(255, 255, 255, 110));
+        } else if (isCounterStanceActive()) {
+            mSprite.setColor(sf::Color(0, 240, 255));
+        } else if (hurtTimer > 0.0f) {
+            mSprite.setColor(sf::Color(255, 130, 145));
+        } else if (enemyType == EnemyType::BOSS_1 && isBossWallStunned()) {
+            mSprite.setColor(sf::Color(255, 230, 130));
+        } else {
+            mSprite.setColor(sf::Color::White);
+        }
+        window.draw(mSprite);
+        drewMutantSprite = true;
     } else {
         window.draw(body);
     }
@@ -3093,50 +3180,52 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         }
     }
 
-    // Мишень / визор на теле
-    if (enemyType == EnemyType::DUMMY) {
-        // Мишень на теле манекена: круглая контрастная мишень с кольцами
-        sf::CircleShape targetRing(10.0f * scale);
-        targetRing.setOrigin({10.0f * scale, 10.0f * scale});
-        targetRing.setPosition(position);
-        targetRing.setFillColor(sf::Color(185, 45, 40));
-        targetRing.setOutlineThickness(1.5f);
-        targetRing.setOutlineColor(sf::Color(255, 255, 255, 220));
-        window.draw(targetRing);
+    // Мишень / визор на теле (рисуется только как fallback при отсутствии текстур спрайта)
+    if (!drewMutantSprite) {
+        if (enemyType == EnemyType::DUMMY) {
+            // Мишень на теле манекена: круглая контрастная мишень с кольцами
+            sf::CircleShape targetRing(10.0f * scale);
+            targetRing.setOrigin({10.0f * scale, 10.0f * scale});
+            targetRing.setPosition(position);
+            targetRing.setFillColor(sf::Color(185, 45, 40));
+            targetRing.setOutlineThickness(1.5f);
+            targetRing.setOutlineColor(sf::Color(255, 255, 255, 220));
+            window.draw(targetRing);
 
-        sf::CircleShape targetInner(5.0f * scale);
-        targetInner.setOrigin({5.0f * scale, 5.0f * scale});
-        targetInner.setPosition(position);
-        targetInner.setFillColor(sf::Color(255, 255, 255, 240));
-        window.draw(targetInner);
+            sf::CircleShape targetInner(5.0f * scale);
+            targetInner.setOrigin({5.0f * scale, 5.0f * scale});
+            targetInner.setPosition(position);
+            targetInner.setFillColor(sf::Color(255, 255, 255, 240));
+            window.draw(targetInner);
 
-        sf::CircleShape targetDot(2.0f * scale);
-        targetDot.setOrigin({2.0f * scale, 2.0f * scale});
-        targetDot.setPosition(position);
-        targetDot.setFillColor(sf::Color(185, 45, 40));
-        window.draw(targetDot);
-    } else if (enemyType != EnemyType::BOSS_1) {
-        // Внутренний квадрат-мишень на теле противника
-        sf::RectangleShape target({14.0f * scale, 14.0f * scale});
-        target.setOrigin({7.0f * scale, 7.0f * scale});
-        target.setPosition(position);
-        target.setFillColor(sf::Color(40, 40, 50, 160));
-        window.draw(target);
+            sf::CircleShape targetDot(2.0f * scale);
+            targetDot.setOrigin({2.0f * scale, 2.0f * scale});
+            targetDot.setPosition(position);
+            targetDot.setFillColor(sf::Color(185, 45, 40));
+            window.draw(targetDot);
+        } else if (enemyType != EnemyType::BOSS_1) {
+            // Внутренний квадрат-мишень на теле противника
+            sf::RectangleShape target({14.0f * scale, 14.0f * scale});
+            target.setOrigin({7.0f * scale, 7.0f * scale});
+            target.setPosition(position);
+            target.setFillColor(sf::Color(40, 40, 50, 160));
+            window.draw(target);
 
-        // Простой глаз/визор с динамическим цветом в зависимости от восприятия (патруль/тревога/погоня)
-        float eyeX = isFacingLeft ? (position.x - 7.0f * scale) : (position.x + 3.0f * scale);
-        sf::RectangleShape eye({4.0f * scale, 4.0f * scale});
-        eye.setPosition({eyeX, position.y - 16.0f * scale});
-        sf::Color eyeColor = sf::Color(255, 245, 220);
-        if (behaviorState == AIBehaviorState::PATROL) {
-            eyeColor = sf::Color(60, 220, 255); // Спокойный лазурный визор
-        } else if (behaviorState == AIBehaviorState::ALERT) {
-            eyeColor = sf::Color(255, 225, 0);   // Золотой визор тревоги
-        } else if (behaviorState == AIBehaviorState::CHASE || behaviorState == AIBehaviorState::COMBAT) {
-            eyeColor = sf::Color(255, 50, 60);   // Алый визор атаки
+            // Простой глаз/визор с динамическим цветом в зависимости от восприятия (патруль/тревога/погоня)
+            float eyeX = isFacingLeft ? (position.x - 7.0f * scale) : (position.x + 3.0f * scale);
+            sf::RectangleShape eye({4.0f * scale, 4.0f * scale});
+            eye.setPosition({eyeX, position.y - 16.0f * scale});
+            sf::Color eyeColor = sf::Color(255, 245, 220);
+            if (behaviorState == AIBehaviorState::PATROL) {
+                eyeColor = sf::Color(60, 220, 255); // Спокойный лазурный визор
+            } else if (behaviorState == AIBehaviorState::ALERT) {
+                eyeColor = sf::Color(255, 225, 0);   // Золотой визор тревоги
+            } else if (behaviorState == AIBehaviorState::CHASE || behaviorState == AIBehaviorState::COMBAT) {
+                eyeColor = sf::Color(255, 50, 60);   // Алый визор атаки
+            }
+            eye.setFillColor(eyeColor);
+            window.draw(eye);
         }
-        eye.setFillColor(eyeColor);
-        window.draw(eye);
     }
 
     // Отрисовка взмаха атаки (для обычных мобов и дуэлянтов; у Босса 1 собственные кинематографичные процедурные VFX)
@@ -3944,7 +4033,6 @@ void Enemy::triggerBossJumpSlamLanding(const Arena& arena) {
 }
 
 void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking) {
-    bossAnimTimer += dt;
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             deathFadeTimer -= dt;
