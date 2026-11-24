@@ -3671,6 +3671,18 @@ void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos, con
             float hby = position.y - halfH - 65.0f;
             attackHitbox = sf::FloatRect({hbx, hby}, {totalW, hbh});
             SoundManager::get().playAttack(step.sfx, "", false, 90.0f);
+
+            // Спец-эффекты Pixelfx: взмахи оружия, круговые вихри и сокрушительные рубящие удары
+            sf::Vector2f slashPos = {isFacingLeft ? (position.x - halfW - 20.0f) : (position.x + halfW + 20.0f), position.y};
+            if (bossNextComboIndex == 4) { // СМЕРЧ УДАРОВ
+                VfxSystem::get().spawnSpinSlash(slashPos, dir * 1.35f, 1.35f);
+            } else if (step.damage >= 24.0f) { // Тяжелый финишер
+                VfxSystem::get().spawnHeavyCleave(slashPos, dir * 1.4f, 1.4f);
+            } else if (bossCurrentComboHit % 2 == 1) { // Чередование ударов
+                VfxSystem::get().spawnHammerSmash(slashPos, dir * 1.25f, 1.25f);
+            } else {
+                VfxSystem::get().spawnSwordSlash(slashPos, dir * 1.35f, 1.35f);
+            }
         }
     } else if (attackState == EnemyAttackState::ATTACKING) {
         attackStateTimer -= dt;
@@ -3800,6 +3812,10 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
                     GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
                     bossDustWaves.push_back(waveL);
                     bossDustWaves.push_back(waveR);
+
+                    // Спец-эффекты Pixelfx: мощнейший эпицентр приземления с разлетом камней и ударной волной
+                    VfxSystem::get().spawnGroundSlam({position.x, groundY}, 1.5f, 1.5f);
+                    VfxSystem::get().spawnHeavyLanding({position.x, groundY}, 1.6f, 1.6f);
 
                     SoundManager::get().play("wall_slam", 95.0f);
                     if (CombatSystem::getActive()) {
@@ -3941,6 +3957,14 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         // Перемещение с проверкой коллизии с блоками
         bool moved = tryBossMoveX(velocity.x * dt);
 
+        // Пылевой след за ногами босса во время стремительного бега/разгона
+        bossChargeTrailTimer -= dt;
+        if (bossChargeTrailTimer <= 0.0f) {
+            bossChargeTrailTimer = 0.12f;
+            float trailX = position.x - dir * halfW * 0.9f;
+            VfxSystem::get().spawnHeavyLanding({trailX, position.y + halfH}, dir * 0.85f, 0.85f);
+        }
+
         bossSpecialTimer -= dt;
         if (!moved || bossSpecialTimer <= 0.0f) {
             // ВРЕЗАНИЕ В СТЕНУ ИЛИ БЛОК! Стан на 2.8 секунды!
@@ -3955,6 +3979,11 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             if (CombatSystem::getActive()) {
                 CombatSystem::getActive()->triggerShake(0.35f, 9.0f);
             }
+
+            // Спец-эффекты Pixelfx: взрыв каменных обломков и пыли при сокрушении о стену
+            float impactX = position.x + dir * halfW;
+            VfxSystem::get().spawnDirtExplosion({impactX, position.y + halfH * 0.1f}, dir * 1.4f, 1.4f);
+            VfxSystem::get().spawnHeavyLanding({position.x, position.y + halfH}, 1.4f, 1.4f);
         }
         return;
     } else if (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH) {
@@ -3970,6 +3999,12 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
             bossDustWaves.push_back(waveL);
             bossDustWaves.push_back(waveR);
+
+            // Спец-эффекты Pixelfx: сокрушительный удар в землю, разлом и земляные шипы
+            VfxSystem::get().spawnGroundSlam({position.x, groundY}, 1.35f, 1.35f);
+            VfxSystem::get().spawnQuake({position.x, groundY}, 1.3f, 1.3f);
+            VfxSystem::get().spawnEarthSpike({position.x - 75.0f, groundY}, -1.15f, 1.15f);
+            VfxSystem::get().spawnEarthSpike({position.x + 75.0f, groundY}, 1.15f, 1.15f);
 
             SoundManager::get().playAttack("heavy", "", false, 95.0f);
             if (CombatSystem::getActive()) {
@@ -4030,6 +4065,11 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             attackState = EnemyAttackState::ATTACKING;
             attackHasHit = false;
             currentComboName = "БОСС 1: СОКРУШИТЕЛЬНЫЙ УДАР С ВОЗДУХА ПО ПОЛУ!";
+
+            // Спец-эффекты Pixelfx: удар из воздуха вниз (молот и сокрушительный росчерк клинка)
+            float curDirX = isFacingLeft ? -1.0f : 1.0f;
+            VfxSystem::get().spawnHammerSmash({position.x + curDirX * 25.0f, position.y + halfH * 0.4f}, curDirX * 1.5f, 1.5f);
+            VfxSystem::get().spawnHeavyCleave({position.x + curDirX * 35.0f, position.y + halfH * 0.2f}, curDirX * 1.5f, 1.5f);
 
             SoundManager::get().playAttack("heavy", "", true, 95.0f);
             if (CombatSystem::getActive()) {

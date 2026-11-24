@@ -835,6 +835,7 @@ void CombatSystem::update(float dt, Player& player, std::vector<Enemy>& enemies)
 }
 
 void CombatSystem::updateInternal(float dt, Player& player, const std::vector<Enemy*>& enemiesList) {
+    VfxSystem::get().update(dt);
     bool isGroundedNow = player.isOnGround();
     if (_wasGroundedLastFrame && !isGroundedNow && player.velocity.y < -120.0f) {
         registerJump();
@@ -1210,6 +1211,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                     bool targetWasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
                     enemy.takeDamage(scaledDamage, _knockX, _knockY, scaledStun, pAttackHitLevel, _currentIsBackHit, player.position);
+                    VfxSystem::get().spawnHitSpark(enemy.position, (_knockX < 0.0f ? -1.0f : 1.0f) * 1.15f, 1.15f);
                     bool enemyJustDied = !targetWasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f);
 
                     // Особые комбо-маркеры и эффекты при попадании усиленной атаки из идеального уворота
@@ -1810,6 +1812,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                                   enemy.getCurrentKnockY(), 
                                   enemy.getCurrentStunTime(),
                                   eHitLevel, eIsBack, enemy.position);
+                VfxSystem::get().spawnHitSpark(player.position, (enemy.isFacingLeft ? -1.0f : 1.0f) * 1.2f, 1.2f);
                 if (!playerWasDead && player.isDead && Arena::getActive()) {
                     float kLen = std::hypot(enemy.getCurrentKnockX(), enemy.getCurrentKnockY());
                     sf::Vector2f kDir = (kLen > 0.001f) ? sf::Vector2f(enemy.getCurrentKnockX() / kLen, enemy.getCurrentKnockY() / kLen) : sf::Vector2f(0.0f, -1.0f);
@@ -2174,6 +2177,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                         bool wasDeadBefore = (enemy.isDead || enemy.hp <= 0.0f);
                         enemy.takeDamage(maceDmg, hitDir.x * knockForce, hitDir.y * knockForce, 0.50f);
+                        VfxSystem::get().spawnHitSpark(enemy.position, (hitDir.x < 0.0f ? -1.0f : 1.0f) * 1.3f, 1.3f);
 
                         // Если бросок был летальным — разлетается куча крови в направлении форсы
                         if (!wasDeadBefore && (enemy.isDead || enemy.hp <= 0.0f)) {
@@ -2397,6 +2401,9 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
             }
         }
     }
+
+    // 7. Отрисовка динамических спец-эффектов Pixelfx
+    VfxSystem::get().draw(window);
 }
 
 void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {

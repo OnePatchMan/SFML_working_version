@@ -2,6 +2,7 @@
 #include "entities/PlayerConfig.h"
 #include "entities/EnemyConfig.h"
 #include "audio/SoundManager.h"
+#include "graphics/VfxSystem.h"
 #include <iostream>
 #include <cstdlib>
 
@@ -53,6 +54,7 @@ void GameApp::initWindow() {
 
 void GameApp::initSubsystems() {
     SoundManager::get().init("assets/soundeff");
+    VfxSystem::get().init();
 
     _crosshair = std::make_unique<Crosshair>("assets/sprites/crosshair.png", _window);
 

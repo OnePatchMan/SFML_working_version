@@ -6,6 +6,7 @@
 #include <optional>
 #include "core/Common.h"
 #include "combat/CombatConfig.h"
+#include "graphics/VfxSystem.h"
 
 class Player;
 class Enemy;

@@ -6,6 +6,7 @@
 #include <optional>
 #include "core/Common.h"
 #include "entities/EnemyConfig.h"
+#include "graphics/VfxSystem.h"
 
 class Arena;
 
@@ -405,6 +406,7 @@ public:
     float bossWallStunTimer = 0.0f;
     float bossComboCooldown = 0.0f; // Пауза после комбо (~2.0с, запрет соединения комбо)
     float bossSpecialAttackCooldown = 3.5f;
+    float bossChargeTrailTimer = 0.0f;
     int bossNextComboIndex = 0;
     int bossCurrentComboHit = 0;
     int bossComboTotalHits = 0;
