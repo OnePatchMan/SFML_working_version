@@ -2802,9 +2802,29 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             float alpha = std::clamp((deathFadeTimer / 0.6f) * 160.0f, 0.0f, 255.0f);
-            body.setFillColor(sf::Color(100, 100, 115, static_cast<std::uint8_t>(alpha)));
-            body.setOutlineColor(sf::Color(40, 40, 45, static_cast<std::uint8_t>(alpha)));
-            window.draw(body);
+            if (enemyType == EnemyType::BOSS_1) {
+                static sf::Texture s_bossDeathTex;
+                static bool s_bossDeathLoaded = false;
+                static bool s_bossDeathAttempted = false;
+                if (!s_bossDeathAttempted) {
+                    s_bossDeathAttempted = true;
+                    s_bossDeathLoaded = s_bossDeathTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+                }
+                if (s_bossDeathLoaded) {
+                    sf::Sprite bSp(s_bossDeathTex);
+                    bSp.setTextureRect(sf::IntRect({7 * 128, 0}, {128, 96}));
+                    bSp.setOrigin({64.0f, 48.0f});
+                    float dirX = isFacingLeft ? 1.0f : -1.0f;
+                    bSp.setScale({((halfW * 2.0f) / 128.0f) * dirX, (halfH * 2.0f) / 96.0f});
+                    bSp.setPosition(position);
+                    bSp.setColor(sf::Color(100, 100, 115, static_cast<std::uint8_t>(alpha)));
+                    window.draw(bSp);
+                }
+            } else {
+                body.setFillColor(sf::Color(100, 100, 115, static_cast<std::uint8_t>(alpha)));
+                body.setOutlineColor(sf::Color(40, 40, 45, static_cast<std::uint8_t>(alpha)));
+                window.draw(body);
+            }
         }
         return;
     }
@@ -2940,7 +2960,92 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         body.setFillColor(dCol);
     }
 
-    window.draw(body);
+    if (enemyType == EnemyType::BOSS_1) {
+        // Отрисовка уникальной спрайтовой модели Бледного Мутанта (Горилла без шеи и головы)
+        static sf::Texture s_bossTex;
+        static bool s_bossLoaded = false;
+        static bool s_bossAttempted = false;
+        if (!s_bossAttempted) {
+            s_bossAttempted = true;
+            s_bossLoaded = s_bossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+        }
+
+        if (s_bossLoaded) {
+            // Тень под ногами
+            sf::CircleShape shadow(halfW * 0.72f);
+            shadow.setScale({1.0f, 0.22f});
+            shadow.setOrigin({shadow.getRadius(), shadow.getRadius()});
+            shadow.setPosition({position.x, position.y + halfH - 2.0f});
+            shadow.setFillColor(sf::Color(10, 12, 18, 125));
+            window.draw(shadow);
+
+            // Определение активного кадра анимации
+            // 0: Idle low
+            // 1: Idle breath high
+            // 2: Knuckle walk 1
+            // 3: Knuckle walk 2
+            // 4: Attack windup (rearing back on hind legs)
+            // 5: Attack slam (knuckle crash)
+            // 6: Jump slam (coiled mid-air / descending strike)
+            // 7: Hurt / stunned
+            int frameIdx = 0;
+            if (hurtTimer > 0.0f || isBossWallStunned()) {
+                frameIdx = 7;
+            } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
+                frameIdx = 0; // Присед перед прыжком
+            } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_RISE || 
+                       bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
+                frameIdx = 6; // В воздухе
+            } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_STRIKE || 
+                       bossSpecialState == Boss1SpecialState::EARTHQUAKE_SLAM ||
+                       bossSpecialState == Boss1SpecialState::BULL_CHARGE_RUN) {
+                frameIdx = 5; // Удар по полу / разбег
+            } else if (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH ||
+                       bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH ||
+                       attackState == EnemyAttackState::WINDUP) {
+                frameIdx = 4; // Замах / стойка перед комбо-ударом
+            } else if (attackState == EnemyAttackState::ATTACKING) {
+                frameIdx = 5; // Удар кулаками
+            } else if (std::abs(velocity.x) > 10.0f) {
+                int step = static_cast<int>(std::abs(position.x) / 32.0f) % 2;
+                frameIdx = 2 + step; // Ходьба с опорой на руки
+            } else {
+                int breath = static_cast<int>(bossAnimTimer * 2.2f) % 2;
+                frameIdx = breath; // Дыхание на месте
+            }
+
+            sf::Sprite bossSprite(s_bossTex);
+            bossSprite.setTextureRect(sf::IntRect({frameIdx * 128, 0}, {128, 96}));
+            bossSprite.setOrigin({64.0f, 48.0f});
+
+            // Направление взгляда (по умолчанию спрайт смотрит влево)
+            float dirX = isFacingLeft ? 1.0f : -1.0f;
+            float scaleY = (halfH * 2.0f) / 96.0f;
+            float scaleX = ((halfW * 2.0f) / 128.0f) * dirX;
+            if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH) {
+                // Приседание: сжатие по высоте и расширение вширь
+                scaleX *= 1.15f;
+                scaleY *= 0.85f;
+                bossSprite.setPosition({position.x, position.y + halfH * 0.15f});
+            } else {
+                bossSprite.setPosition(position);
+            }
+            bossSprite.setScale({scaleX, scaleY});
+
+            if (hurtTimer > 0.0f) {
+                bossSprite.setColor(sf::Color(255, 140, 155));
+            } else if (isBossWallStunned()) {
+                bossSprite.setColor(sf::Color(255, 230, 130));
+            } else {
+                bossSprite.setColor(sf::Color::White);
+            }
+            window.draw(bossSprite);
+        } else {
+            window.draw(body);
+        }
+    } else {
+        window.draw(body);
+    }
 
     // Волна идеального доджа дуэлянта (золотое расширяющееся кольцо)
     if (isPerfectDodged && perfectDodgeEffectTimer > 0.0f) {
@@ -3010,7 +3115,7 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         targetDot.setPosition(position);
         targetDot.setFillColor(sf::Color(185, 45, 40));
         window.draw(targetDot);
-    } else {
+    } else if (enemyType != EnemyType::BOSS_1) {
         // Внутренний квадрат-мишень на теле противника
         sf::RectangleShape target({14.0f * scale, 14.0f * scale});
         target.setOrigin({7.0f * scale, 7.0f * scale});
@@ -3839,6 +3944,7 @@ void Enemy::triggerBossJumpSlamLanding(const Arena& arena) {
 }
 
 void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking) {
+    bossAnimTimer += dt;
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
             deathFadeTimer -= dt;

@@ -25,6 +25,7 @@ inline const std::vector<IngameLeftButton> s_ingameLeftButtons = {
     {"T",  "Танк [6]",            EditorTool::ENEMY_TANK,           sf::Color(240, 50, 50)},
     {"U",  "Дуэлянт Агр [7]",     EditorTool::ENEMY_DUELIST,        sf::Color(170, 70, 230)},
     {"V",  "Дуэлянт Пасс [8]",    EditorTool::ENEMY_DUELIST_PASSIVE,sf::Color(45, 185, 245)},
+    {"B",  "Босс 1 Мутант [B]",   EditorTool::ENEMY_BOSS,           sf::Color(240, 245, 255)},
     {"[]", "Заливка Box [X]",     EditorTool::BOX_FILL,             sf::Color(100, 180, 255)},
     {"/",  "Линия [L]",           EditorTool::LINE,                 sf::Color(80, 220, 160)},
     {"F",  "Ведро [G]",           EditorTool::FLOOD_FILL,           sf::Color(255, 180, 0)},

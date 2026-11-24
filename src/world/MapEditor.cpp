@@ -110,6 +110,13 @@ void MapEditor::scanTileSprites() {
         item.tool = EditorTool::ENEMY_DUELIST_PASSIVE;
         _paletteSprites.push_back(std::move(item));
     }
+    {
+        IngameTileSpriteItem item;
+        item.name = "Босс 1 Мутант";
+        item.filename = "enemy_boss.png";
+        item.tool = EditorTool::ENEMY_BOSS;
+        _paletteSprites.push_back(std::move(item));
+    }
 
     // 2. Сканирование папок тайлов
     std::string tilesDir = resolveAssetPath("assets/tiles");
@@ -407,11 +414,13 @@ bool MapEditor::eyedropAt(int tx, int ty, Arena& arena) {
             if (sp.type == 1) _tool = EditorTool::ENEMY_TANK;
             else if (sp.type == 2) _tool = EditorTool::ENEMY_DUELIST;
             else if (sp.type == 3) _tool = EditorTool::ENEMY_DUELIST_PASSIVE;
+            else if (sp.type == 5) _tool = EditorTool::ENEMY_BOSS;
             else _tool = EditorTool::ENEMY_SPAWN;
 
             std::string tName = (sp.type == 1) ? "Жирный (Tank)" :
                                 (sp.type == 2) ? "Дуэлянт Агрессивный" :
-                                (sp.type == 3) ? "Дуэлянт Пассивный" : "Обычный (Normal)";
+                                (sp.type == 3) ? "Дуэлянт Пассивный" :
+                                (sp.type == 5) ? "Босс 1 (Бледный Мутант)" : "Обычный (Normal)";
             _statusMessage = "Пипетка: Враг [" + tName + "]";
             _statusTimer = 2.0f;
             return true;

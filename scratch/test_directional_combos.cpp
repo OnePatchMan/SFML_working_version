@@ -4703,7 +4703,15 @@ int main() {
         arena.setEnemySpawnAt(22, 10, 2);
         editor.eyedropAt(22, 10, arena);
         assert(editor.getCurrentTool() == EditorTool::ENEMY_DUELIST);
-        std::cout << "-> Verified Eyedropper accurately sampled Wall, Door (target R4), and Duelist Aggressive!" << std::endl;
+
+        // Set enemy spawn at (24, 10) as Boss 1 Pale Mutant (type 5)
+        arena.setEnemySpawnAt(24, 10, 5);
+        editor.eyedropAt(24, 10, arena);
+        assert(editor.getCurrentTool() == EditorTool::ENEMY_BOSS);
+        editor.setCurrentTool(EditorTool::ENEMY_BOSS);
+        assert(editor.getCurrentTool() == EditorTool::ENEMY_BOSS);
+        std::cout << "-> Verified Eyedropper & Selection for Boss 1 (EditorTool::ENEMY_BOSS, type 5)!" << std::endl;
+        std::cout << "-> Verified Eyedropper accurately sampled Wall, Door (target R4), Duelist Aggressive, and Boss 1!" << std::endl;
 
         // 4. Test Clipboard Copy & Paste
         // Create 2x2 pattern at (25, 10)

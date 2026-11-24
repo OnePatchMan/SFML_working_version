@@ -168,6 +168,7 @@ public:
     bool canDodge = false;
     float aggressiveness = 0.65f;
     float intelligence = 0.85f;
+    float bossAnimTimer = 0.0f;
     float getIntelligence() const { return intelligence; }
     void setIntelligence(float intel) { intelligence = intel; }
 

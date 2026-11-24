@@ -183,6 +183,10 @@ void MapEditor::handleInput(const std::optional<sf::Event>& event, Arena& arena,
             _tool = EditorTool::LAMP;
             _statusMessage = "Инструмент: Люминесцентная лампа (L - освещение лаборатории)";
             _statusTimer = 2.0f;
+        } else if (kp->code == sf::Keyboard::Key::B) {
+            _tool = EditorTool::ENEMY_BOSS;
+            _statusMessage = "Инструмент: Босс 1 (Бледный Мутант, 4x3 тайла, Горилла без шеи и головы)";
+            _statusTimer = 2.0f;
         }
 
         // Кисть и настройка двери
@@ -362,12 +366,18 @@ void MapEditor::handleInput(const std::optional<sf::Event>& event, Arena& arena,
                 int sty = static_cast<int>(std::floor((spawns[i].position.y + 28.0f) / ts) - 1.0f);
                 if (stx == _lastHoverTile.x && sty == _lastHoverTile.y) {
                     pushUndo(arena);
-                    int nextType = (spawns[i].type + 1) % 4; // 0=Norm, 1=Tank, 2=Agr, 3=Pass
+                    int nextType = 0;
+                    if (spawns[i].type == 0) nextType = 1;
+                    else if (spawns[i].type == 1) nextType = 2;
+                    else if (spawns[i].type == 2) nextType = 3;
+                    else if (spawns[i].type == 3) nextType = 5;
+                    else nextType = 0;
                     spawns[i].type = nextType;
                     arena.setEnemySpawns(spawns);
                     std::string tName = (nextType == 1) ? "Жирный (Tank)" :
                                         (nextType == 2) ? "Дуэлянт Агрессивный" :
-                                        (nextType == 3) ? "Дуэлянт Пассивный" : "Обычный (Normal)";
+                                        (nextType == 3) ? "Дуэлянт Пассивный" :
+                                        (nextType == 5) ? "Босс 1 (Бледный Мутант)" : "Обычный (Normal)";
                     _statusMessage = "Враг #" + std::to_string(i + 1) + " переключен: [" + tName + "]";
                     _statusTimer = 2.0f;
                     enemyClicked = true;
@@ -655,15 +665,18 @@ void MapEditor::applyToolAt(int tx, int ty, Arena& arena, Player& player, Enemy&
         return;
     }
     if (_tool == EditorTool::ENEMY_SPAWN || _tool == EditorTool::ENEMY_TANK || 
-        _tool == EditorTool::ENEMY_DUELIST || _tool == EditorTool::ENEMY_DUELIST_PASSIVE) {
+        _tool == EditorTool::ENEMY_DUELIST || _tool == EditorTool::ENEMY_DUELIST_PASSIVE ||
+        _tool == EditorTool::ENEMY_BOSS) {
         arena.setTile(tx, ty, 0);
         int enemyType = (_tool == EditorTool::ENEMY_TANK) ? 1 : 
                         (_tool == EditorTool::ENEMY_DUELIST) ? 2 : 
-                        (_tool == EditorTool::ENEMY_DUELIST_PASSIVE) ? 3 : 0;
+                        (_tool == EditorTool::ENEMY_DUELIST_PASSIVE) ? 3 :
+                        (_tool == EditorTool::ENEMY_BOSS) ? 5 : 0;
         arena.setEnemySpawnAt(tx, ty, enemyType);
         std::string tName = (enemyType == 1) ? "Жирный (Tank)" : 
                             (enemyType == 2) ? "Дуэлянт Агрессивный" : 
-                            (enemyType == 3) ? "Дуэлянт Пассивный" : "Обычный (Normal)";
+                            (enemyType == 3) ? "Дуэлянт Пассивный" :
+                            (enemyType == 5) ? "Босс 1 (Бледный Мутант)" : "Обычный (Normal)";
         _statusMessage = "Враг [" + tName + "] установлен на [" + std::to_string(tx) + ", " + std::to_string(ty) + "] (Всего: " + std::to_string(arena.getEnemySpawns().size()) + ")";
         _statusTimer = 2.0f;
         return;

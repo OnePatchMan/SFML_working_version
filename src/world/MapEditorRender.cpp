@@ -180,9 +180,9 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             hoveredEnemyIdx = static_cast<int>(i);
         }
 
-        float scale = (eType == 1) ? 1.5f : 1.0f;
-        float halfW = 24.0f * scale;
-        float halfH = 21.0f * scale;
+        float scale = (eType == 5) ? 3.3f : ((eType == 1) ? 1.5f : 1.0f);
+        float halfW = (eType == 5) ? 120.0f : (24.0f * scale);
+        float halfH = (eType == 5) ? 92.0f : (21.0f * scale);
 
         float posX = eSpawn.x;
         float posY = eSpawn.y;
@@ -206,7 +206,11 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
         std::string typeBadge;
         sf::Color badgeColor;
 
-        if (eType == 1) { // ТАНК
+        if (eType == 5) { // БОСС 1 (БЛЕДНЫЙ МУТАНТ)
+            baseColor = sf::Color(218, 224, 233);
+            typeBadge = "БОСС 1: МУТАНТ #" + std::to_string(i + 1);
+            badgeColor = sf::Color(255, 100, 100);
+        } else if (eType == 1) { // ТАНК
             baseColor = sf::Color(215, 38, 48);
             typeBadge = "ТАНК #" + std::to_string(i + 1);
             badgeColor = sf::Color(255, 90, 90);
@@ -228,8 +232,25 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             badgeColor = sf::Color(210, 215, 225);
         }
 
-        body.setFillColor(baseColor);
-        window.draw(body);
+        static sf::Texture s_editorBossTex;
+        static bool s_editorBossLoaded = false;
+        static bool s_editorBossAttempted = false;
+        if (!s_editorBossAttempted) {
+            s_editorBossAttempted = true;
+            s_editorBossLoaded = s_editorBossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+        }
+
+        if (eType == 5 && s_editorBossLoaded) {
+            sf::Sprite bSp(s_editorBossTex);
+            bSp.setTextureRect(sf::IntRect({0, 0}, {128, 96}));
+            bSp.setOrigin({64.0f, 48.0f});
+            bSp.setScale({(halfW * 2.0f) / 128.0f, (halfH * 2.0f) / 96.0f});
+            bSp.setPosition({posX, posY});
+            window.draw(bSp);
+        } else {
+            body.setFillColor(baseColor);
+            window.draw(body);
+        }
 
         // 3. Мишень / визор на теле
         if (eType == 4) {
@@ -252,7 +273,7 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             ringDot.setPosition({posX, posY});
             ringDot.setFillColor(sf::Color(185, 45, 40));
             window.draw(ringDot);
-        } else {
+        } else if (eType != 5) {
             sf::RectangleShape target({14.0f * scale, 14.0f * scale});
             target.setOrigin({7.0f * scale, 7.0f * scale});
             target.setPosition({posX, posY});
@@ -293,7 +314,8 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
     // 5. Инспектор объекта под курсором (Floating Inspector)
     if (font && hoveredEnemyIdx >= 0) {
         int eType = eSpawns[hoveredEnemyIdx].type;
-        std::string eName = (eType == 1) ? "ТАНК (110 HP, Стан -45%)" :
+        std::string eName = (eType == 5) ? "БОСС 1 (Бледный Мутант, Горилла без шеи и головы, 240x184)" :
+                            (eType == 1) ? "ТАНК (110 HP, Стан -45%)" :
                             (eType == 2) ? "ДУЭЛЯНТ АГР (65 HP, Прессинг, Зацеп 210px)" :
                             (eType == 3) ? "ДУЭЛЯНТ ПАСС (65 HP, Спейсинг, Инвиз 1с)" : "ОБЫЧНЫЙ (45 HP, Базовый)";
         std::string inspStr = "ВРАГ #" + std::to_string(hoveredEnemyIdx + 1) + "\n" + eName + "\n[ПКМ] - Сменить архетип | [Ластик] - Удалить";
@@ -460,6 +482,11 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
             brushRect.setPosition({static_cast<float>(_lastHoverTile.x) * ts, static_cast<float>(_lastHoverTile.y) * ts});
             brushRect.setFillColor(sf::Color(35, 150, 225, 90));
             brushRect.setOutlineColor(sf::Color(45, 185, 245, 255));
+        } else if (_tool == EditorTool::ENEMY_BOSS) {
+            brushRect.setSize({240.0f, 184.0f});
+            brushRect.setPosition({static_cast<float>(_lastHoverTile.x) * ts + ts * 0.5f - 120.0f, static_cast<float>(_lastHoverTile.y) * ts + ts * 0.5f - 92.0f});
+            brushRect.setFillColor(sf::Color(218, 224, 233, 80));
+            brushRect.setOutlineColor(sf::Color(255, 80, 80, 255));
         } else if (_tool == EditorTool::ERASER) {
             brushRect.setSize({bW, bH});
             brushRect.setPosition({bX, bY});
@@ -533,13 +560,14 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
         toolsStr += (_tool == EditorTool::ENEMY_TANK ? ">> [6] Танк <<  " : "[6] Танк  ");
         toolsStr += (_tool == EditorTool::ENEMY_DUELIST ? ">> [7] Дуэль-Агр <<  " : "[7] Дуэль-Агр  ");
         toolsStr += (_tool == EditorTool::ENEMY_DUELIST_PASSIVE ? ">> [8] Дуэль-Пасс <<  " : "[8] Дуэль-Пасс  ");
+        toolsStr += (_tool == EditorTool::ENEMY_BOSS ? ">> [B] Босс 1 <<  " : "[B] Босс 1  ");
         toolsStr += (_tool == EditorTool::ERASER ? ">> [9] Ластик <<  " : "[9] Ластик  ");
         toolsStr += (_tool == EditorTool::LAMP ? ">> [0] Лампа <<  " : "[0] Лампа  ");
         toolsStr += (_tool == EditorTool::BOX_FILL ? ">> [X] Box <<  " : "[X] Box  ");
         toolsStr += (_tool == EditorTool::LINE ? ">> [L] Линия <<  " : "[L] Линия  ");
         toolsStr += (_tool == EditorTool::FLOOD_FILL ? ">> [G] Ведро <<  " : "[G] Ведро  ");
         toolsStr += (_tool == EditorTool::EYEDROPPER ? ">> [Q] Пипетка <<  " : "[Q] Пипетка  ");
-        toolsStr += "| Кисть: [B] " + std::to_string(_brushSize) + "x" + std::to_string(_brushSize);
+        toolsStr += "| Кисть: " + std::to_string(_brushSize) + "x" + std::to_string(_brushSize);
 
         sf::Text toolsText(*font, toSfString(toolsStr), 13);
         toolsText.setFillColor(sf::Color::White);
@@ -637,12 +665,14 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
     window.draw(pDot);
 
     for (const auto& sp : arena.getEnemySpawns()) {
-        sf::CircleShape eDot(sp.type == 1 ? 4.0f : 3.0f);
-        if (sp.type == 1) eDot.setFillColor(sf::Color(255, 60, 60));
+        float dotR = (sp.type == 5) ? 6.0f : ((sp.type == 1) ? 4.0f : 3.0f);
+        sf::CircleShape eDot(dotR);
+        if (sp.type == 5) eDot.setFillColor(sf::Color(255, 230, 230));
+        else if (sp.type == 1) eDot.setFillColor(sf::Color(255, 60, 60));
         else if (sp.type == 2) eDot.setFillColor(sf::Color(190, 90, 255));
         else if (sp.type == 3) eDot.setFillColor(sf::Color(45, 185, 245));
         else eDot.setFillColor(sf::Color(190, 190, 190));
-        eDot.setPosition({offX + sp.position.x * scale - 3.0f, offY + sp.position.y * scale - 3.0f});
+        eDot.setPosition({offX + sp.position.x * scale - dotR, offY + sp.position.y * scale - dotR});
         window.draw(eDot);
     }
 
@@ -804,6 +834,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_TANK) hotkeyStr = "[6]";
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) hotkeyStr = "[7]";
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) hotkeyStr = "[8]";
+            else if (_paletteSprites[i].tool == EditorTool::ENEMY_BOSS) hotkeyStr = "[B]";
             else if (_paletteSprites[i].tool == EditorTool::ERASER) hotkeyStr = "[9]";
             else if (_paletteSprites[i].tool == EditorTool::LAMP) hotkeyStr = "[0]";
             else if (_paletteSprites[i].tool == EditorTool::BOX_FILL) hotkeyStr = "[X]";
@@ -836,6 +867,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_TANK) colorBox.setFillColor(sf::Color(240, 50, 50));
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) colorBox.setFillColor(sf::Color(170, 70, 230));
             else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) colorBox.setFillColor(sf::Color(45, 185, 245));
+            else if (_paletteSprites[i].tool == EditorTool::ENEMY_BOSS) colorBox.setFillColor(sf::Color(218, 224, 233));
             else if (_paletteSprites[i].tool == EditorTool::ERASER) colorBox.setFillColor(sf::Color(60, 60, 60));
             else if (_paletteSprites[i].tool == EditorTool::LAMP) colorBox.setFillColor(sf::Color(180, 240, 255));
             else if (_paletteSprites[i].tool == EditorTool::BOX_FILL) colorBox.setFillColor(sf::Color(100, 180, 255));
@@ -854,6 +886,7 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
                 else if (_paletteSprites[i].tool == EditorTool::ENEMY_TANK) letter = "T";
                 else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST) letter = "DA";
                 else if (_paletteSprites[i].tool == EditorTool::ENEMY_DUELIST_PASSIVE) letter = "DP";
+                else if (_paletteSprites[i].tool == EditorTool::ENEMY_BOSS) letter = "BOSS";
                 else if (_paletteSprites[i].tool == EditorTool::DOOR) letter = "D";
                 else if (_paletteSprites[i].tool == EditorTool::ERASER) letter = "X";
                 else if (_paletteSprites[i].tool == EditorTool::LAMP) letter = "L";
