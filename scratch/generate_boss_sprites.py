@@ -20,6 +20,8 @@ C_RIB_LIGHT = (244, 246, 238, 255)
 
 C_CLAW_DARK = (108, 112, 104, 255)
 C_CLAW_HI = (250, 252, 246, 255)
+C_VEIN = (92, 46, 74, 255)
+C_SINEW = (136, 42, 58, 255)
 
 def draw_organic_boss_frame(draw, ox, frame_idx):
     """
@@ -163,6 +165,7 @@ def draw_organic_boss_frame(draw, ox, frame_idx):
     ]
     draw.polygon(far_arm_pts, fill=C_SHADOW, outline=C_OUT)
     draw.line([(dx + fa_sx - 2, fa_s_y + 4), (dx + fa_ex - 1, fa_e_y), (dx + fa_kx - 1, fa_k_y - 6)], fill=C_MID, width=2)
+    draw.line([(dx + fa_sx, fa_s_y + 5), (dx + fa_ex, fa_e_y - 2)], fill=C_VEIN, width=1)
     for c in range(3):
         cx = dx + fa_kx - 4 + c * 3
         draw.polygon([(cx, fa_k_y - 2), (cx - 2, fa_k_y), (cx + 1, fa_k_y)], fill=C_CLAW_DARK, outline=C_OUT)
@@ -195,14 +198,23 @@ def draw_organic_boss_frame(draw, ox, frame_idx):
     spine_light = [(dx + 19, 35 + bob_y), (dx + 25, 25 + bob_y), (dx + 37, 17 + bob_y), (dx + 52, 12 + bob_y), (dx + 67, 12 + bob_y), (dx + 78, 16 + bob_y), (dx + 84, 25 + bob_y), (dx + 86, 36 + bob_y)]
     draw.line(spine_light, fill=C_LIGHT, width=2)
 
+    # Jagged bone vertebrae crest along arched spine
+    for s in range(5):
+        vx = dx + 38 + s * 10
+        vy = (16 if s in (0, 4) else 12) + bob_y
+        draw.polygon([(vx, vy), (vx + 2, vy - 3), (vx + 4, vy)], fill=C_RIB_LIGHT, outline=C_OUT)
+        draw.point((vx + 2, vy - 2), fill=C_HI)
+
     # Front Cowl
     prow_face = [(dx + 17, 34 + bob_y), (dx + 26, 26 + bob_y), (dx + 32, 38 + bob_y), (dx + 22, 43 + bob_y)]
     draw.polygon(prow_face, fill=C_LIGHT)
     draw.line([(dx + 18, 34 + bob_y), (dx + 22, 42 + bob_y)], fill=C_HI, width=2)
 
-    # Deep underbelly cavity
+    # Deep underbelly cavity with visceral sinew strands
     under_cavity = [(dx + 38, 34 + bob_y), (dx + 54, 28 + bob_y), (dx + 68, 38 + bob_y), (dx + 76, 48 + bob_y), (dx + 72, 42 + bob_y), (dx + 56, 32 + bob_y), (dx + 42, 36 + bob_y)]
     draw.polygon(under_cavity, fill=C_SHADOW_DEEP)
+    draw.line([(dx + 48, 32 + bob_y), (dx + 62, 34 + bob_y)], fill=C_SINEW, width=1)
+    draw.line([(dx + 52, 30 + bob_y), (dx + 66, 37 + bob_y)], fill=C_VEIN, width=1)
 
     # Ivory Bone Ribs (Curving along the flank)
     ribs = [
@@ -270,11 +282,18 @@ def draw_organic_boss_frame(draw, ox, frame_idx):
     draw.line([(dx + na_sx - 2, na_s_y + 2), (dx + na_ex - 3, na_e_y), (dx + na_kx - 3, na_k_y - 6)], fill=C_LIGHT, width=2)
     draw.line([(dx + na_sx - 1, na_s_y + 2), (dx + na_ex - 2, na_e_y)], fill=C_HI, width=1)
     draw.line([(dx + na_sx + 4, na_s_y + 2), (dx + na_ex + 3, na_e_y), (dx + na_kx + 3, na_k_y - 6)], fill=C_SHADOW, width=2)
+    # Bulging dark necrotic veins and sinews running down the front attack arm
+    draw.line([(dx + na_sx, na_s_y + 3), (dx + na_ex - 1, na_e_y - 2), (dx + na_kx - 1, na_k_y - 7)], fill=C_VEIN, width=2)
+    draw.line([(dx + na_sx + 2, na_s_y + 5), (dx + na_ex + 1, na_e_y)], fill=C_SINEW, width=1)
 
-    draw.line([(dx + na_kx - 5, na_k_y - 3), (dx + na_kx + 4, na_k_y - 3)], fill=C_LIGHT, width=1)
+    # Calcified bone knuckle shield on the fist
+    draw.rectangle([dx + na_kx - 6, na_k_y - 6, dx + na_kx + 5, na_k_y - 3], fill=C_RIB_LIGHT, outline=C_OUT)
+    draw.line([(dx + na_kx - 5, na_k_y - 5), (dx + na_kx + 4, na_k_y - 5)], fill=C_HI, width=1)
+
+    # Heavy curved bone claws digging into the floor
     for i in range(4):
         cx = dx + na_kx - 5 + i * 3
-        draw.polygon([(cx, na_k_y - 2), (cx - 2, na_k_y), (cx + 1, na_k_y)], fill=C_CLAW_HI, outline=C_OUT)
+        draw.polygon([(cx, na_k_y - 3), (cx - 3, na_k_y), (cx + 1, na_k_y)], fill=C_CLAW_HI, outline=C_OUT)
         draw.point((cx - 1, na_k_y), fill=C_CLAW_DARK)
 
 def generate_full_sheet():
