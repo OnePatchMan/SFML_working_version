@@ -3,6 +3,7 @@
 #include "entities/EnemyConfig.h"
 #include "audio/SoundManager.h"
 #include "graphics/VfxSystem.h"
+#include "graphics/BossVfx.h"
 #include <iostream>
 #include <cstdlib>
 

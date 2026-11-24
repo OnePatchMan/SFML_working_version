@@ -46,10 +46,11 @@ void Enemy::setType(EnemyType type) {
         canCounter = ecfg.canCounter;
         canBlock = ecfg.canBlock;
         canDodge = ecfg.canDodge;
-        aggressiveness = 0.5f;
-        intelligence = 0.5f;
-        maxComboHits = 1; // Обычный враг дает 1 комбо
+        aggressiveness = 0.65f;
+        intelligence = 0.75f;
+        maxComboHits = 2; // Обычный враг проводит полноценные комбо (2 удара)
         allowAirFollowup = false;
+        isSmartAI = true;
     } else if (enemyType == EnemyType::TANK) {
         maxHp = ecfg.hp;
         scale = ecfg.scale;
@@ -67,6 +68,7 @@ void Enemy::setType(EnemyType type) {
         intelligence = 0.5f;
         maxComboHits = 2;
         allowAirFollowup = false;
+        isSmartAI = true;
     } else if (enemyType == EnemyType::DUELIST) {
         maxHp = ecfg.hp;
         scale = ecfg.scale;
@@ -84,6 +86,7 @@ void Enemy::setType(EnemyType type) {
         intelligence = ecfg.intelligence;
         maxComboHits = 3;
         allowAirFollowup = true;
+        isSmartAI = true;
     } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
         maxHp = ecfg.hp;
         scale = ecfg.scale;
@@ -101,6 +104,7 @@ void Enemy::setType(EnemyType type) {
         intelligence = ecfg.intelligence;
         maxComboHits = 3;
         allowAirFollowup = true;
+        isSmartAI = true;
         invisActiveTimer = 0.0f;
         invisCooldownTimer = ecfg.invisCooldown;
     } else if (enemyType == EnemyType::DUMMY) {
@@ -598,7 +602,24 @@ bool Enemy::jump(float speedY) {
 }
 
 void Enemy::applyAttackStats(const EnemyAttackStats& s, float dirX) {
-    currentAttackDamage = s.damage * damageMultiplier;
+    // Система снижения урона в серии комбо (combo damage scaling / decay):
+    // 1-й удар: 100% урона (для обычного врага ~5.5 - 6.0 урона)
+    // 2-й удар: минус урон от комбо (~82% = ~4.5 - 5.0 урона)
+    // 3-й удар: ~68% урона
+    float comboScaling = 1.0f;
+    if (currentComboHit == 1) {
+        comboScaling = 0.82f;
+    } else if (currentComboHit >= 2) {
+        comboScaling = 0.68f;
+    }
+
+    float baseDamage = s.damage;
+    if (enemyType == EnemyType::NORMAL) {
+        // Обычный враг наносит 5-6 урона с базовой атаки (5.5) с учетом минус урона от комбо
+        baseDamage = 1.0f;
+    }
+
+    currentAttackDamage = baseDamage * damageMultiplier * comboScaling;
     currentAttackKnockX = dirX * s.knockX;
     currentAttackKnockY = s.knockY;
     currentAttackStun = s.stun;
@@ -612,12 +633,14 @@ void Enemy::applyAttackStats(const EnemyAttackStats& s, float dirX) {
 
 void Enemy::triggerAttack() {
     if (isDead || hurtTimer > 0.0f || attackState != EnemyAttackState::IDLE) return;
+    currentComboHit = 0;
     const auto& ecfg = getEConfig();
     behaviorState = AIBehaviorState::COMBAT;
     attackState = EnemyAttackState::WINDUP;
     attackStateTimer = ecfg.stats.dummyWindup * windupMultiplier; // Замах перед ударом
     attackHasHit = false;
-    currentAttackDamage = ecfg.stats.dummyDamage * damageMultiplier;
+    float baseDmg = (enemyType == EnemyType::NORMAL) ? 5.5f : (ecfg.stats.dummyDamage * damageMultiplier);
+    currentAttackDamage = baseDmg;
     currentAttackKnockX = isFacingLeft ? -ecfg.stats.dummyKnockX * knockMultiplier : ecfg.stats.dummyKnockX * knockMultiplier;
     currentAttackKnockY = ecfg.stats.dummyKnockY;
     currentAttackStun = ecfg.stats.dummyStun;
@@ -702,6 +725,7 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
     aiStateTimer = 0.0f;
     attackCooldown = 0.0f;
     attackHasHit = false;
+    currentComboHit = 0;
 
     switch (currentStarterType) {
     case AIStarterType::STARTER_1F2D1:
@@ -726,6 +750,7 @@ void Enemy::triggerComboSequence(int forcedStarter, int forcedHitLimit) {
 }
 
 void Enemy::dropCombo() {
+    currentComboHit = 0;
     if (enemyType == EnemyType::BOSS_1) {
         interruptBossComboAndStun(1.2f);
         return;
@@ -742,6 +767,7 @@ void Enemy::dropCombo() {
 }
 
 void Enemy::finishCombo(bool hitConfirmed) {
+    currentComboHit = 0;
     const auto& ecfg = getEConfig();
     aiComboState = AIComboState::IDLE;
     attackState = EnemyAttackState::RECOVERY;
@@ -1574,10 +1600,13 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             const auto& ecfg = getEConfig();
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
-                // Если удар не попал (уворот/промах) — прекращаем комбо
+                // Если удар не попал (уворот/промах) — проверяем, продолжает ли враг комбо (1-2)
                 if (!attackHasHit) {
-                    dropCombo();
-                    break;
+                    float dist = std::abs(playerPos.x - position.x);
+                    if (dist > 120.0f || (static_cast<float>(rand() % 1000) / 1000.0f > intelligence)) {
+                        dropCombo();
+                        break;
+                    }
                 }
                 aiComboState = AIComboState::LAUNCHER_1_RECOVERY;
                 aiStateTimer = ecfg.starter1.hit1.recoveryTime;
@@ -1606,6 +1635,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 if (!arena.overlapsSolid(position.x + elungeF2, position.y, halfW, halfH, halfH)) {
                     position.x += elungeF2; // Выпад вперед
                 }
+                currentComboHit = 1;
                 applyAttackStats(ecfg.starter1.hitF2, dir);
             }
             break;
@@ -1646,6 +1676,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 if (!arena.overlapsSolid(position.x + elungeD1, position.y, halfW, halfH, halfH)) {
                     position.x += elungeD1; // Рывок вперед
                 }
+                currentComboHit = 2;
                 applyAttackStats(ecfg.starter1.hitD1, dir);
             }
             break;
@@ -1710,8 +1741,11 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
-                    dropCombo();
-                    break;
+                    float dist = std::abs(playerPos.x - position.x);
+                    if (dist > 120.0f || (static_cast<float>(rand() % 1000) / 1000.0f > intelligence)) {
+                        dropCombo();
+                        break;
+                    }
                 }
                 aiComboState = AIComboState::STARTER_112_1_RECOVERY;
                 aiStateTimer = ecfg.starter2.hit1.recoveryTime;
@@ -1739,6 +1773,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 if (!arena.overlapsSolid(position.x + elunge2nd1, position.y, halfW, halfH, halfH)) {
                     position.x += elunge2nd1; // Шаг вперед
                 }
+                currentComboHit = 1;
                 applyAttackStats(ecfg.starter2.hit2nd1, dir);
             }
             break;
@@ -1779,6 +1814,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 if (!arena.overlapsSolid(position.x + elunge2, position.y, halfW, halfH, halfH)) {
                     position.x += elunge2; // Выпад
                 }
+                currentComboHit = 2;
                 applyAttackStats(ecfg.starter2.hit2, dir);
             }
             break;
@@ -1842,8 +1878,11 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
             aiStateTimer -= dt;
             if (aiStateTimer <= 0.0f) {
                 if (!attackHasHit) {
-                    dropCombo();
-                    break;
+                    float dist = std::abs(playerPos.x - position.x);
+                    if (dist > 120.0f || (static_cast<float>(rand() % 1000) / 1000.0f > intelligence)) {
+                        dropCombo();
+                        break;
+                    }
                 }
                 aiComboState = AIComboState::STARTER_21DB1_2_RECOVERY;
                 aiStateTimer = ecfg.starter3.hit2.recoveryTime;
@@ -1871,6 +1910,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 if (!arena.overlapsSolid(position.x + elungeHit1, position.y, halfW, halfH, halfH)) {
                     position.x += elungeHit1; // Шаг вперед вдогонку
                 }
+                currentComboHit = 1;
                 applyAttackStats(ecfg.starter3.hit1, dir);
             }
             break;
@@ -1927,6 +1967,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                 SoundManager::get().playAttack("db1", "21", false, 75.0f);
                 attackStateTimer = ecfg.starter3.hitSweep.activeTime;
                 attackHasHit = false;
+                currentComboHit = 2;
                 applyAttackStats(ecfg.starter3.hitSweep, dir);
                 currentAttackHitLevel = HitLevel::LOW;
                 currentAttackKnockX = ecfg.starter3.hitSweep.knockX; // СТРОГО ВЕРТИКАЛЬНЫЙ ПОДЪЕМ!
@@ -3672,17 +3713,18 @@ void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos, con
             attackHitbox = sf::FloatRect({hbx, hby}, {totalW, hbh});
             SoundManager::get().playAttack(step.sfx, "", false, 90.0f);
 
-            // Спец-эффекты Pixelfx: взмахи оружия, круговые вихри и сокрушительные рубящие удары
-            sf::Vector2f slashPos = {isFacingLeft ? (position.x - halfW - 20.0f) : (position.x + halfW + 20.0f), position.y};
+            // Процедурные спецэффекты атак босса (точно подогнаны под габариты attackHitbox):
+            BossSlashType slashType = BossSlashType::HORIZONTAL_CLEAVE;
             if (bossNextComboIndex == 4) { // СМЕРЧ УДАРОВ
-                VfxSystem::get().spawnSpinSlash(slashPos, dir * 1.35f, 1.35f);
+                slashType = BossSlashType::WHIRLWIND_360;
             } else if (step.damage >= 24.0f) { // Тяжелый финишер
-                VfxSystem::get().spawnHeavyCleave(slashPos, dir * 1.4f, 1.4f);
+                slashType = BossSlashType::HEAVY_OVERHEAD;
             } else if (bossCurrentComboHit % 2 == 1) { // Чередование ударов
-                VfxSystem::get().spawnHammerSmash(slashPos, dir * 1.25f, 1.25f);
+                slashType = BossSlashType::CROSS_X;
             } else {
-                VfxSystem::get().spawnSwordSlash(slashPos, dir * 1.35f, 1.35f);
+                slashType = BossSlashType::HORIZONTAL_CLEAVE;
             }
+            BossVfxManager::get().spawnSlash(attackHitbox, isFacingLeft, slashType, step.activeTime);
         }
     } else if (attackState == EnemyAttackState::ATTACKING) {
         attackStateTimer -= dt;
@@ -3752,6 +3794,30 @@ void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos, con
     }
 }
 
+void Enemy::triggerBossJumpSlamLanding(const Arena& arena) {
+    if (bossSpecialState != Boss1SpecialState::JUMP_SLAM_FALL) return;
+    bossSpecialState = Boss1SpecialState::NONE;
+    bossComboCooldown = 0.8f;
+    currentComboName = "";
+    velocity = {0.0f, 0.0f};
+    attackState = EnemyAttackState::IDLE;
+    attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
+
+    float groundY = position.y + halfH;
+    GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
+    GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
+    bossDustWaves.push_back(waveL);
+    bossDustWaves.push_back(waveR);
+
+    // Процедурные спецэффекты босса: сокрушительный удар о землю и взрыв каменной породы
+    BossVfxManager::get().spawnGroundImpact({position.x, groundY}, 440.0f, true);
+
+    SoundManager::get().play("wall_slam", 95.0f);
+    if (CombatSystem::getActive()) {
+        CombatSystem::getActive()->triggerShake(0.35f, 9.0f);
+    }
+}
+
 void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking) {
     if (isDead) {
         if (deathFadeTimer > 0.0f) {
@@ -3778,6 +3844,9 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         }
     } else {
         if (velocity.y > 0.0f) velocity.y = 0.0f;
+        if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
+            triggerBossJumpSlamLanding(arena);
+        }
     }
 
     // Движение по вертикали с коллизией
@@ -3803,24 +3872,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
 
                 // Приземление после прыжка-слэма
                 if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
-                    bossSpecialState = Boss1SpecialState::NONE;
-                    bossComboCooldown = 0.8f;
-                    currentComboName = "";
-
-                    float groundY = position.y + halfH;
-                    GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
-                    GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
-                    bossDustWaves.push_back(waveL);
-                    bossDustWaves.push_back(waveR);
-
-                    // Спец-эффекты Pixelfx: мощнейший эпицентр приземления с разлетом камней и ударной волной
-                    VfxSystem::get().spawnGroundSlam({position.x, groundY}, 1.5f, 1.5f);
-                    VfxSystem::get().spawnHeavyLanding({position.x, groundY}, 1.6f, 1.6f);
-
-                    SoundManager::get().play("wall_slam", 95.0f);
-                    if (CombatSystem::getActive()) {
-                        CombatSystem::getActive()->triggerShake(0.30f, 8.0f);
-                    }
+                    triggerBossJumpSlamLanding(arena);
                 }
             } else {
                 position.y = nextY;
@@ -3957,12 +4009,11 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         // Перемещение с проверкой коллизии с блоками
         bool moved = tryBossMoveX(velocity.x * dt);
 
-        // Пылевой след за ногами босса во время стремительного бега/разгона
+        // Процедурный шлейф/фантом босса во время разгона
         bossChargeTrailTimer -= dt;
         if (bossChargeTrailTimer <= 0.0f) {
-            bossChargeTrailTimer = 0.12f;
-            float trailX = position.x - dir * halfW * 0.9f;
-            VfxSystem::get().spawnHeavyLanding({trailX, position.y + halfH}, dir * 0.85f, 0.85f);
+            bossChargeTrailTimer = 0.08f;
+            BossVfxManager::get().spawnAfterimage(position, sf::Vector2f(halfW * 2.0f, halfH * 2.0f), sf::Vector2f(halfW, halfH), isFacingLeft);
         }
 
         bossSpecialTimer -= dt;
@@ -3980,10 +4031,9 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
                 CombatSystem::getActive()->triggerShake(0.35f, 9.0f);
             }
 
-            // Спец-эффекты Pixelfx: взрыв каменных обломков и пыли при сокрушении о стену
+            // Процедурный взрыв каменных обломков и породы о стену:
             float impactX = position.x + dir * halfW;
-            VfxSystem::get().spawnDirtExplosion({impactX, position.y + halfH * 0.1f}, dir * 1.4f, 1.4f);
-            VfxSystem::get().spawnHeavyLanding({position.x, position.y + halfH}, 1.4f, 1.4f);
+            BossVfxManager::get().spawnWallCrash({impactX, position.y + halfH * 0.1f}, dir);
         }
         return;
     } else if (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH) {
@@ -4000,11 +4050,8 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             bossDustWaves.push_back(waveL);
             bossDustWaves.push_back(waveR);
 
-            // Спец-эффекты Pixelfx: сокрушительный удар в землю, разлом и земляные шипы
-            VfxSystem::get().spawnGroundSlam({position.x, groundY}, 1.35f, 1.35f);
-            VfxSystem::get().spawnQuake({position.x, groundY}, 1.3f, 1.3f);
-            VfxSystem::get().spawnEarthSpike({position.x - 75.0f, groundY}, -1.15f, 1.15f);
-            VfxSystem::get().spawnEarthSpike({position.x + 75.0f, groundY}, 1.15f, 1.15f);
+            // Процедурные каменные шипы, ударные волны и разлетающиеся обломки
+            BossVfxManager::get().spawnGroundImpact({position.x, groundY}, 420.0f, true);
 
             SoundManager::get().playAttack("heavy", "", false, 95.0f);
             if (CombatSystem::getActive()) {
@@ -4066,10 +4113,8 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             attackHasHit = false;
             currentComboName = "БОСС 1: СОКРУШИТЕЛЬНЫЙ УДАР С ВОЗДУХА ПО ПОЛУ!";
 
-            // Спец-эффекты Pixelfx: удар из воздуха вниз (молот и сокрушительный росчерк клинка)
-            float curDirX = isFacingLeft ? -1.0f : 1.0f;
-            VfxSystem::get().spawnHammerSmash({position.x + curDirX * 25.0f, position.y + halfH * 0.4f}, curDirX * 1.5f, 1.5f);
-            VfxSystem::get().spawnHeavyCleave({position.x + curDirX * 35.0f, position.y + halfH * 0.2f}, curDirX * 1.5f, 1.5f);
+            // Процедурный сокрушительный столб энергии на всю высоту хитбокса прямо до пола
+            BossVfxManager::get().spawnJumpSlamBeam(attackHitbox, 0.30f);
 
             SoundManager::get().playAttack("heavy", "", true, 95.0f);
             if (CombatSystem::getActive()) {
@@ -4082,6 +4127,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         velocity = {0.0f, 0.0f};
         if (bossSpecialTimer <= 0.0f) {
             bossSpecialState = Boss1SpecialState::JUMP_SLAM_FALL;
+            bossSpecialTimer = 1.5f; // Сторожевой таймер от зависания
             attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
             attackState = EnemyAttackState::IDLE;
             velocity.y = 1200.0f; // стремительное падение вниз
@@ -4089,6 +4135,10 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         return;
     } else if (bossSpecialState == Boss1SpecialState::JUMP_SLAM_FALL) {
         // Падение вниз обрабатывается физикой выше
+        bossSpecialTimer -= dt;
+        if (isGrounded || bossSpecialTimer <= 0.0f || arena.overlapsSolid(position.x, position.y + 4.0f, halfW, halfH, halfH)) {
+            triggerBossJumpSlamLanding(arena);
+        }
         return;
     }
 

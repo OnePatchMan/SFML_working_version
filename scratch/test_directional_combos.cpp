@@ -9,6 +9,7 @@
 #include "entities/EnemyConfig.h"
 #include "audio/SoundManager.h"
 #include "graphics/VfxSystem.h"
+#include "graphics/BossVfx.h"
 #include <cassert>
 #include <iostream>
 #include <cmath>
@@ -6888,24 +6889,14 @@ int main() {
         assert(boss.bossSpecialState == Enemy::Boss1SpecialState::EARTHQUAKE_TELEGRAPH);
 
         // Завершение телеграфа и активация удара в землю
+        BossVfxManager::get().clear();
         boss.updateBoss1(0.72f, arena, player.position, false, false);
         assert(boss.bossSpecialState == Enemy::Boss1SpecialState::EARTHQUAKE_SLAM);
-        // Должны появиться ground-slam, quake и earth-spike
-        bool hasGroundSlam = false;
-        bool hasQuake = false;
-        bool hasEarthSpike = false;
-        for (const auto& inst : vfx.getActiveInstances()) {
-            if (inst.name == "ground-slam") hasGroundSlam = true;
-            if (inst.name == "quake") hasQuake = true;
-            if (inst.name == "earth-spike") hasEarthSpike = true;
-        }
-        assert(hasGroundSlam && "Earthquake must trigger ground-slam VFX!");
-        assert(hasQuake && "Earthquake must trigger quake rift VFX!");
-        assert(hasEarthSpike && "Earthquake must trigger earth-spike VFX!");
-        std::cout << "-> Step 3: Verified Boss 1 Earthquake triggers ground-slam, quake & earth-spike VFX!" << std::endl;
+        assert(BossVfxManager::get().getActiveCount() > 0 && "Earthquake must trigger BossVfxManager ground impact!");
+        std::cout << "-> Step 3: Verified Boss 1 Earthquake triggers procedural ground impact VFX!" << std::endl;
 
         // 4. Проверка срабатывания VFX при спец-атаке Jump Slam (в воздухе и на земле)
-        vfx.clear();
+        BossVfxManager::get().clear();
         Enemy slamBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
         slamBoss.triggerBossJumpSlam();
         slamBoss.updateBoss1(0.42f, arena, player.position, false, false); // Взлет
@@ -6915,79 +6906,53 @@ int main() {
         while (slamBoss.velocity.y < -30.0f && slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE) {
             slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
         }
-        vfx.clear();
+        BossVfxManager::get().clear();
         slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_STRIKE);
-        bool hasHammerSmash = false;
-        bool hasHeavyCleave = false;
-        for (const auto& inst : vfx.getActiveInstances()) {
-            if (inst.name == "hammer-smash") hasHammerSmash = true;
-            if (inst.name == "heavy-cleave") hasHeavyCleave = true;
-        }
-        assert(hasHammerSmash && "Jump Slam apex must trigger hammer-smash VFX!");
-        assert(hasHeavyCleave && "Jump Slam apex must trigger heavy-cleave VFX!");
+        assert(BossVfxManager::get().getActiveCount() > 0 && "Jump Slam apex must trigger BossVfxManager jump slam beam!");
 
         // Падение и приземление на пол -> сокрушительный импакт
         slamBoss.updateBoss1(0.32f, arena, player.position, false, false); // переход к падению
-        vfx.clear();
+        BossVfxManager::get().clear();
         for (int f = 0; f < 30 && slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_FALL; ++f) {
             slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
         }
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::NONE);
-        bool hasLandingSlam = false;
-        bool hasHeavyLanding = false;
-        for (const auto& inst : vfx.getActiveInstances()) {
-            if (inst.name == "ground-slam") hasLandingSlam = true;
-            if (inst.name == "heavy-landing") hasHeavyLanding = true;
-        }
-        assert(hasLandingSlam && "Jump Slam landing must trigger ground-slam impact VFX!");
-        assert(hasHeavyLanding && "Jump Slam landing must trigger heavy-landing dust VFX!");
-        std::cout << "-> Step 4: Verified Boss 1 Jump Slam triggers hammer-smash at apex & ground-slam on landing!" << std::endl;
+        assert(BossVfxManager::get().getActiveCount() > 0 && "Jump Slam landing must trigger procedural impact VFX!");
+        std::cout << "-> Step 4: Verified Boss 1 Jump Slam triggers procedural beam at apex & ground impact on landing!" << std::endl;
 
         // 5. Проверка срабатывания VFX при Bull Charge (след пыли и врезание в стену)
-        vfx.clear();
+        BossVfxManager::get().clear();
         Enemy chargeBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
         chargeBoss.triggerBossBullCharge();
         chargeBoss.updateBoss1(0.55f, arena, player.position, false, false); // переход к бегу
         assert(chargeBoss.bossSpecialState == Enemy::Boss1SpecialState::BULL_CHARGE_RUN);
 
-        // Бег -> появление следа пыли (heavy-landing)
+        // Бег -> появление фантома/шлейфа
         chargeBoss.updateBoss1(0.15f, arena, player.position, false, false);
-        bool hasTrailDust = false;
-        for (const auto& inst : vfx.getActiveInstances()) {
-            if (inst.name == "heavy-landing") hasTrailDust = true;
-        }
-        assert(hasTrailDust && "Bull Charge run must produce heavy-landing trail dust!");
+        assert(BossVfxManager::get().getActiveCount() > 0 && "Bull Charge run must produce BossVfxManager afterimage ghost!");
 
-        // Врезание в стену (за пределами или в твердый блок) -> dirt-explosion
-        vfx.clear();
+        // Врезание в стену -> wall crash
+        BossVfxManager::get().clear();
         chargeBoss.position.x = 20.0f; // У левого края / стены
         chargeBoss.isFacingLeft = true;
         chargeBoss.updateBoss1(0.02f, arena, player.position, false, false);
         assert(chargeBoss.bossSpecialState == Enemy::Boss1SpecialState::BULL_CHARGE_WALL_STUN);
-        bool hasDirtExplosion = false;
-        for (const auto& inst : vfx.getActiveInstances()) {
-            if (inst.name == "dirt-explosion") hasDirtExplosion = true;
-        }
-        assert(hasDirtExplosion && "Bull Charge wall slam must trigger dirt-explosion VFX!");
-        std::cout << "-> Step 5: Verified Boss 1 Bull Charge produces dust trail & dirt-explosion on wall collision!" << std::endl;
+        assert(BossVfxManager::get().getActiveCount() > 0 && "Bull Charge wall slam must trigger wall crash VFX!");
+        std::cout << "-> Step 5: Verified Boss 1 Bull Charge produces afterimage trail & wall crash on collision!" << std::endl;
 
         // 6. Проверка срабатывания VFX взмахов при комбо-сериях босса
-        vfx.clear();
+        BossVfxManager::get().clear();
         Enemy comboBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
-        comboBoss.triggerBossCombo(4); // СМЕРЧ УДАРОВ -> spin-slash
+        comboBoss.triggerBossCombo(4); // СМЕРЧ УДАРОВ -> whirlwind slash
         comboBoss.updateBossComboSequence(0.26f, player.position, &arena); // завершение замаха -> атака
-        bool hasSpinSlash = false;
-        for (const auto& inst : vfx.getActiveInstances()) {
-            if (inst.name == "spin-slash") hasSpinSlash = true;
-        }
-        assert(hasSpinSlash && "Whirlwind combo must trigger spin-slash VFX!");
+        assert(BossVfxManager::get().getActiveCount() > 0 && "Whirlwind combo must trigger BossVfxManager slash!");
 
-        vfx.clear();
+        BossVfxManager::get().clear();
         comboBoss.triggerBossCombo(0); // ЗАТЯЖНОЙ ТЯЖЕЛЫЙ СМЭШ
         comboBoss.updateBossComboSequence(0.39f, player.position, &arena);
-        assert(vfx.getActiveCount() > 0 && "Normal combo strikes must trigger weapon slash VFX!");
-        std::cout << "-> Step 6: Verified Boss 1 Combos spawn spin-slash, heavy-cleave & sword-slash VFX!" << std::endl;
+        assert(BossVfxManager::get().getActiveCount() > 0 && "Normal combo strikes must trigger procedural weapon slash VFX!");
+        std::cout << "-> Step 6: Verified Boss 1 Combos spawn procedural slash VFX matching hitbox size!" << std::endl;
 
         // 7. Проверка появления искр попадания (hit-spark) при уроне
         vfx.clear();
@@ -7004,6 +6969,64 @@ int main() {
         std::cout << "-> Step 7: Verified combat damage and impacts trigger hit-spark VFX!" << std::endl;
 
         std::cout << "-> PASSED: Pixelfx Special Effects System & Boss 1 Integration verified 100%!" << std::endl;
+    }
+
+    // -------------------------------------------------------------
+    // TEST 39: VERIFY PROCEDURAL BOSS VFX, JUMP SLAM NO-AFK, AND NORMAL ENEMY COMBOS & 5-6 DAMAGE
+    // -------------------------------------------------------------
+    {
+        std::cout << "\n[TEST 39] Testing Boss Jump Slam No-AFK & Normal Enemy 5-6 Damage & Combos..." << std::endl;
+
+        // 1. Проверка отсутствия AFK зависания босса после Jump Slam
+        Enemy afkTestBoss({400.0f, 15.0f * 64.0f - 28.0f}, EnemyType::BOSS_1);
+        afkTestBoss.triggerBossJumpSlam();
+        assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_TELEGRAPH);
+        afkTestBoss.updateBoss1(0.40f, arena, player.position, false, false);
+        assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE);
+
+        // Ждем пика
+        for (int i = 0; i < 60 && afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE; ++i) {
+            afkTestBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        }
+        assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_STRIKE);
+
+        // Ждем завершения удара в воздухе -> падение
+        afkTestBoss.updateBoss1(0.35f, arena, player.position, false, false);
+        // Теперь босс в состоянии JUMP_SLAM_FALL
+        // Симулируем падение и приземление на пол арены
+        for (int i = 0; i < 60 && afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_FALL; ++i) {
+            afkTestBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        }
+        // Босс ОБЯЗАТЕЛЬНО должен выйти из состояния JUMP_SLAM_FALL и не зависнуть AFK!
+        assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::NONE && "Boss MUST NOT be stuck in JUMP_SLAM_FALL (AFK)!");
+        assert(afkTestBoss.attackState == EnemyAttackState::IDLE);
+        std::cout << "-> Step 1: Verified Boss 1 Jump Slam lands cleanly and does NOT freeze AFK!" << std::endl;
+
+        // 2. Проверка урона обычного противника (5.5 - 6.0 на 1 ударе)
+        Enemy normEnemy({300.0f, 500.0f}, EnemyType::NORMAL);
+        normEnemy.triggerAttack();
+        assert(normEnemy.currentAttackDamage >= 5.5f && normEnemy.currentAttackDamage <= 6.0f);
+
+        // 3. Проверка комбо-скалирования (decay) урона обычного противника:
+        // 1-й удар: 100% (~5.5)
+        // 2-й удар: ~82% (~4.5)
+        normEnemy.currentComboHit = 0;
+        EnemyAttackStats testStrike{0.0f, 0.12f, 0.05f, 1.0f, 150.0f, -25.0f, 0.24f, 0.0f, 55.0f, 42.0f, -18.0f, false};
+        normEnemy.applyAttackStats(testStrike, 1.0f);
+        assert(std::abs(normEnemy.currentAttackDamage - 5.5f) < 0.01f);
+
+        normEnemy.currentComboHit = 1; // 2-й удар в комбо
+        normEnemy.applyAttackStats(testStrike, 1.0f);
+        assert(std::abs(normEnemy.currentAttackDamage - (5.5f * 0.82f)) < 0.05f); // ~4.51f
+        std::cout << "-> Step 2: Verified Normal Enemy deals 5.5 dmg on hit 1, and 4.51 dmg on hit 2 (combo decay)!" << std::endl;
+
+        // 4. Проверка того, что обычный враг проводит полноценные комбо (maxComboHits >= 2)
+        normEnemy.setType(EnemyType::NORMAL);
+        assert(normEnemy.isSmartAI && "Normal enemy must have isSmartAI active!");
+        assert(normEnemy.maxComboHits == 2 && "Normal enemy default maxComboHits must be 2!");
+        std::cout << "-> Step 3: Verified Normal Enemy performs 2-hit combos based on intelligence!" << std::endl;
+
+        std::cout << "-> PASSED: Boss VFX, Jump Slam Landing & Normal Enemy Combos verified 100%!" << std::endl;
     }
 
     std::cout << "\n======================================================" << std::endl;

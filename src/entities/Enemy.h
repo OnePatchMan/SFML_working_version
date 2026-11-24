@@ -7,6 +7,7 @@
 #include "core/Common.h"
 #include "entities/EnemyConfig.h"
 #include "graphics/VfxSystem.h"
+#include "graphics/BossVfx.h"
 
 class Arena;
 
@@ -294,6 +295,7 @@ public:
     AIStarterType currentStarterType = AIStarterType::STARTER_1F2D1;
     int nextStarterChoice = 0;
     int maxComboHits = 3;
+    int currentComboHit = 0;
     bool allowAirFollowup = true;
 
     // Система восприятия, патрулирования и прыжков
@@ -417,6 +419,7 @@ public:
     void triggerBossBullCharge();
     void triggerBossEarthquake();
     void triggerBossJumpSlam();
+    void triggerBossJumpSlamLanding(const Arena& arena);
     void triggerBossCombo(int comboIndex);
     void interruptBossComboAndStun(float stunTime);
     void updateBoss1(float dt, const Arena& arena, const sf::Vector2f& playerPos, bool playerIsStunned, bool playerIsAttacking);

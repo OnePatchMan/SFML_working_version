@@ -7,6 +7,7 @@
 #include "core/Common.h"
 #include "combat/CombatConfig.h"
 #include "graphics/VfxSystem.h"
+#include "graphics/BossVfx.h"
 
 class Player;
 class Enemy;

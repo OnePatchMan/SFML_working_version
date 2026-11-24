@@ -156,7 +156,7 @@ struct NormalEnemyConfig {
     float hp = 45.0f;
     float speed = 220.0f;
     float approachSpeed = 280.0f;
-    float damageMult = 1.0f;
+    float damageMult = 5.5f; // Урон обычной атаки 5-6 (5.5)
     float scale = 1.0f;
     bool canCounter = false;
     bool canBlock = false;

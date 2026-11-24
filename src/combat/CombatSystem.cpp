@@ -836,6 +836,7 @@ void CombatSystem::update(float dt, Player& player, std::vector<Enemy>& enemies)
 
 void CombatSystem::updateInternal(float dt, Player& player, const std::vector<Enemy*>& enemiesList) {
     VfxSystem::get().update(dt);
+    BossVfxManager::get().update(dt);
     bool isGroundedNow = player.isOnGround();
     if (_wasGroundedLastFrame && !isGroundedNow && player.velocity.y < -120.0f) {
         registerJump();
@@ -2402,8 +2403,9 @@ void CombatSystem::drawWorld(sf::RenderWindow& window, const Player& player) {
         }
     }
 
-    // 7. Отрисовка динамических спец-эффектов Pixelfx
+    // 7. Отрисовка динамических спец-эффектов Pixelfx и процедурных спецэффектов Босса
     VfxSystem::get().draw(window);
+    BossVfxManager::get().draw(window);
 }
 
 void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {

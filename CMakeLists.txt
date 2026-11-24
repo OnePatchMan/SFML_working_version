@@ -42,6 +42,7 @@ add_executable(FightingComboArena
     src/audio/SoundManager.cpp
     src/ui/MenuSystem.cpp
     src/graphics/VfxSystem.cpp
+    src/graphics/BossVfx.cpp
 )
 
 target_include_directories(FightingComboArena PRIVATE
@@ -70,6 +71,7 @@ add_executable(test_directional_combos
     src/combat/CombatSystem.cpp
     src/audio/SoundManager.cpp
     src/graphics/VfxSystem.cpp
+    src/graphics/BossVfx.cpp
 )
 
 target_include_directories(test_directional_combos PRIVATE
@@ -101,6 +103,7 @@ if(MAP_EDITOR_DIR)
         src/combat/CombatSystem.cpp
         src/audio/SoundManager.cpp
         src/graphics/VfxSystem.cpp
+        src/graphics/BossVfx.cpp
     )
 
     target_include_directories(MapEditor PRIVATE
