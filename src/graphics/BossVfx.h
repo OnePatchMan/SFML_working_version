@@ -13,38 +13,77 @@ enum class BossSlashType {
     WHIRLWIND_360      // Круговой вихревой взмах (Смерч ударов)
 };
 
-// Экземпляр процедурного рубящего взмаха босса (точно по размеру хитбокса)
+// Экземпляр рубящего взмаха босса с ослепительным энергетическим шлейфом и снопом искр
 struct BossSlashInstance {
     sf::FloatRect hitbox;
     bool facingLeft = false;
     BossSlashType type = BossSlashType::HORIZONTAL_CLEAVE;
     float timer = 0.0f;
-    float maxDuration = 0.22f;
+    float maxDuration = 0.28f;
     bool active = true;
 
-    // Внутренние процедурные частицы/искры взмаха
+    // Внутренние процедурные искры со скоростными шлейфами
     struct Spark {
         sf::Vector2f pos;
+        sf::Vector2f prevPos;
         sf::Vector2f vel;
         float timer = 0.0f;
-        float maxLife = 0.25f;
+        float maxLife = 0.35f;
+        sf::Color color = sf::Color(255, 230, 80);
     };
     std::vector<Spark> sparks;
 };
 
-// Вырывающиеся из земли каменные шипы при Землетрясении и Слэме
-struct BossGroundSpike {
-    sf::Vector2f basePos;
-    float width = 24.0f;
-    float targetHeight = 55.0f;
-    float currentHeight = 0.0f;
-    float tilt = 0.0f;
+// Клубящиеся частицы объемной пыли и дыма (Volumetric Dust Plume)
+struct BossDustPuff {
+    sf::Vector2f pos;
+    sf::Vector2f vel;
+    float currentRadius = 14.0f;
+    float maxRadius = 48.0f;
+    float rot = 0.0f;
+    float rotSpeed = 0.0f;
     float timer = 0.0f;
-    float maxDuration = 0.85f;
+    float maxDuration = 1.2f;
+    sf::Color color = sf::Color(140, 115, 90);
     bool active = true;
 };
 
-// Разлетающиеся каменные осколки и комья земли
+// Разломы и пылающие трещины в земле
+struct BossGroundCrack {
+    sf::Vector2f center;
+    float length = 120.0f;
+    std::vector<sf::Vector2f> jaggedPoints;
+    float timer = 0.0f;
+    float maxDuration = 1.8f;
+    bool active = true;
+};
+
+// Бегущая по всей арене волна сотрясения земли (Earthquake Arena Wave)
+struct BossArenaShockwave {
+    float x = 0.0f;
+    float groundY = 0.0f;
+    float dir = 1.0f;
+    float speed = 680.0f;
+    float currentDist = 0.0f;
+    float maxDist = 1100.0f;
+    float puffTimer = 0.0f;
+    bool active = true;
+};
+
+// Вырывающиеся из земли массивные каменные шипы
+struct BossGroundSpike {
+    sf::Vector2f basePos;
+    float width = 30.0f;
+    float targetHeight = 65.0f;
+    float currentHeight = 0.0f;
+    float tilt = 0.0f;
+    float timer = 0.0f;
+    float maxDuration = 1.1f;
+    sf::Color rockColor = sf::Color(75, 65, 60);
+    bool active = true;
+};
+
+// Разлетающиеся осколки камней и комья породы
 struct BossDebrisChunk {
     sf::Vector2f pos;
     sf::Vector2f vel;
@@ -52,20 +91,20 @@ struct BossDebrisChunk {
     float rotSpeed = 0.0f;
     float size = 8.0f;
     float timer = 0.0f;
-    float maxDuration = 0.70f;
-    sf::Color color = sf::Color(110, 85, 75);
+    float maxDuration = 0.90f;
+    sf::Color color = sf::Color(100, 85, 75);
     bool active = true;
 };
 
 // Расширяющиеся кольца ударной волны по полу
 struct BossShockwaveRing {
     sf::Vector2f center;
-    float radiusX = 10.0f;
-    float radiusY = 5.0f;
-    float maxRadiusX = 180.0f;
-    float speed = 450.0f;
+    float radiusX = 15.0f;
+    float radiusY = 6.0f;
+    float maxRadiusX = 220.0f;
+    float speed = 520.0f;
     float timer = 0.0f;
-    float maxDuration = 0.45f;
+    float maxDuration = 0.50f;
     sf::Color color = sf::Color(255, 60, 30);
     bool active = true;
 };
@@ -74,8 +113,9 @@ struct BossShockwaveRing {
 struct BossJumpSlamPillar {
     sf::FloatRect hitbox;
     float timer = 0.0f;
-    float maxDuration = 0.32f;
+    float maxDuration = 0.38f;
     bool active = true;
+    std::vector<std::vector<sf::Vector2f>> lightningBranches;
 };
 
 // Взрыв породы и пыли при врезании тарана в стену
@@ -83,7 +123,7 @@ struct BossWallCrashEffect {
     sf::Vector2f pos;
     float dirX = -1.0f;
     float timer = 0.0f;
-    float maxDuration = 0.65f;
+    float maxDuration = 0.75f;
     bool active = true;
     std::vector<BossDebrisChunk> chunks;
 };
@@ -95,7 +135,7 @@ struct BossAfterimageGhost {
     sf::Vector2f origin;
     bool facingLeft = false;
     float timer = 0.0f;
-    float maxDuration = 0.18f;
+    float maxDuration = 0.22f;
     bool active = true;
 };
 
@@ -104,6 +144,9 @@ private:
     std::vector<BossSlashInstance> m_slashes;
     std::vector<BossGroundSpike> m_spikes;
     std::vector<BossDebrisChunk> m_debris;
+    std::vector<BossDustPuff> m_dustPuffs;
+    std::vector<BossGroundCrack> m_cracks;
+    std::vector<BossArenaShockwave> m_arenaWaves;
     std::vector<BossShockwaveRing> m_rings;
     std::vector<BossJumpSlamPillar> m_pillars;
     std::vector<BossWallCrashEffect> m_wallCrashes;
@@ -118,13 +161,19 @@ public:
     }
 
     // Спавн рубящего удара, идеально подогнанного под размеры хитбокса
-    void spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, BossSlashType type, float duration = 0.22f);
+    void spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, BossSlashType type, float duration = 0.26f);
 
-    // Спавн сокрушительного удара в землю (Землетрясение / приземление слэма)
-    void spawnGroundImpact(const sf::Vector2f& groundPos, float width = 340.0f, bool intense = false);
+    // Спавн сокрушительного удара в землю: взрыв пыли, волны на всю арену, шипы и трещины
+    void spawnGroundImpact(const sf::Vector2f& groundPos, float width = 420.0f, bool intense = false);
+
+    // Спавн бегущих волн сотрясения на всю арену с непрерывным поднятием клубов пыли
+    void spawnArenaShockwaves(const sf::Vector2f& groundPos, float maxDist = 1100.0f);
+
+    // Спавн объемного клубящегося облака пыли
+    void spawnDustCloud(const sf::Vector2f& pos, const sf::Vector2f& vel, float radius, sf::Color color, float life = 1.1f);
 
     // Спавн вертикального энергетического столба удара с воздуха по полу
-    void spawnJumpSlamBeam(const sf::FloatRect& hitbox, float duration = 0.30f);
+    void spawnJumpSlamBeam(const sf::FloatRect& hitbox, float duration = 0.35f);
 
     // Спавн взрыва породы при врезании в стену
     void spawnWallCrash(const sf::Vector2f& impactPos, float dirX);
@@ -138,4 +187,3 @@ public:
 
     size_t getActiveCount() const;
 };
-

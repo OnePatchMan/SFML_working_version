@@ -40,7 +40,7 @@ void Enemy::setType(EnemyType type) {
         halfH = HALF_H * scale;
         stunMultiplier = 1.0f;
         knockMultiplier = 1.0f;
-        damageMultiplier = ecfg.damageMult;
+        damageMultiplier = 5.5f;
         hitboxScale = 1.0f;
         windupMultiplier = 1.0f;
         canCounter = ecfg.canCounter;
@@ -613,13 +613,12 @@ void Enemy::applyAttackStats(const EnemyAttackStats& s, float dirX) {
         comboScaling = 0.68f;
     }
 
-    float baseDamage = s.damage;
     if (enemyType == EnemyType::NORMAL) {
-        // Обычный враг наносит 5-6 урона с базовой атаки (5.5) с учетом минус урона от комбо
-        baseDamage = 1.0f;
+        // Обычный враг ВСЕГДА наносит 5-6 урона с базовой атаки (5.5) с учетом минус урона от комбо
+        currentAttackDamage = 5.5f * comboScaling;
+    } else {
+        currentAttackDamage = s.damage * damageMultiplier * comboScaling;
     }
-
-    currentAttackDamage = baseDamage * damageMultiplier * comboScaling;
     currentAttackKnockX = dirX * s.knockX;
     currentAttackKnockY = s.knockY;
     currentAttackStun = s.stun;
@@ -3216,24 +3215,8 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
 
     // Для Босса 1 не рисуем маленькую полоску ХП над головой (у него большой верхний ХП-бар на экране)
     if (enemyType == EnemyType::BOSS_1) {
-        // Отрисовка спец-эффектов Босса 1
-        // 1. Отрисовка волн пыли на земле (Earthquake Dust Waves)
-        for (const auto& wave : bossDustWaves) {
-            if (!wave.active) continue;
-            sf::CircleShape dust(14.0f);
-            dust.setOrigin({14.0f, 14.0f});
-            dust.setPosition({wave.x, wave.y});
-            dust.setFillColor(sf::Color(180, 140, 95, static_cast<std::uint8_t>(std::clamp(wave.lifetime * 255.0f, 0.0f, 255.0f))));
-            window.draw(dust);
-
-            sf::CircleShape inner(8.0f);
-            inner.setOrigin({8.0f, 8.0f});
-            inner.setPosition({wave.x, wave.y});
-            inner.setFillColor(sf::Color(240, 200, 140, static_cast<std::uint8_t>(std::clamp(wave.lifetime * 255.0f, 0.0f, 255.0f))));
-            window.draw(inner);
-        }
-
-        // 2. Звездочки стана при ударе о стену
+        // Отрисовка спец-эффектов Босса 1 (клубящаяся пыль и разломы отрисовываются через BossVfxManager)
+        // Звездочки стана при ударе о стену
         if (isBossWallStunned()) {
             static float stunStarAngle = 0.0f;
             stunStarAngle += 8.0f;
@@ -3804,13 +3787,13 @@ void Enemy::triggerBossJumpSlamLanding(const Arena& arena) {
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
 
     float groundY = position.y + halfH;
-    GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
-    GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
+    GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 680.0f, 0.0f, 950.0f, true, 1.5f};
+    GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 680.0f, 0.0f, 950.0f, true, 1.5f};
     bossDustWaves.push_back(waveL);
     bossDustWaves.push_back(waveR);
 
-    // Процедурные спецэффекты босса: сокрушительный удар о землю и взрыв каменной породы
-    BossVfxManager::get().spawnGroundImpact({position.x, groundY}, 440.0f, true);
+    // Грандиозные спецэффекты босса: сокрушительный удар о землю, разломы, шипы и буря клубящейся пыли по всей арене
+    BossVfxManager::get().spawnGroundImpact({position.x, groundY}, 520.0f, true);
 
     SoundManager::get().play("wall_slam", 95.0f);
     if (CombatSystem::getActive()) {
@@ -4009,11 +3992,12 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         // Перемещение с проверкой коллизии с блоками
         bool moved = tryBossMoveX(velocity.x * dt);
 
-        // Процедурный шлейф/фантом босса во время разгона
+        // Процедурный шлейф/фантом босса и клубы пыли из-под ног во время разгона
         bossChargeTrailTimer -= dt;
         if (bossChargeTrailTimer <= 0.0f) {
             bossChargeTrailTimer = 0.08f;
             BossVfxManager::get().spawnAfterimage(position, sf::Vector2f(halfW * 2.0f, halfH * 2.0f), sf::Vector2f(halfW, halfH), isFacingLeft);
+            BossVfxManager::get().spawnDustCloud({position.x - dir * halfW * 0.8f, position.y + halfH - 4.0f}, {-dir * 120.0f, -80.0f}, 18.0f, sf::Color(140, 115, 90), 0.6f);
         }
 
         bossSpecialTimer -= dt;
@@ -4045,13 +4029,13 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
             bossSpecialTimer = 0.35f;
 
             float groundY = position.y + halfH;
-            GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
-            GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 480.0f, 0.0f, 420.0f, true, 1.0f};
+            GroundDustWave waveL{position.x - 40.0f, groundY - 14.0f, -1.0f, 680.0f, 0.0f, 950.0f, true, 1.5f};
+            GroundDustWave waveR{position.x + 40.0f, groundY - 14.0f,  1.0f, 680.0f, 0.0f, 950.0f, true, 1.5f};
             bossDustWaves.push_back(waveL);
             bossDustWaves.push_back(waveR);
 
-            // Процедурные каменные шипы, ударные волны и разлетающиеся обломки
-            BossVfxManager::get().spawnGroundImpact({position.x, groundY}, 420.0f, true);
+            // Процедурные каменные шипы, ударные волны, разломы и буря клубящейся пыли по всей арене
+            BossVfxManager::get().spawnGroundImpact({position.x, groundY}, 480.0f, true);
 
             SoundManager::get().playAttack("heavy", "", false, 95.0f);
             if (CombatSystem::getActive()) {

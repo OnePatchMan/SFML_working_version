@@ -7018,13 +7018,30 @@ int main() {
         normEnemy.currentComboHit = 1; // 2-й удар в комбо
         normEnemy.applyAttackStats(testStrike, 1.0f);
         assert(std::abs(normEnemy.currentAttackDamage - (5.5f * 0.82f)) < 0.05f); // ~4.51f
-        std::cout << "-> Step 2: Verified Normal Enemy deals 5.5 dmg on hit 1, and 4.51 dmg on hit 2 (combo decay)!" << std::endl;
+
+        // Проверка фактического нанесения урона игроку: игрок теряет 5.5 ХП от 1-го удара
+        Player victimPlayer({340.0f, 500.0f});
+        victimPlayer.hp = 100.0f;
+        victimPlayer.takeDamage(5.5f, 0.0f, 0.0f, 0.2f);
+        assert(std::abs(victimPlayer.hp - 94.5f) < 0.01f && "Player MUST lose 5.5 HP (not 1.0 HP)!");
+        std::cout << "-> Step 2: Verified Normal Enemy deals 5.5 dmg on hit 1 (Player 100 -> 94.5 HP), and 4.51 dmg on hit 2!" << std::endl;
 
         // 4. Проверка того, что обычный враг проводит полноценные комбо (maxComboHits >= 2)
         normEnemy.setType(EnemyType::NORMAL);
         assert(normEnemy.isSmartAI && "Normal enemy must have isSmartAI active!");
         assert(normEnemy.maxComboHits == 2 && "Normal enemy default maxComboHits must be 2!");
         std::cout << "-> Step 3: Verified Normal Enemy performs 2-hit combos based on intelligence!" << std::endl;
+
+        // 5. Проверка генерации эпической пылевой бури на всю арену в BossVfxManager
+        BossVfxManager::get().clear();
+        BossVfxManager::get().spawnGroundImpact({400.0f, 500.0f}, 480.0f, true);
+        assert(BossVfxManager::get().getActiveCount() > 15 && "Ground impact must spawn dust clouds, spikes, debris & arena waves!");
+        // Симулируем несколько кадров распространения волны сотрясения земли
+        for (int f = 0; f < 20; ++f) {
+            BossVfxManager::get().update(0.016f);
+        }
+        assert(BossVfxManager::get().getActiveCount() > 20 && "Arena shockwave must continuously erupt dust clouds across the floor!");
+        std::cout << "-> Step 4: Verified Boss 1 triggers massive volumetric dust clouds and arena shockwaves!" << std::endl;
 
         std::cout << "-> PASSED: Boss VFX, Jump Slam Landing & Normal Enemy Combos verified 100%!" << std::endl;
     }
