@@ -7,10 +7,12 @@
 #include "core/Common.h"
 
 enum class BossSlashType {
-    HEAVY_OVERHEAD,    // Вертикальный/диагональный сокрушительный удар сверху вниз
-    HORIZONTAL_CLEAVE, // Горизонтальный размашистый рубящий взмах
-    CROSS_X,           // Крестообразный двойной рассекатель
-    WHIRLWIND_360      // Круговой вихревой взмах (Смерч ударов)
+    HORIZONTAL_CLEAVE, // Горизонтальный силовой разрез с огненным полумесяцем и скоростными линиями
+    UPWARD_CLEAVE,     // Восходящий подсекающий полумесяц (снизу вверх) с искрами от пола
+    HEAVY_OVERHEAD,    // Сокрушительный вертикальный разрез сверху вниз с ударом о землю
+    CROSS_X,           // Двойной перекрестный разрез (X-образный) со вспышкой в центре
+    WHIRLWIND_360,     // Полный круговой смерч клинков 360° с центробежными искрами
+    PIERCING_THRUST    // Сверхзвуковой колющий выпад вперед с конусом ударной волны
 };
 
 // Экземпляр рубящего взмаха босса с ослепительным энергетическим шлейфом и снопом искр
@@ -20,6 +22,7 @@ struct BossSlashInstance {
     BossSlashType type = BossSlashType::HORIZONTAL_CLEAVE;
     float timer = 0.0f;
     float maxDuration = 0.28f;
+    float groundY = 0.0f;
     bool active = true;
 
     // Внутренние процедурные искры со скоростными шлейфами
@@ -29,7 +32,9 @@ struct BossSlashInstance {
         sf::Vector2f vel;
         float timer = 0.0f;
         float maxLife = 0.35f;
+        float size = 2.0f;
         sf::Color color = sf::Color(255, 230, 80);
+        bool isFloorSpark = false;
     };
     std::vector<Spark> sparks;
 };
@@ -52,6 +57,8 @@ struct BossDustPuff {
 struct BossGroundCrack {
     sf::Vector2f center;
     float length = 120.0f;
+    sf::Vector2f startPos;
+    sf::Vector2f endPos;
     std::vector<sf::Vector2f> jaggedPoints;
     float timer = 0.0f;
     float maxDuration = 1.8f;
@@ -161,7 +168,7 @@ public:
     }
 
     // Спавн рубящего удара, идеально подогнанного под размеры хитбокса
-    void spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, BossSlashType type, float duration = 0.26f);
+    void spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, BossSlashType type, float duration = 0.26f, float groundY = 0.0f);
 
     // Спавн сокрушительного удара в землю: взрыв пыли, волны на всю арену, шипы и трещины
     void spawnGroundImpact(const sf::Vector2f& groundPos, float width = 420.0f, bool intense = false);

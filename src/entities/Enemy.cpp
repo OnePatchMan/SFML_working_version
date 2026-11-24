@@ -3034,8 +3034,8 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(eye);
     }
 
-    // Отрисовка взмаха атаки
-    if (attackState == EnemyAttackState::ATTACKING) {
+    // Отрисовка взмаха атаки (для обычных мобов и дуэлянтов; у Босса 1 собственные кинематографичные процедурные VFX)
+    if (attackState == EnemyAttackState::ATTACKING && enemyType != EnemyType::BOSS_1) {
         sf::RectangleShape slash({attackHitbox.size.x, attackHitbox.size.y});
         slash.setPosition(attackHitbox.position);
         if (enemyType == EnemyType::DUELIST) {
@@ -3055,13 +3055,12 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         window.draw(slash);
     }
 
-    // Предупреждение перед атакой Босса 1 (заменяет замах: красный бейдж [ ! ] и подсвечиваемая зона удара)
+    // Предупреждение перед специальными атаками Босса 1 (Таран, Дрожь земли, Прыжок-Слэм)
     if (enemyType == EnemyType::BOSS_1) {
-        bool isTelegraphing = (attackState == EnemyAttackState::WINDUP) ||
-                              (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH) ||
-                              (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH) ||
-                              (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH);
-        if (isTelegraphing) {
+        bool isSpecialTelegraphing = (bossSpecialState == Boss1SpecialState::BULL_CHARGE_TELEGRAPH) ||
+                                     (bossSpecialState == Boss1SpecialState::EARTHQUAKE_TELEGRAPH) ||
+                                     (bossSpecialState == Boss1SpecialState::JUMP_SLAM_TELEGRAPH);
+        if (isSpecialTelegraphing) {
             // 1. Светящийся бейдж предупреждения [ ! ] над головой босса
             sf::CircleShape warnBadge(15.0f);
             warnBadge.setOrigin({15.0f, 15.0f});
@@ -3100,11 +3099,30 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
 
             sf::RectangleShape warnBox({totalW, hbh});
             warnBox.setPosition({hbx, hby});
-            float pulse = 0.6f + 0.4f * std::sin(attackStateTimer * 28.0f);
+            float pulse = 0.6f + 0.4f * std::sin(bossSpecialTimer * 28.0f);
             warnBox.setFillColor(sf::Color(255, 40, 20, static_cast<std::uint8_t>(45 + 45 * pulse)));
             warnBox.setOutlineThickness(2.0f);
             warnBox.setOutlineColor(sf::Color(255, 220, 40, static_cast<std::uint8_t>(160 + 80 * pulse)));
             window.draw(warnBox);
+        } else if (attackState == EnemyAttackState::WINDUP) {
+            // Тонкий алый блик готовности удара в визоре босса перед взмахом комбо (без громоздких рамок)
+            float gleamT = std::clamp(1.0f - attackStateTimer / 0.35f, 0.0f, 1.0f);
+            float pulse = std::sin(gleamT * 3.14159f);
+            if (pulse > 0.05f) {
+                float gleamR = 10.0f * pulse;
+                sf::CircleShape eyeGleam(gleamR);
+                eyeGleam.setOrigin({gleamR, gleamR});
+                float eyeX = isFacingLeft ? (position.x - halfW * 0.45f) : (position.x + halfW * 0.45f);
+                eyeGleam.setPosition({eyeX, position.y - halfH * 0.45f});
+                eyeGleam.setFillColor(sf::Color(255, 30, 20, static_cast<std::uint8_t>(220 * pulse)));
+                window.draw(eyeGleam);
+
+                sf::CircleShape eyeCore(3.5f * pulse);
+                eyeCore.setOrigin({eyeCore.getRadius(), eyeCore.getRadius()});
+                eyeCore.setPosition({eyeX, position.y - halfH * 0.45f});
+                eyeCore.setFillColor(sf::Color(255, 255, 230, static_cast<std::uint8_t>(255 * pulse)));
+                window.draw(eyeCore);
+            }
         }
 
         // 3. Отрисовка энергетической волны удара с воздуха по полу (Jump Slam Strike)
@@ -3696,18 +3714,37 @@ void Enemy::updateBossComboSequence(float dt, const sf::Vector2f& playerPos, con
             attackHitbox = sf::FloatRect({hbx, hby}, {totalW, hbh});
             SoundManager::get().playAttack(step.sfx, "", false, 90.0f);
 
-            // Процедурные спецэффекты атак босса (точно подогнаны под габариты attackHitbox):
+            // Кинематографичные процедурные спецэффекты ударов босса:
             BossSlashType slashType = BossSlashType::HORIZONTAL_CLEAVE;
-            if (bossNextComboIndex == 4) { // СМЕРЧ УДАРОВ
-                slashType = BossSlashType::WHIRLWIND_360;
-            } else if (step.damage >= 24.0f) { // Тяжелый финишер
-                slashType = BossSlashType::HEAVY_OVERHEAD;
-            } else if (bossCurrentComboHit % 2 == 1) { // Чередование ударов
-                slashType = BossSlashType::CROSS_X;
-            } else {
-                slashType = BossSlashType::HORIZONTAL_CLEAVE;
+            if (bossNextComboIndex == 0) { // ЗАТЯЖНОЙ СМЭШ [3 УДАРА]
+                if (bossCurrentComboHit == 0) slashType = BossSlashType::HORIZONTAL_CLEAVE;
+                else if (bossCurrentComboHit == 1) slashType = BossSlashType::UPWARD_CLEAVE;
+                else slashType = BossSlashType::HEAVY_OVERHEAD;
+            } else if (bossNextComboIndex == 1) { // КРЕСТОВОЙ РАССЕКАТЕЛЬ [3 УДАРА]
+                if (bossCurrentComboHit == 0) slashType = BossSlashType::HORIZONTAL_CLEAVE;
+                else if (bossCurrentComboHit == 1) slashType = BossSlashType::UPWARD_CLEAVE;
+                else slashType = BossSlashType::CROSS_X;
+            } else if (bossNextComboIndex == 2) { // ЯРОСТЬ БЕРСЕРКА [4 УДАРА]
+                if (bossCurrentComboHit == 0) slashType = BossSlashType::PIERCING_THRUST;
+                else if (bossCurrentComboHit == 1) slashType = BossSlashType::HORIZONTAL_CLEAVE;
+                else if (bossCurrentComboHit == 2) slashType = BossSlashType::UPWARD_CLEAVE;
+                else slashType = BossSlashType::HEAVY_OVERHEAD;
+            } else if (bossNextComboIndex == 3) { // СОКРУШИТЕЛЬ ПОЗЫ [2 УДАРА]
+                if (bossCurrentComboHit == 0) slashType = BossSlashType::HEAVY_OVERHEAD;
+                else slashType = BossSlashType::HORIZONTAL_CLEAVE;
+            } else if (bossNextComboIndex == 4) { // СМЕРЧ УДАРОВ [4 УДАРА]
+                if (bossCurrentComboHit == 1 || bossCurrentComboHit == 3) slashType = BossSlashType::WHIRLWIND_360;
+                else if (bossCurrentComboHit == 2) slashType = BossSlashType::UPWARD_CLEAVE;
+                else slashType = BossSlashType::HORIZONTAL_CLEAVE;
+            } else if (bossNextComboIndex == 5) { // ТЕМПОВЫЙ РАЗРЫВ [4 УДАРА]
+                if (bossCurrentComboHit == 0) slashType = BossSlashType::HEAVY_OVERHEAD;
+                else if (bossCurrentComboHit == 1) slashType = BossSlashType::HORIZONTAL_CLEAVE;
+                else if (bossCurrentComboHit == 2) slashType = BossSlashType::UPWARD_CLEAVE;
+                else slashType = BossSlashType::CROSS_X;
             }
-            BossVfxManager::get().spawnSlash(attackHitbox, isFacingLeft, slashType, step.activeTime);
+
+            float bossFloorY = position.y + halfH;
+            BossVfxManager::get().spawnSlash(attackHitbox, isFacingLeft, slashType, step.activeTime, bossFloorY);
         }
     } else if (attackState == EnemyAttackState::ATTACKING) {
         attackStateTimer -= dt;

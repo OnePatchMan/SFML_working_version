@@ -1,31 +1,117 @@
 #include "graphics/BossVfx.h"
 
-void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, BossSlashType type, float duration) {
+void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, BossSlashType type, float duration, float groundY) {
     BossSlashInstance inst;
     inst.hitbox = hitbox;
     inst.facingLeft = facingLeft;
     inst.type = type;
     inst.timer = 0.0f;
     inst.maxDuration = duration;
+    inst.groundY = (groundY > 0.0f) ? groundY : (hitbox.position.y + hitbox.size.y);
     inst.active = true;
 
-    // Генерация веера искр вдоль дуги лезвия со скоростными шлейфами
-    int sparkCount = 36;
+    float dir = facingLeft ? -1.0f : 1.0f;
+    float x = hitbox.position.x;
+    float y = hitbox.position.y;
+    float w = hitbox.size.x;
+    float h = hitbox.size.y;
+    float pivotX = facingLeft ? (x + w * 0.90f) : (x + w * 0.10f);
+
+    int sparkCount = 38;
+    if (type == BossSlashType::WHIRLWIND_360) sparkCount = 52;
+    else if (type == BossSlashType::CROSS_X) sparkCount = 48;
+    else if (type == BossSlashType::HEAVY_OVERHEAD) sparkCount = 46;
+
     for (int i = 0; i < sparkCount; ++i) {
         BossSlashInstance::Spark s;
-        float fx = hitbox.position.x + (facingLeft ? hitbox.size.x * (0.65f + (rand() % 35) / 100.0f) : hitbox.size.x * (0.0f + (rand() % 35) / 100.0f));
-        float fy = hitbox.position.y + hitbox.size.y * (0.05f + 0.90f * (i / static_cast<float>(sparkCount)));
-        s.pos = {fx, fy};
+        float u = i / static_cast<float>(sparkCount);
+
+        if (type == BossSlashType::WHIRLWIND_360) {
+            float angle = static_cast<float>(rand() % 360);
+            float rad = angle * 3.14159f / 180.0f;
+            float rDist = (w * 0.22f) + static_cast<float>(rand() % static_cast<int>(w * 0.26f + 1.0f));
+            s.pos = {x + w * 0.5f + std::cos(rad) * rDist, y + h * 0.52f + std::sin(rad) * (rDist * 0.85f)};
+            float spd = 340.0f + static_cast<float>(rand() % 340);
+            s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
+        } else if (type == BossSlashType::PIERCING_THRUST) {
+            float fx = pivotX + dir * (w * (0.2f + 0.75f * u));
+            float fy = y + h * 0.52f + ((rand() % 36) - 18.0f);
+            s.pos = {fx, fy};
+            float spd = 560.0f + static_cast<float>(rand() % 420);
+            float ang = (facingLeft ? 180.0f : 0.0f) + (-16.0f + static_cast<float>(rand() % 32));
+            float rad = ang * 3.14159f / 180.0f;
+            s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
+        } else if (type == BossSlashType::UPWARD_CLEAVE) {
+            float ang = 1.15f - u * 2.25f;
+            float px = pivotX + dir * std::cos(ang) * (w * 0.85f);
+            float py = y + h * 0.62f + std::sin(ang) * (h * 0.50f);
+            s.pos = {px, py};
+            float spd = 320.0f + static_cast<float>(rand() % 340);
+            float outAng = (facingLeft ? 180.0f : 0.0f) + (-65.0f - static_cast<float>(rand() % 50));
+            float rad = outAng * 3.14159f / 180.0f;
+            s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
+        } else if (type == BossSlashType::HEAVY_OVERHEAD) {
+            float ang = -1.45f + u * 2.80f;
+            float px = pivotX + dir * std::cos(ang) * (w * 0.78f);
+            float py = y + h * 0.18f + std::sin(ang) * (h * 0.82f);
+            s.pos = {px, py};
+            float spd = 360.0f + static_cast<float>(rand() % 380);
+            float outAng = (facingLeft ? 180.0f : 0.0f) + (35.0f + static_cast<float>(rand() % 55));
+            float rad = outAng * 3.14159f / 180.0f;
+            s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
+        } else if (type == BossSlashType::CROSS_X) {
+            bool d2 = (i % 2 == 1);
+            float ang = d2 ? (1.05f - u * 1.90f) : (-1.05f + u * 1.90f);
+            float pyOff = d2 ? (h * 0.72f) : (h * 0.28f);
+            float px = pivotX + dir * std::cos(ang) * (w * 0.82f);
+            float py = y + pyOff + std::sin(ang) * (h * 0.45f);
+            s.pos = {px, py};
+            float spd = 300.0f + static_cast<float>(rand() % 350);
+            float baseAngle = (facingLeft ? 180.0f : 0.0f) + (-45.0f + static_cast<float>(rand() % 90));
+            float rad = baseAngle * 3.14159f / 180.0f;
+            s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
+        } else { // HORIZONTAL_CLEAVE
+            float ang = -0.95f + u * 1.75f;
+            float px = pivotX + dir * std::cos(ang) * (w * 0.86f);
+            float py = y + h * 0.52f + std::sin(ang) * (h * 0.42f);
+            s.pos = {px, py};
+            float spd = 300.0f + static_cast<float>(rand() % 320);
+            float baseAngle = (facingLeft ? 180.0f : 0.0f) + (-35.0f + static_cast<float>(rand() % 70));
+            float rad = baseAngle * 3.14159f / 180.0f;
+            s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
+        }
+
         s.prevPos = s.pos;
-        float spd = 280.0f + static_cast<float>(rand() % 380);
-        float baseAngle = (type == BossSlashType::WHIRLWIND_360) ? static_cast<float>(rand() % 360) :
-                          (facingLeft ? 180.0f : 0.0f) + (-45.0f + static_cast<float>(rand() % 90));
-        float rad = baseAngle * 3.14159f / 180.0f;
-        s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
         s.timer = 0.0f;
-        s.maxLife = 0.20f + (rand() % 100) / 450.0f;
-        s.color = (i % 3 == 0) ? sf::Color(255, 255, 230) : ((i % 3 == 1) ? sf::Color(255, 200, 50) : sf::Color(255, 70, 20));
+        s.maxLife = 0.22f + (rand() % 100) / 400.0f;
+        s.size = (i % 4 == 0) ? 3.0f : 1.8f;
+        s.color = (i % 3 == 0) ? sf::Color(255, 255, 240) :
+                  ((i % 3 == 1) ? sf::Color(255, 195, 45) : sf::Color(255, 65, 20));
+        s.isFloorSpark = false;
         inst.sparks.push_back(s);
+    }
+
+    // Искры от трения о пол при низких или вертикальных ударах
+    if (type == BossSlashType::HEAVY_OVERHEAD || type == BossSlashType::UPWARD_CLEAVE ||
+        (inst.groundY - (y + h) < 35.0f)) {
+        int floorSparks = (type == BossSlashType::HEAVY_OVERHEAD) ? 18 : 10;
+        float sparkX = pivotX + dir * (w * 0.55f);
+        for (int k = 0; k < floorSparks; ++k) {
+            BossSlashInstance::Spark fs;
+            fs.pos = {sparkX + ((rand() % 40) - 20.0f), inst.groundY - 2.0f};
+            fs.prevPos = fs.pos;
+            float fspd = 280.0f + static_cast<float>(rand() % 380);
+            float fdir = (k % 3 == 0) ? -dir : dir;
+            float fAng = (fdir > 0.0f ? 0.0f : 180.0f) + (-10.0f - (rand() % 35));
+            float frad = fAng * 3.14159f / 180.0f;
+            fs.vel = {std::cos(frad) * fspd, std::sin(frad) * fspd};
+            fs.timer = 0.0f;
+            fs.maxLife = 0.16f + (rand() % 100) / 500.0f;
+            fs.size = 2.2f;
+            fs.color = (k % 2 == 0) ? sf::Color(255, 250, 220) : sf::Color(255, 160, 40);
+            fs.isFloorSpark = true;
+            inst.sparks.push_back(fs);
+        }
     }
 
     m_slashes.push_back(inst);
@@ -237,13 +323,23 @@ void BossVfxManager::update(float dt) {
     for (auto& s : m_slashes) {
         if (!s.active) continue;
         s.timer += dt;
-        if (s.timer >= s.maxDuration) s.active = false;
-        for (auto& sp : s.sparks) {
-            sp.timer += dt;
-            sp.prevPos = sp.pos;
-            sp.pos += sp.vel * dt;
-            sp.vel.y += 380.0f * dt; // Гравитация искр
-            sp.vel *= 0.94f;
+        if (s.timer >= s.maxDuration) {
+            s.active = false;
+        } else {
+            for (auto& sp : s.sparks) {
+                sp.timer += dt;
+                sp.prevPos = sp.pos;
+                sp.pos += sp.vel * dt;
+                sp.vel.x *= std::max(0.0f, 1.0f - 1.8f * dt);
+                if (!sp.isFloorSpark) {
+                    sp.vel.y += 420.0f * dt;
+                }
+                if (s.groundY > 0.0f && sp.pos.y >= s.groundY) {
+                    sp.pos.y = s.groundY;
+                    sp.vel.y = -sp.vel.y * 0.35f;
+                    sp.vel.x *= 0.72f;
+                }
+            }
         }
     }
     m_slashes.erase(std::remove_if(m_slashes.begin(), m_slashes.end(), [](const BossSlashInstance& s) { return !s.active; }), m_slashes.end());
@@ -565,7 +661,7 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
         }
     }
 
-    // 8. Отрисовка рубящих взмахов атак босса (точно по хитбоксу)
+    // 8. Отрисовка рубящих взмахов атак босса (кинематографичные процедурные клинки)
     for (const auto& s : m_slashes) {
         if (!s.active) continue;
         float prog = s.timer / s.maxDuration;
@@ -576,103 +672,341 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
         float y = s.hitbox.position.y;
         float w = s.hitbox.size.x;
         float h = s.hitbox.size.y;
+        float dir = s.facingLeft ? -1.0f : 1.0f;
 
-        // Внешнее светящееся силовое поле атаки
-        sf::RectangleShape boxGlow({w, h});
-        boxGlow.setPosition({x, y});
-        boxGlow.setFillColor(sf::Color(255, 45, 20, static_cast<std::uint8_t>(a * 0.22f)));
-        boxGlow.setOutlineThickness(2.2f);
-        boxGlow.setOutlineColor(sf::Color(255, 220, 60, a));
-        target.draw(boxGlow);
+        // Вспомогательная лямбда генерации многослойного серповидного лезвия
+        auto drawCrescentBlade = [&](sf::Vector2f pivot, float rx, float ry, float startAng, float endAng,
+                                     float thickness, float progress, float bladeAlpha, float sweepDir) {
+            float headT = std::min(1.0f, progress / 0.28f);
+            float tailT = std::clamp((progress - 0.10f) / 0.90f, 0.0f, 1.0f);
+            float curStart = startAng + (endAng - startAng) * (tailT * 0.32f);
+            float curEnd = startAng + (endAng - startAng) * headT;
 
-        if (s.type == BossSlashType::WHIRLWIND_360) {
-            // КРУГОВОЙ ВИХРЕВОЙ ВЗМАХ НА 360° (Смерч ударов)
-            sf::VertexArray spin(sf::PrimitiveType::TriangleStrip);
             int segs = 32;
-            float cx = x + w * 0.5f;
-            float cy = y + h * 0.5f;
-            float rOuterX = w * 0.49f;
-            float rOuterY = h * 0.46f;
-            float rInnerX = rOuterX * 0.55f;
-            float rInnerY = rOuterY * 0.55f;
+            std::vector<sf::Vector2f> outerPts;
+            std::vector<sf::Vector2f> midPts;
+            std::vector<sf::Vector2f> innerPts;
+            std::vector<sf::Vector2f> auraOuterPts;
+            std::vector<sf::Vector2f> auraInnerPts;
+
+            outerPts.reserve(segs + 1);
+            midPts.reserve(segs + 1);
+            innerPts.reserve(segs + 1);
+            auraOuterPts.reserve(segs + 1);
+            auraInnerPts.reserve(segs + 1);
 
             for (int i = 0; i <= segs; ++i) {
-                float ang = (i / static_cast<float>(segs)) * 6.28318f;
+                float u = i / static_cast<float>(segs);
+                float ang = curStart + (curEnd - curStart) * u;
                 float cosA = std::cos(ang);
                 float sinA = std::sin(ang);
 
-                sf::Color cOut = (i % 2 == 0) ? sf::Color(255, 45, 20, a) : sf::Color(255, 190, 40, a);
-                sf::Color cIn = sf::Color(255, 255, 245, a);
+                float px = pivot.x + sweepDir * cosA * rx;
+                float py = pivot.y + sinA * ry;
+                sf::Vector2f pSpine(px, py);
 
-                spin.append({{cx + cosA * rOuterX, cy + sinA * rOuterY}, cOut, {0.0f, 0.0f}});
-                spin.append({{cx + cosA * rInnerX, cy + sinA * rInnerY}, cIn, {0.0f, 0.0f}});
+                float tx = -sweepDir * sinA * rx;
+                float ty = cosA * ry;
+                float tlen = std::sqrt(tx * tx + ty * ty);
+                if (tlen > 0.001f) { tx /= tlen; ty /= tlen; }
+                float nx = -ty * sweepDir;
+                float ny = tx * sweepDir;
+
+                float thick = thickness * std::sin(u * 3.14159f) * (0.35f + 0.65f * u);
+                sf::Vector2f norm(nx, ny);
+
+                outerPts.push_back(pSpine + norm * (thick * 0.55f));
+                midPts.push_back(pSpine + norm * (thick * 0.10f));
+                innerPts.push_back(pSpine - norm * (thick * 0.45f));
+
+                auraOuterPts.push_back(pSpine + norm * (thick * 0.55f + 16.0f));
+                auraInnerPts.push_back(pSpine - norm * (thick * 0.45f + 12.0f));
             }
-            target.draw(spin);
-        } else if (s.type == BossSlashType::HEAVY_OVERHEAD) {
-            // ТЯЖЕЛЫЙ ВЕРТИКАЛЬНЫЙ СОКРУШИТЕЛЬНЫЙ РАЗРЕЗ
-            sf::VertexArray cleave(sf::PrimitiveType::TriangleStrip);
-            int segs = 20;
-            float startX = s.facingLeft ? (x + w * 0.85f) : (x + w * 0.15f);
-            float endX = s.facingLeft ? (x + w * 0.05f) : (x + w * 0.95f);
 
+            // Слой 1: Внешняя тепловая атмосфера и шлейф дыма
+            sf::VertexArray aura(sf::PrimitiveType::TriangleStrip);
             for (int i = 0; i <= segs; ++i) {
-                float t = i / static_cast<float>(segs);
-                float curX = startX + (endX - startX) * t;
-                float curY = y + t * h;
-                float ribW = std::sin(t * 3.14159f) * 45.0f;
+                float u = i / static_cast<float>(segs);
+                float uAlpha = std::sin(u * 3.14159f);
+                std::uint8_t aMid = static_cast<std::uint8_t>(bladeAlpha * uAlpha * 0.40f);
 
-                cleave.append({{curX - ribW, curY}, sf::Color(255, 45, 20, a), {0.0f, 0.0f}});
-                cleave.append({{curX, curY}, sf::Color(255, 255, 240, a), {0.0f, 0.0f}});
-                cleave.append({{curX + ribW, curY}, sf::Color(255, 180, 30, a), {0.0f, 0.0f}});
+                aura.append({auraOuterPts[i], sf::Color(190, 25, 10, 0), {0.0f, 0.0f}});
+                aura.append({midPts[i], sf::Color(255, 60, 20, aMid), {0.0f, 0.0f}});
             }
-            target.draw(cleave);
+            target.draw(aura);
+
+            sf::VertexArray auraIn(sf::PrimitiveType::TriangleStrip);
+            for (int i = 0; i <= segs; ++i) {
+                float u = i / static_cast<float>(segs);
+                float uAlpha = std::sin(u * 3.14159f);
+                std::uint8_t aMid = static_cast<std::uint8_t>(bladeAlpha * uAlpha * 0.40f);
+
+                auraIn.append({midPts[i], sf::Color(255, 60, 20, aMid), {0.0f, 0.0f}});
+                auraIn.append({auraInnerPts[i], sf::Color(120, 15, 10, 0), {0.0f, 0.0f}});
+            }
+            target.draw(auraIn);
+
+            // Слой 2: Раскаленное тело плазменного клинка (золотисто-алый градиент)
+            sf::VertexArray bladeOut(sf::PrimitiveType::TriangleStrip);
+            for (int i = 0; i <= segs; ++i) {
+                float u = i / static_cast<float>(segs);
+                float uAlpha = std::pow(std::sin(u * 3.14159f), 0.65f);
+                std::uint8_t aOut = static_cast<std::uint8_t>(bladeAlpha * uAlpha * 0.95f);
+                std::uint8_t aMid = static_cast<std::uint8_t>(bladeAlpha * uAlpha * 0.90f);
+
+                bladeOut.append({outerPts[i], sf::Color(255, 205, 50, aOut), {0.0f, 0.0f}});
+                bladeOut.append({midPts[i], sf::Color(255, 75, 20, aMid), {0.0f, 0.0f}});
+            }
+            target.draw(bladeOut);
+
+            sf::VertexArray bladeIn(sf::PrimitiveType::TriangleStrip);
+            for (int i = 0; i <= segs; ++i) {
+                float u = i / static_cast<float>(segs);
+                float uAlpha = std::pow(std::sin(u * 3.14159f), 0.65f);
+                std::uint8_t aMid = static_cast<std::uint8_t>(bladeAlpha * uAlpha * 0.90f);
+                std::uint8_t aIn = static_cast<std::uint8_t>(bladeAlpha * uAlpha * 0.55f);
+
+                bladeIn.append({midPts[i], sf::Color(255, 75, 20, aMid), {0.0f, 0.0f}});
+                bladeIn.append({innerPts[i], sf::Color(180, 25, 15, aIn), {0.0f, 0.0f}});
+            }
+            target.draw(bladeIn);
+
+            // Слой 3: Ослепительно-белая режущая кромка
+            sf::VertexArray cutEdge(sf::PrimitiveType::TriangleStrip);
+            for (int i = 0; i <= segs; ++i) {
+                float u = i / static_cast<float>(segs);
+                float uAlpha = std::pow(std::sin(u * 3.14159f), 0.5f);
+                std::uint8_t aWhite = static_cast<std::uint8_t>(bladeAlpha * uAlpha);
+                std::uint8_t aEdge = static_cast<std::uint8_t>(bladeAlpha * uAlpha * 0.65f);
+
+                sf::Vector2f edgeIn = outerPts[i] + (midPts[i] - outerPts[i]) * 0.28f;
+                cutEdge.append({outerPts[i], sf::Color(255, 255, 245, aWhite), {0.0f, 0.0f}});
+                cutEdge.append({edgeIn, sf::Color(255, 230, 90, aEdge), {0.0f, 0.0f}});
+            }
+            target.draw(cutEdge);
+
+            // Слой 4: Скоростные шлейфы рассечения воздуха
+            if (progress < 0.60f) {
+                float streakFade = (1.0f - progress / 0.60f) * bladeAlpha;
+                std::uint8_t aStreak = static_cast<std::uint8_t>(streakFade * 0.75f);
+                sf::VertexArray streak1(sf::PrimitiveType::LineStrip);
+                sf::VertexArray streak2(sf::PrimitiveType::LineStrip);
+                for (int i = 4; i < segs - 2; ++i) {
+                    streak1.append({outerPts[i] + (midPts[i] - outerPts[i]) * 0.15f, sf::Color(255, 245, 180, aStreak), {0.0f, 0.0f}});
+                    streak2.append({midPts[i] + (innerPts[i] - midPts[i]) * 0.25f, sf::Color(255, 190, 60, static_cast<std::uint8_t>(aStreak * 0.6f)), {0.0f, 0.0f}});
+                }
+                target.draw(streak1);
+                target.draw(streak2);
+            }
+
+            // Слой 5: Вспышка на острие в момент максимальной кинетической энергии
+            if (progress < 0.35f && !outerPts.empty()) {
+                float glintT = 1.0f - progress / 0.35f;
+                float glintLen = 28.0f * glintT;
+                float glintThick = 4.0f * glintT;
+                sf::Vector2f tip = outerPts.back();
+                std::uint8_t aGlint = static_cast<std::uint8_t>(bladeAlpha * glintT);
+
+                sf::VertexArray glint(sf::PrimitiveType::Triangles);
+                glint.append({{tip.x - glintLen, tip.y}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+                glint.append({{tip.x, tip.y - glintThick}, sf::Color(255, 255, 245, aGlint), {0.0f, 0.0f}});
+                glint.append({{tip.x + glintLen, tip.y}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+
+                glint.append({{tip.x + glintLen, tip.y}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+                glint.append({{tip.x, tip.y + glintThick}, sf::Color(255, 255, 245, aGlint), {0.0f, 0.0f}});
+                glint.append({{tip.x - glintLen, tip.y}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+
+                glint.append({{tip.x, tip.y - glintLen}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+                glint.append({{tip.x + glintThick, tip.y}, sf::Color(255, 255, 245, aGlint), {0.0f, 0.0f}});
+                glint.append({{tip.x, tip.y + glintLen}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+
+                glint.append({{tip.x, tip.y + glintLen}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+                glint.append({{tip.x - glintThick, tip.y}, sf::Color(255, 255, 245, aGlint), {0.0f, 0.0f}});
+                glint.append({{tip.x, tip.y - glintLen}, sf::Color(255, 210, 80, 0), {0.0f, 0.0f}});
+                target.draw(glint);
+
+                sf::CircleShape glintCore(4.5f * glintT);
+                glintCore.setOrigin({glintCore.getRadius(), glintCore.getRadius()});
+                glintCore.setPosition(tip);
+                glintCore.setFillColor(sf::Color(255, 255, 255, aGlint));
+                target.draw(glintCore);
+            }
+        };
+
+        if (s.type == BossSlashType::WHIRLWIND_360) {
+            // КРУГОВОЙ ВИХРЕВОЙ СМЕРЧ НА 360°
+            float cx = x + w * 0.5f;
+            float cy = y + h * 0.52f;
+            float rx = w * 0.46f;
+            float ry = h * 0.42f;
+            float spinAng = prog * 6.28318f * 2.2f;
+
+            for (int k = 0; k < 3; ++k) {
+                float finStart = spinAng + k * 2.0944f;
+                float finEnd = finStart + 1.45f;
+                drawCrescentBlade({cx, cy}, rx, ry, finStart, finEnd, 30.0f, prog, alpha, 1.0f);
+            }
+
+            // Внутреннее концентрическое энергетическое кольцо
+            sf::VertexArray spinRing(sf::PrimitiveType::TriangleStrip);
+            int segs = 28;
+            for (int i = 0; i <= segs; ++i) {
+                float ang = (i / static_cast<float>(segs)) * 6.28318f;
+                float ca = std::cos(ang);
+                float sa = std::sin(ang);
+                float rOutX = rx * 0.65f;
+                float rOutY = ry * 0.65f;
+                float rInX = rx * 0.48f;
+                float rInY = ry * 0.48f;
+
+                std::uint8_t aRing = static_cast<std::uint8_t>(a * 0.65f);
+                spinRing.append({{cx + ca * rOutX, cy + sa * rOutY}, sf::Color(255, 140, 30, aRing), {0.0f, 0.0f}});
+                spinRing.append({{cx + ca * rInX, cy + sa * rInY}, sf::Color(255, 240, 200, aRing), {0.0f, 0.0f}});
+            }
+            target.draw(spinRing);
+
+        } else if (s.type == BossSlashType::HEAVY_OVERHEAD) {
+            // СОКРУШИТЕЛЬНЫЙ ВЕРТИКАЛЬНЫЙ РАЗРЕЗ СВЕРХУ ВНИЗ
+            sf::Vector2f pivot = {s.facingLeft ? (x + w * 0.82f) : (x + w * 0.18f), y + h * 0.16f};
+            drawCrescentBlade(pivot, w * 0.84f, h * 0.86f, -1.45f, 1.35f, 50.0f, prog, alpha, dir);
+
+            // Вспышка и полукольцо удара о землю
+            if (prog < 0.45f) {
+                float hitT = 1.0f - prog / 0.45f;
+                float groundImpactX = pivot.x + dir * (w * 0.60f);
+                float gY = (s.groundY > 0.0f) ? s.groundY : (y + h);
+
+                sf::CircleShape impactFlash(26.0f * hitT);
+                impactFlash.setOrigin({impactFlash.getRadius(), impactFlash.getRadius()});
+                impactFlash.setPosition({groundImpactX, gY - 4.0f});
+                impactFlash.setFillColor(sf::Color(255, 255, 220, static_cast<std::uint8_t>(a * hitT * 0.85f)));
+                target.draw(impactFlash);
+
+                // Расширяющаяся ударная волна по полу
+                sf::VertexArray groundShock(sf::PrimitiveType::TriangleStrip);
+                int gsegs = 16;
+                float waveR = 40.0f + prog * 110.0f;
+                for (int i = 0; i <= gsegs; ++i) {
+                    float ga = (i / static_cast<float>(gsegs)) * 3.14159f;
+                    float gx = groundImpactX + std::cos(ga) * waveR;
+                    float gy = gY - std::sin(ga) * (waveR * 0.32f);
+                    float inR = waveR - 6.0f;
+                    float inGx = groundImpactX + std::cos(ga) * inR;
+                    float inGy = gY - std::sin(ga) * (inR * 0.32f);
+
+                    std::uint8_t aWave = static_cast<std::uint8_t>(a * hitT * 0.70f);
+                    groundShock.append({{gx, gy}, sf::Color(255, 70, 20, 0), {0.0f, 0.0f}});
+                    groundShock.append({{inGx, inGy}, sf::Color(255, 230, 90, aWave), {0.0f, 0.0f}});
+                }
+                target.draw(groundShock);
+            }
+
+        } else if (s.type == BossSlashType::UPWARD_CLEAVE) {
+            // ВОСХОДЯЩИЙ ПОДСЕКАЮЩИЙ РАЗРЕЗ СНИЗУ ВВЕРХ
+            sf::Vector2f pivot = {s.facingLeft ? (x + w * 0.90f) : (x + w * 0.10f), y + h * 0.62f};
+            drawCrescentBlade(pivot, w * 0.86f, h * 0.54f, 1.15f, -1.10f, 34.0f, prog, alpha, dir);
+
         } else if (s.type == BossSlashType::CROSS_X) {
             // ДВОЙНОЙ КРЕСТООБРАЗНЫЙ РАССЕКАТЕЛЬ
-            sf::VertexArray cross(sf::PrimitiveType::TriangleStrip);
+            sf::Vector2f pivot1 = {s.facingLeft ? (x + w * 0.88f) : (x + w * 0.12f), y + h * 0.28f};
+            drawCrescentBlade(pivot1, w * 0.82f, h * 0.46f, -1.05f, 0.85f, 32.0f, prog, alpha, dir);
+
+            sf::Vector2f pivot2 = {s.facingLeft ? (x + w * 0.88f) : (x + w * 0.12f), y + h * 0.72f};
+            drawCrescentBlade(pivot2, w * 0.82f, h * 0.46f, 1.05f, -0.85f, 32.0f, prog, alpha, dir);
+
+            // 8-лучевая звезда в точке перекрестия
+            if (prog < 0.40f) {
+                float crossT = 1.0f - prog / 0.40f;
+                sf::Vector2f crossCenter = {x + w * 0.50f, y + h * 0.50f};
+                float starLen = 32.0f * crossT;
+                float starThick = 4.5f * crossT;
+                std::uint8_t aCross = static_cast<std::uint8_t>(a * crossT);
+
+                sf::VertexArray star(sf::PrimitiveType::Triangles);
+                // Горизонтальный и вертикальный лучи
+                star.append({{crossCenter.x - starLen, crossCenter.y}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+                star.append({{crossCenter.x, crossCenter.y - starThick}, sf::Color(255, 255, 245, aCross), {0.0f, 0.0f}});
+                star.append({{crossCenter.x + starLen, crossCenter.y}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+
+                star.append({{crossCenter.x + starLen, crossCenter.y}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+                star.append({{crossCenter.x, crossCenter.y + starThick}, sf::Color(255, 255, 245, aCross), {0.0f, 0.0f}});
+                star.append({{crossCenter.x - starLen, crossCenter.y}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+
+                star.append({{crossCenter.x, crossCenter.y - starLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+                star.append({{crossCenter.x + starThick, crossCenter.y}, sf::Color(255, 255, 245, aCross), {0.0f, 0.0f}});
+                star.append({{crossCenter.x, crossCenter.y + starLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+
+                star.append({{crossCenter.x, crossCenter.y + starLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+                star.append({{crossCenter.x - starThick, crossCenter.y}, sf::Color(255, 255, 245, aCross), {0.0f, 0.0f}});
+                star.append({{crossCenter.x, crossCenter.y - starLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+
+                // Диагональные лучи
+                float diagLen = starLen * 0.707f;
+                float diagThick = starThick * 0.707f;
+                star.append({{crossCenter.x - diagLen, crossCenter.y - diagLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+                star.append({{crossCenter.x + diagThick, crossCenter.y - diagThick}, sf::Color(255, 255, 245, aCross), {0.0f, 0.0f}});
+                star.append({{crossCenter.x + diagLen, crossCenter.y + diagLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+
+                star.append({{crossCenter.x - diagLen, crossCenter.y + diagLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+                star.append({{crossCenter.x + diagThick, crossCenter.y + diagThick}, sf::Color(255, 255, 245, aCross), {0.0f, 0.0f}});
+                star.append({{crossCenter.x + diagLen, crossCenter.y - diagLen}, sf::Color(255, 180, 40, 0), {0.0f, 0.0f}});
+                target.draw(star);
+
+                sf::CircleShape burstCore(6.0f * crossT);
+                burstCore.setOrigin({burstCore.getRadius(), burstCore.getRadius()});
+                burstCore.setPosition(crossCenter);
+                burstCore.setFillColor(sf::Color(255, 255, 255, aCross));
+                target.draw(burstCore);
+            }
+
+        } else if (s.type == BossSlashType::PIERCING_THRUST) {
+            // СВЕРХЗВУКОВОЙ КОЛЮЩИЙ ВЫПАД
+            float startX = s.facingLeft ? (x + w * 0.90f) : (x + w * 0.10f);
+            float endX = s.facingLeft ? (x + w * 0.05f) : (x + w * 0.95f);
+            float midY = y + h * 0.52f;
+            float curReachX = startX + (endX - startX) * std::min(1.0f, prog / 0.25f);
+
+            // Копьевидный сердечник
+            sf::VertexArray spear(sf::PrimitiveType::TriangleStrip);
             int segs = 16;
             for (int i = 0; i <= segs; ++i) {
-                float t = i / static_cast<float>(segs);
-                float curX = x + t * w;
-                float curY1 = y + t * h;
-                float ribW = 18.0f * (1.0f - std::abs(t - 0.5f) * 1.5f);
-                cross.append({{curX, curY1 - ribW}, sf::Color(255, 50, 20, a), {0.0f, 0.0f}});
-                cross.append({{curX, curY1 + ribW}, sf::Color(255, 255, 220, a), {0.0f, 0.0f}});
-            }
-            target.draw(cross);
+                float u = i / static_cast<float>(segs);
+                float curX = startX + (curReachX - startX) * u;
+                float th = (1.0f - u) * 16.0f + u * 3.0f;
+                std::uint8_t aSp = static_cast<std::uint8_t>(a * (0.4f + 0.6f * u));
 
-            sf::VertexArray cross2(sf::PrimitiveType::TriangleStrip);
-            for (int i = 0; i <= segs; ++i) {
-                float t = i / static_cast<float>(segs);
-                float curX = x + t * w;
-                float curY2 = y + (1.0f - t) * h;
-                float ribW = 18.0f * (1.0f - std::abs(t - 0.5f) * 1.5f);
-                cross2.append({{curX, curY2 - ribW}, sf::Color(255, 190, 40, a), {0.0f, 0.0f}});
-                cross2.append({{curX, curY2 + ribW}, sf::Color(255, 255, 220, a), {0.0f, 0.0f}});
+                spear.append({{curX, midY - th}, sf::Color(255, 90, 20, aSp), {0.0f, 0.0f}});
+                spear.append({{curX, midY}, sf::Color(255, 255, 245, aSp), {0.0f, 0.0f}});
+                spear.append({{curX, midY + th}, sf::Color(255, 190, 40, aSp), {0.0f, 0.0f}});
             }
-            target.draw(cross2);
+            target.draw(spear);
+
+            // Конические ударные волны рассечения воздуха
+            for (int r = 0; r < 3; ++r) {
+                float coneT = std::fmod(prog * 2.8f + r * 0.33f, 1.0f);
+                float coneX = startX + (curReachX - startX) * coneT;
+                float coneW = 12.0f + coneT * 32.0f;
+                float coneH = 14.0f + coneT * 40.0f;
+                float coneFade = (1.0f - coneT) * a;
+
+                sf::VertexArray cone(sf::PrimitiveType::LineStrip);
+                int csegs = 12;
+                for (int ci = 0; ci <= csegs; ++ci) {
+                    float ca = -1.57f + (ci / static_cast<float>(csegs)) * 3.14159f;
+                    float cpx = coneX - dir * std::cos(ca) * coneW;
+                    float cpy = midY + std::sin(ca) * coneH;
+                    cone.append({{cpx, cpy}, sf::Color(255, 220, 110, static_cast<std::uint8_t>(coneFade * 0.65f)), {0.0f, 0.0f}});
+                }
+                target.draw(cone);
+            }
+
         } else {
-            // ГОРИЗОНТАЛЬНЫЙ РАЗМАШИСТЫЙ РУБЯЩИЙ ВЗМАХ
-            sf::VertexArray cleaveH(sf::PrimitiveType::TriangleStrip);
-            int segs = 24;
-            float startY = y + h * 0.15f;
-            float endY = y + h * 0.85f;
-
-            for (int i = 0; i <= segs; ++i) {
-                float t = i / static_cast<float>(segs);
-                float curY = startY + (endY - startY) * t;
-                float curX = s.facingLeft ? (x + w * (1.0f - t)) : (x + w * t);
-                float bowOffset = std::sin(t * 3.14159f) * 35.0f;
-                float drawX = s.facingLeft ? (curX - bowOffset) : (curX + bowOffset);
-                float ribH = std::sin(t * 3.14159f) * 42.0f;
-
-                cleaveH.append({{drawX, curY - ribH}, sf::Color(255, 45, 20, a), {0.0f, 0.0f}});
-                cleaveH.append({{drawX, curY}, sf::Color(255, 255, 245, a), {0.0f, 0.0f}});
-                cleaveH.append({{drawX, curY + ribH}, sf::Color(255, 185, 35, a), {0.0f, 0.0f}});
-            }
-            target.draw(cleaveH);
+            // ГОРИЗОНТАЛЬНЫЙ СИЛОВОЙ РАЗРЕЗ (HORIZONTAL_CLEAVE)
+            sf::Vector2f pivot = {s.facingLeft ? (x + w * 0.92f) : (x + w * 0.08f), y + h * 0.52f};
+            drawCrescentBlade(pivot, w * 0.88f, h * 0.44f, -0.95f, 0.80f, 38.0f, prog, alpha, dir);
         }
 
-        // Шлейфы искр со скоростными линиями
+        // Шлейфы искр со скоростными штрихами и раскаленными ядрами
         sf::VertexArray sparkLines(sf::PrimitiveType::Lines);
         for (const auto& sp : s.sparks) {
             float sProg = sp.timer / sp.maxLife;
@@ -682,6 +1016,15 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
 
             sparkLines.append({sp.pos, sf::Color(sp.color.r, sp.color.g, sp.color.b, sparkAlpha), {0.0f, 0.0f}});
             sparkLines.append({sp.prevPos, sf::Color(255, 60, 20, static_cast<std::uint8_t>(sparkAlpha * 0.35f)), {0.0f, 0.0f}});
+
+            if (sp.size > 2.2f) {
+                sf::RectangleShape sparkHead({sp.size, sp.size});
+                sparkHead.setOrigin({sp.size * 0.5f, sp.size * 0.5f});
+                sparkHead.setPosition(sp.pos);
+                sparkHead.setRotation(sf::degrees(45.0f));
+                sparkHead.setFillColor(sf::Color(sp.color.r, sp.color.g, sp.color.b, sparkAlpha));
+                target.draw(sparkHead);
+            }
         }
         target.draw(sparkLines);
     }
