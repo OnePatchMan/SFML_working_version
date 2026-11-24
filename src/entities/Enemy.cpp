@@ -2967,29 +2967,24 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         return; // Тело скрыто под землей
     }
 
-    // ЦВЕТОВЫЕ ОТЛИЧИЯ АРХЕТИПОВ:
-    // Подземный (Скрытень) — ярко-оранжевый
-    // Обычный — серый
-    // Жирный (Танк) — красный
-    // Агрессивный дуэлянт — фиолетовый
-    // Пассивный дуэлянт — голубой
+    // ЦВЕТОВЫЕ ОТЛИЧИЯ АРХЕТИПОВ (Сгнившая бледная серая плоть мутантов):
     sf::Color baseColor;
     if (enemyId == "lurker" || enemyId == "burrow") {
-        baseColor = sf::Color(255, 140, 25); // Ярко-оранжевый цвет для Скрытня
+        baseColor = sf::Color(132, 138, 148); // Трупо-серый хитин сгнившего Скрытня
     } else if (enemyType == EnemyType::NORMAL) {
-        baseColor = sf::Color(135, 140, 150); // Серый цвет
+        baseColor = sf::Color(130, 142, 132); // Зеленовато-серый трупный мутант
     } else if (enemyType == EnemyType::TANK) {
-        baseColor = sf::Color(215, 38, 48);   // Красный цвет
+        baseColor = sf::Color(142, 138, 146); // Раздутая серо-багровая плоть Танка
     } else if (enemyType == EnemyType::DUELIST) {
-        baseColor = sf::Color(155, 45, 225);  // Фиолетовый цвет (агрессивный)
+        baseColor = sf::Color(136, 140, 152); // Фиолетово-серая сгнившая плоть Дуэлянта
     } else if (enemyType == EnemyType::DUELIST_PASSIVE) {
-        baseColor = sf::Color(45, 185, 245);  // Голубой цвет (пассивный)
+        baseColor = sf::Color(126, 144, 154); // Ледяная трупно-серая плоть пассивного дуэлянта
     } else if (enemyType == EnemyType::DUMMY) {
-        baseColor = sf::Color(220, 175, 75);  // Золотисто-древесный цвет (манекен)
+        baseColor = sf::Color(136, 140, 150); // Серая плоть сшитого био-манекена
     } else if (enemyType == EnemyType::BOSS_1) {
-        baseColor = sf::Color(255, 30, 30);   // Ярко-красный цвет (БОСС 1)
+        baseColor = sf::Color(146, 158, 184); // Бледный органический мутант
     } else {
-        baseColor = isSmartAI ? sf::Color(110, 45, 150) : sf::Color(220, 75, 55);
+        baseColor = sf::Color(130, 135, 142);
     }
 
     sf::Texture* mTex = nullptr;

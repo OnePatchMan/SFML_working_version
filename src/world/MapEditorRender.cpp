@@ -207,29 +207,29 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
         sf::Color badgeColor;
 
         if (eType == 5) { // БОСС 1 (БЛЕДНЫЙ МУТАНТ)
-            baseColor = sf::Color(218, 224, 233);
+            baseColor = sf::Color(146, 158, 184);
             typeBadge = "БОСС 1: МУТАНТ #" + std::to_string(i + 1);
-            badgeColor = sf::Color(255, 100, 100);
+            badgeColor = sf::Color(255, 120, 120);
         } else if (eType == 1) { // ТАНК
-            baseColor = sf::Color(215, 38, 48);
+            baseColor = sf::Color(142, 138, 146);
             typeBadge = "ТАНК #" + std::to_string(i + 1);
-            badgeColor = sf::Color(255, 90, 90);
+            badgeColor = sf::Color(255, 140, 140);
         } else if (eType == 2) { // ДУЭЛЯНТ АГРЕССИВНЫЙ
-            baseColor = sf::Color(155, 45, 225);
+            baseColor = sf::Color(136, 140, 152);
             typeBadge = "ДУЭЛЬ-АГР #" + std::to_string(i + 1);
-            badgeColor = sf::Color(220, 140, 255);
+            badgeColor = sf::Color(210, 160, 255);
         } else if (eType == 3) { // ДУЭЛЯНТ ПАССИВНЫЙ
-            baseColor = sf::Color(45, 185, 245);
+            baseColor = sf::Color(126, 144, 154);
             typeBadge = "ДУЭЛЬ-ПАСС #" + std::to_string(i + 1);
-            badgeColor = sf::Color(100, 220, 255);
+            badgeColor = sf::Color(140, 230, 255);
         } else if (eType == 4) { // МАНЕКЕН
-            baseColor = sf::Color(220, 175, 75);
+            baseColor = sf::Color(136, 140, 150);
             typeBadge = "МАНЕКЕН #" + std::to_string(i + 1);
-            badgeColor = sf::Color(255, 225, 120);
+            badgeColor = sf::Color(255, 225, 140);
         } else { // ОБЫЧНЫЙ
-            baseColor = sf::Color(135, 140, 150);
+            baseColor = sf::Color(130, 142, 132);
             typeBadge = "ОБЫЧНЫЙ #" + std::to_string(i + 1);
-            badgeColor = sf::Color(210, 215, 225);
+            badgeColor = sf::Color(210, 225, 215);
         }
 
         static sf::Texture s_edBossTex;
