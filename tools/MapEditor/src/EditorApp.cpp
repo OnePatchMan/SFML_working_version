@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cmath>
 #include <algorithm>
+#include <cstdint>
 #include <queue>
 #include <set>
 
@@ -1022,10 +1023,10 @@ void EditorApp::floodFill(int startX, int startY, int fillTile) {
     if (targetTile == fillTile) return;
 
     pushUndo();
-    std::vector<bool> visited(_width * _height, false);
+    std::vector<std::uint8_t> visited(_width * _height, 0);
     std::deque<sf::Vector2i> q;
     q.push_back({startX, startY});
-    visited[startY * _width + startX] = true;
+    visited[startY * _width + startX] = 1;
 
     int count = 0;
     while (!q.empty()) {
@@ -1047,7 +1048,7 @@ void EditorApp::floodFill(int startX, int startY, int fillTile) {
             if (nx >= 0 && nx < _width && ny >= 0 && ny < _height) {
                 int idx = ny * _width + nx;
                 if (!visited[idx] && _map[ny][nx] == targetTile) {
-                    visited[idx] = true;
+                    visited[idx] = 1;
                     q.push_back({nx, ny});
                 }
             }
@@ -6044,20 +6045,19 @@ void EditorApp::update(float dt) {
             }
 
             // Перезапуск симуляции при гибели игрока (полный сброс арены, камеры и музыки!)
-            static float simDeathTimer = 1.8f;
             if (_simPlayer->isDead) {
-                simDeathTimer -= dt;
+                _simDeathTimer -= dt;
                 _camera.setSize(_baseCameraSize);
                 _camera.setCenter(_simPlayer->position);
-                if (simDeathTimer <= 0.0f || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Enter)) {
+                if (_simDeathTimer <= 0.0f || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Enter)) {
                     _simArena->resetCameraLock();
                     _camera.setSize(_baseCameraSize);
                     startSimulation(_testSpawn.has_value() ? _testSpawn : std::optional<sf::Vector2i>(_playerSpawn));
                     SoundManager::get().playGameMusic();
-                    simDeathTimer = 1.8f;
+                    _simDeathTimer = 1.8f;
                 }
             } else {
-                simDeathTimer = 1.8f;
+                _simDeathTimer = 1.8f;
             }
 
             // Переходы через двери в режиме симуляции

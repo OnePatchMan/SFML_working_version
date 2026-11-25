@@ -183,14 +183,14 @@ void MapEditor::handleInput(const std::optional<sf::Event>& event, Arena& arena,
             _tool = EditorTool::LAMP;
             _statusMessage = "Инструмент: Люминесцентная лампа (L - освещение лаборатории)";
             _statusTimer = 2.0f;
-        } else if (kp->code == sf::Keyboard::Key::B) {
+        } else if (kp->code == sf::Keyboard::Key::B && !kp->shift) {
             _tool = EditorTool::ENEMY_BOSS;
             _statusMessage = "Инструмент: Босс 1 (Бледный Мутант, 4x3 тайла, Горилла без шеи и головы)";
             _statusTimer = 2.0f;
         }
 
         // Кисть и настройка двери
-        if (kp->code == sf::Keyboard::Key::B) {
+        if (kp->code == sf::Keyboard::Key::B && kp->shift) {
             cycleBrushSize();
         } else if (kp->code == sf::Keyboard::Key::LBracket) {
             if (_tool == EditorTool::DOOR) {
@@ -453,8 +453,8 @@ void MapEditor::handleInput(const std::optional<sf::Event>& event, Arena& arena,
 }
 
 bool MapEditor::handlePaletteClick(const sf::Vector2i& mousePixel, Arena& arena, Player& player, Enemy& enemy, sf::View& camera, float winW, float winH) {
-    float mmW = std::min(240.0f, winW * 0.22f);
-    float mmX = winW - mmW - 15.0f;
+    float mmW = 260.0f;
+    float mmX = winW - mmW - 20.0f;
     float palX = 15.0f;
     float palH = 112.0f;
     float palY = winH - palH - 12.0f;
@@ -616,7 +616,7 @@ void MapEditor::update(float dt, Arena& arena, Player& player, Enemy& enemy,
 
     // Обработка рисования мышью
     sf::Vector2i mousePixel = sf::Mouse::getPosition(window);
-    if (mousePixel.y >= static_cast<int>(window.getSize().y) - 110 ||
+    if (mousePixel.y >= static_cast<int>(window.getSize().y) - 124 ||
         _minimapRect.contains({static_cast<float>(mousePixel.x), static_cast<float>(mousePixel.y)})) {
         return;
     }

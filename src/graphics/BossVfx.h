@@ -158,6 +158,14 @@ private:
     std::vector<BossJumpSlamPillar> m_pillars;
     std::vector<BossWallCrashEffect> m_wallCrashes;
     std::vector<BossAfterimageGhost> m_afterimages;
+    std::mt19937 m_rng{1337u};
+    sf::VertexArray m_spikeVA{sf::PrimitiveType::Triangles};
+    sf::VertexArray m_spearVA{sf::PrimitiveType::Triangles};
+    sf::VertexArray m_sparkLinesVA{sf::PrimitiveType::Lines};
+
+    float randRange(float lo, float hi) {
+        return std::uniform_real_distribution<float>(lo, hi)(m_rng);
+    }
 
     BossVfxManager() = default;
 

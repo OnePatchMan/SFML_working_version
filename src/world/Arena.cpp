@@ -12,11 +12,21 @@
 #include <random>
 
 Arena* Arena::s_activeArena = nullptr;
+std::vector<Arena*> Arena::s_arenaStack;
+
+void Arena::setActive(Arena* a) {
+    if (a) {
+        auto it = std::find(s_arenaStack.begin(), s_arenaStack.end(), a);
+        if (it != s_arenaStack.end()) s_arenaStack.erase(it);
+        s_arenaStack.push_back(a);
+    }
+    s_activeArena = a;
+}
 
 Arena::Arena(int width, int height)
     : _width(width), _height(height), _floorY(std::max(2, height - 5)), _tileSize(TILE_SIZE)
 {
-    s_activeArena = this;
+    setActive(this);
     _map.assign(_height, std::vector<int>(_width, 0));
     _bgMap.assign(_height, std::vector<int>(_width, 0));
     _decorMap.assign(_height, std::vector<int>(_width, 0));
@@ -87,8 +97,12 @@ void Arena::clearEnemySpawns() {
 }
 
 Arena::~Arena() {
+    auto it = std::find(s_arenaStack.begin(), s_arenaStack.end(), this);
+    if (it != s_arenaStack.end()) {
+        s_arenaStack.erase(it);
+    }
     if (s_activeArena == this) {
-        s_activeArena = nullptr;
+        s_activeArena = s_arenaStack.empty() ? nullptr : s_arenaStack.back();
     }
 }
 
@@ -2156,13 +2170,29 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
     std::vector<DoorBlock> doors;
     _enemySpawns.clear();
     _enemySpawnPositions.clear();
+    _lamps.clear();
+    _interactiveDoors.clear();
+    _floorType = FloorType::NORMAL;
 
     struct Plat { int x, y, len; };
     struct Wall { int x, y, w, h; };
-    struct LampCoord { int x, y; };
+    struct LayerRow { int y; std::vector<int> vals; };
     std::vector<Plat> platforms;
     std::vector<Wall> walls;
-    std::vector<LampCoord> lamps;
+    std::vector<LampLight> lamps;
+    std::vector<LayerRow> bgRows;
+    std::vector<LayerRow> decorRows;
+    std::vector<LayerRow> tileRows;
+
+    auto parseLayerRowIndex = [](const std::string& key) -> int {
+        std::string keyLower = key;
+        std::transform(keyLower.begin(), keyLower.end(), keyLower.begin(), ::tolower);
+        try {
+            if (keyLower.rfind("row_", 0) == 0) return std::stoi(keyLower.substr(4));
+            if (keyLower.rfind("r", 0) == 0) return std::stoi(keyLower.substr(1));
+        } catch (...) {}
+        return -1;
+    };
 
     std::string line;
     std::string currentSection = "";
@@ -2188,14 +2218,54 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
             currentSection = "doors";
             continue;
         }
-        if (tokens[0] == "{" || tokens[0] == "}") continue;
+        if (tokens[0] == "InteractiveDoors" || tokens[0] == "interactivedoors") {
+            currentSection = "interactivedoors";
+            continue;
+        }
+        if (tokens[0] == "Lamps" || tokens[0] == "lamps") {
+            currentSection = "lamps";
+            continue;
+        }
+        if (tokens[0] == "BackgroundLayer" || tokens[0] == "backgroundlayer" || tokens[0] == "Background" || tokens[0] == "background") {
+            currentSection = "background";
+            continue;
+        }
+        if (tokens[0] == "DecorLayer" || tokens[0] == "decorlayer" || tokens[0] == "Decor" || tokens[0] == "decor") {
+            currentSection = "decor";
+            continue;
+        }
+        if (tokens[0] == "TileLayer" || tokens[0] == "tilelayer" || tokens[0] == "Tiles" || tokens[0] == "tiles") {
+            currentSection = "tiles";
+            continue;
+        }
+        if (tokens[0] == "{" || tokens[0] == "}") {
+            if (tokens[0] == "}") currentSection.clear();
+            continue;
+        }
 
         if (tokens.size() >= 2) {
             std::string key = tokens[0];
             std::string val = tokens[1];
             std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
-            if (key == "width") {
+            if (currentSection == "background" || currentSection == "decor" || currentSection == "tiles") {
+                int rIdx = parseLayerRowIndex(key);
+                if (rIdx >= 0) {
+                    LayerRow lr;
+                    lr.y = rIdx;
+                    std::istringstream iss(val);
+                    int tCode = 0;
+                    while (iss >> tCode) lr.vals.push_back(tCode);
+                    if (currentSection == "background") bgRows.push_back(std::move(lr));
+                    else if (currentSection == "decor") decorRows.push_back(std::move(lr));
+                    else tileRows.push_back(std::move(lr));
+                }
+                continue;
+            }
+
+            if (key == "floor_type") {
+                _floorType = (val == "basement") ? FloorType::BASEMENT : FloorType::NORMAL;
+            } else if (key == "width") {
                 try { newW = std::stoi(val); } catch (...) {}
             } else if (key == "height") {
                 try { newH = std::stoi(val); } catch (...) {}
@@ -2250,10 +2320,40 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
                 std::istringstream iss(val);
                 int x = 0, y = 0, w = 1, h = 1;
                 if (iss >> x >> y >> w >> h) walls.push_back({x, y, w, h});
+            } else if (currentSection == "interactivedoors") {
+                std::istringstream iss(val);
+                int idx = 0, idy = 0, iOpen = 0, iBroken = 0;
+                if (iss >> idx >> idy) {
+                    if (iss >> iOpen) {}
+                    if (iss >> iBroken) {}
+                    _interactiveDoors.push_back({idx, idy, iOpen != 0, iBroken != 0, 0.0f, 0.0f});
+                }
             } else if (currentSection == "lamps" || key.rfind("lamp", 0) == 0) {
                 std::istringstream iss(val);
                 int lx = 0, ly = 0;
-                if (iss >> lx >> ly) lamps.push_back({lx, ly});
+                if (iss >> lx >> ly) {
+                    LampLight lamp;
+                    lamp.tileX = lx;
+                    lamp.tileY = ly;
+                    lamp.worldPos = {(lx + 0.5f) * _tileSize, (ly + 0.5f) * _tileSize};
+                    lamp.radius = 980.0f;
+                    lamp.intensity = 1.45f;
+                    lamp.color = sf::Color(240, 250, 255);
+                    lamp.coneAngle = 130.0f;
+                    lamp.enabled = true;
+                    int r = 240, g = 250, b = 255;
+                    if (iss >> r >> g >> b) {
+                        lamp.color = sf::Color(static_cast<uint8_t>(std::clamp(r, 0, 255)),
+                                               static_cast<uint8_t>(std::clamp(g, 0, 255)),
+                                               static_cast<uint8_t>(std::clamp(b, 0, 255)));
+                        if (iss >> lamp.intensity) {}
+                        if (iss >> lamp.radius) {}
+                        if (iss >> lamp.coneAngle) {}
+                        int en = 1;
+                        if (iss >> en) lamp.enabled = (en != 0);
+                    }
+                    lamps.push_back(lamp);
+                }
             }
         }
     }
@@ -2261,29 +2361,42 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
     _width = std::max(20, newW);
     _height = std::max(10, newH);
     _map.assign(_height, std::vector<int>(_width, 0));
+    _bgMap.assign(_height, std::vector<int>(_width, 0));
+    _decorMap.assign(_height, std::vector<int>(_width, 0));
     _doors = doors;
 
-    // Стены по краям по умолчанию
-    for (int x = 0; x < _width; ++x) {
-        _map[0][x] = 2;
-        _map[_height - 1][x] = 2;
-        _map[_height - 2][x] = 2;
-        _map[_height - 3][x] = 2;
-        _map[_height - 4][x] = 2;
-    }
-    for (int y = 0; y < _height; ++y) {
-        _map[y][0] = 2;
-        _map[y][_width - 1] = 2;
-    }
+    if (!tileRows.empty()) {
+        for (const auto& lr : tileRows) {
+            if (lr.y >= 0 && lr.y < _height) {
+                int cols = std::min(_width, static_cast<int>(lr.vals.size()));
+                for (int x = 0; x < cols; ++x) {
+                    _map[lr.y][x] = lr.vals[x];
+                }
+            }
+        }
+    } else {
+        // Стены по краям по умолчанию (для legacy KV без TileLayer)
+        for (int x = 0; x < _width; ++x) {
+            _map[0][x] = 2;
+            _map[_height - 1][x] = 2;
+            _map[_height - 2][x] = 2;
+            _map[_height - 3][x] = 2;
+            _map[_height - 4][x] = 2;
+        }
+        for (int y = 0; y < _height; ++y) {
+            _map[y][0] = 2;
+            _map[y][_width - 1] = 2;
+        }
 
-    // Применяем пользовательские стены
-    for (const auto& w : walls) {
-        for (int dy = 0; dy < w.h; ++dy) {
-            for (int dx = 0; dx < w.w; ++dx) {
-                int cx = w.x + dx;
-                int cy = w.y + dy;
-                if (cx >= 0 && cx < _width && cy >= 0 && cy < _height) {
-                    _map[cy][cx] = 2;
+        // Применяем пользовательские стены
+        for (const auto& w : walls) {
+            for (int dy = 0; dy < w.h; ++dy) {
+                for (int dx = 0; dx < w.w; ++dx) {
+                    int cx = w.x + dx;
+                    int cy = w.y + dy;
+                    if (cx >= 0 && cx < _width && cy >= 0 && cy < _height) {
+                        _map[cy][cx] = 2;
+                    }
                 }
             }
         }
@@ -2302,6 +2415,20 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
         }
     }
 
+    // Применяем слои фона и декора
+    for (const auto& lr : bgRows) {
+        if (lr.y >= 0 && lr.y < _height) {
+            int cols = std::min(_width, static_cast<int>(lr.vals.size()));
+            for (int x = 0; x < cols; ++x) _bgMap[lr.y][x] = lr.vals[x];
+        }
+    }
+    for (const auto& lr : decorRows) {
+        if (lr.y >= 0 && lr.y < _height) {
+            int cols = std::min(_width, static_cast<int>(lr.vals.size()));
+            for (int x = 0; x < cols; ++x) _decorMap[lr.y][x] = lr.vals[x];
+        }
+    }
+
     // Применяем двери
     for (const auto& d : doors) {
         if (d.x >= 0 && d.x < _width && d.y >= 0 && d.y < _height) {
@@ -2309,10 +2436,11 @@ bool Arena::loadFromKVCoordinates(const std::string& kvPath) {
         }
     }
 
-    // Применяем люминесцентные лампы
+    // Применяем люминесцентные лампы и сохраняем их параметры для scanLamps()
     for (const auto& l : lamps) {
-        if (l.x >= 0 && l.x < _width && l.y >= 0 && l.y < _height) {
-            _map[l.y][l.x] = 4;
+        if (l.tileX >= 0 && l.tileX < _width && l.tileY >= 0 && l.tileY < _height) {
+            _map[l.tileY][l.tileX] = 4;
+            _lamps.push_back(l);
         }
     }
 
@@ -3073,21 +3201,25 @@ void Arena::drawBlackoutMask(sf::RenderWindow& window) const {
     float roomH = static_cast<float>(_height * _tileSize);
     float bigM = 300000.0f;
 
-    auto drawRect = [&](float x, float y, float w, float h) {
-        sf::RectangleShape r({w, h});
-        r.setPosition({x, y});
-        r.setFillColor(sf::Color::Black);
-        window.draw(r);
+    size_t vi = 0;
+    auto pushQuad = [&](float x, float y, float w, float h) {
+        const sf::Vector2f p0(x, y);
+        const sf::Vector2f p1(x + w, y);
+        const sf::Vector2f p2(x + w, y + h);
+        const sf::Vector2f p3(x, y + h);
+        _blackoutVA[vi++] = {p0, sf::Color::Black};
+        _blackoutVA[vi++] = {p1, sf::Color::Black};
+        _blackoutVA[vi++] = {p2, sf::Color::Black};
+        _blackoutVA[vi++] = {p0, sf::Color::Black};
+        _blackoutVA[vi++] = {p2, sf::Color::Black};
+        _blackoutVA[vi++] = {p3, sf::Color::Black};
     };
 
-    // Верхняя черная область
-    drawRect(-bigM, -bigM, bigM * 2.0f + roomW, bigM);
-    // Нижняя черная область
-    drawRect(-bigM, roomH, bigM * 2.0f + roomW, bigM);
-    // Левая черная область
-    drawRect(-bigM, 0.0f, bigM, roomH);
-    // Правая черная область
-    drawRect(roomW, 0.0f, bigM, roomH);
+    pushQuad(-bigM, -bigM, bigM * 2.0f + roomW, bigM); // Верхняя черная область
+    pushQuad(-bigM, roomH, bigM * 2.0f + roomW, bigM); // Нижняя черная область
+    pushQuad(-bigM, 0.0f, bigM, roomH);                // Левая черная область
+    pushQuad(roomW, 0.0f, bigM, roomH);                // Правая черная область
+    window.draw(_blackoutVA);
 }
 
 bool Arena::isSolid(int tx, int ty) const {
@@ -3753,7 +3885,7 @@ void Arena::updateTriggers(float dt, Player& player) {
                     startBossFight(tr.bossName.empty() ? "БОСС 1" : tr.bossName);
                 }
 
-                if (tr.lockCamera) {
+                if (tr.lockCamera || tr.cameraLockMode > 0) {
                     _isCameraLocked = true;
                     _cameraLockMode = tr.cameraLockMode > 0 ? tr.cameraLockMode : (tr.cameraLockOnBoss ? 3 : 1);
                     if (tr.cameraLockPos.x != 0.0f || tr.cameraLockPos.y != 0.0f) {
@@ -3804,12 +3936,20 @@ void Arena::updateTriggers(float dt, Player& player) {
 void Arena::executeTriggerAction(const std::string& action, Player* player, const ArenaTrigger* tr) {
     if (action.empty()) return;
 
+    auto trimWhitespace = [](std::string& s) {
+        size_t first = s.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            s.clear();
+            return;
+        }
+        size_t last = s.find_last_not_of(" \t\r\n");
+        s = s.substr(first, last - first + 1);
+    };
+
     std::istringstream stream(action);
     std::string cmd;
     while (std::getline(stream, cmd, ';')) {
-        // Trim whitespace
-        cmd.erase(0, cmd.find_first_not_of(" \t\r\n"));
-        cmd.erase(cmd.find_last_not_of(" \t\r\n") + 1);
+        trimWhitespace(cmd);
         if (cmd.empty()) continue;
 
         std::istringstream cmdStream(cmd);
@@ -3842,7 +3982,7 @@ void Arena::executeTriggerAction(const std::string& action, Player* player, cons
         } else if (verb == "msg:show") {
             std::string rest;
             std::getline(cmdStream, rest);
-            rest.erase(0, rest.find_first_not_of(" \t"));
+            trimWhitespace(rest);
             std::string msgText = "";
             float duration = 3.0f;
             int r = 100, g = 255, b = 180;
@@ -4460,7 +4600,13 @@ void Arena::renderLightingMultiplyPass(sf::RenderWindow& window, const sf::View&
 }
 
 void Arena::renderLightingHalos(sf::RenderWindow& window) {
-    // Мягкий плафонный ореол светильника непосредственно вокруг стеклянной колбы (строго вниз в воздух, не касаясь потолка)
+    // Мягкий плафонный ореол светильников (пакетно за 1 draw call)
+    _lampHaloVA.clear();
+    const float haloRadX = 35.0f;
+    const float haloRadY = 12.0f;
+    constexpr int haloSegments = 16;
+    constexpr float kPi = 3.14159265f;
+
     for (const auto& lamp : _lamps) {
         if (!lamp.enabled) continue;
         float effectiveIntensity = lamp.intensity * std::max(0.05f, 1.0f - lamp.flickerDip);
@@ -4469,28 +4615,27 @@ void Arena::renderLightingHalos(sf::RenderWindow& window) {
         float lx = static_cast<float>(lamp.tileX * _tileSize);
         float ly = static_cast<float>(lamp.tileY * _tileSize);
         sf::Vector2f tubeCenter(lx + _tileSize * 0.5f, ly + 14.0f);
-        float haloRadX = 35.0f;
-        float haloRadY = 12.0f;
-        const int haloSegments = 16;
 
-        sf::VertexArray haloVA(sf::PrimitiveType::Triangles);
-        sf::Color centerCol(lamp.color.r, lamp.color.g, lamp.color.b, static_cast<uint8_t>(std::clamp(32.0f * effectiveIntensity, 0.0f, 255.0f)));
-        sf::Color edgeCol(0, 0, 0, 0);
+        sf::Color centerCol(lamp.color.r, lamp.color.g, lamp.color.b,
+                            static_cast<uint8_t>(std::clamp(32.0f * effectiveIntensity, 0.0f, 255.0f)));
+        const sf::Color edgeCol(0, 0, 0, 0);
 
         for (int i = 0; i < haloSegments; ++i) {
-            float a0 = (3.14159265f / haloSegments) * i;
-            float a1 = (3.14159265f / haloSegments) * (i + 1);
-
+            float a0 = (kPi / haloSegments) * i;
+            float a1 = (kPi / haloSegments) * (i + 1);
             sf::Vector2f p0(tubeCenter.x + std::cos(a0) * haloRadX, tubeCenter.y + std::sin(a0) * haloRadY);
             sf::Vector2f p1(tubeCenter.x + std::cos(a1) * haloRadX, tubeCenter.y + std::sin(a1) * haloRadY);
 
-            haloVA.append({tubeCenter, centerCol});
-            haloVA.append({p0, edgeCol});
-            haloVA.append({p1, edgeCol});
+            _lampHaloVA.append({tubeCenter, centerCol});
+            _lampHaloVA.append({p0, edgeCol});
+            _lampHaloVA.append({p1, edgeCol});
         }
+    }
+
+    if (_lampHaloVA.getVertexCount() > 0) {
         sf::RenderStates haloStates;
         haloStates.blendMode = sf::BlendAdd;
-        window.draw(haloVA, haloStates);
+        window.draw(_lampHaloVA, haloStates);
     }
 }
 
@@ -4522,10 +4667,18 @@ void Arena::showNotification(const std::string& text, float duration, sf::Color 
 void Arena::drawNotificationUI(sf::RenderWindow& window, const sf::Font* font) {
     if (_notificationTimer <= 0.0f || _notificationText.empty() || !font) return;
 
-    sf::Text notifText(*font, toSfString(_notificationText), 14);
-    notifText.setFillColor(_notificationColor);
-    notifText.setStyle(sf::Text::Bold);
-    sf::FloatRect bounds = notifText.getLocalBounds();
+    if (!_cachedNotifText || _lastCachedNotifStr != _notificationText) {
+        _lastCachedNotifStr = _notificationText;
+        if (!_cachedNotifText) {
+            _cachedNotifText.emplace(*font, toSfString(_notificationText), 14);
+            _cachedNotifText->setStyle(sf::Text::Bold);
+        } else {
+            _cachedNotifText->setFont(*font);
+            _cachedNotifText->setString(toSfString(_notificationText));
+        }
+    }
+    _cachedNotifText->setFillColor(_notificationColor);
+    sf::FloatRect bounds = _cachedNotifText->getLocalBounds();
 
     float padX = 24.0f;
     float padY = 8.0f;
@@ -4535,19 +4688,18 @@ void Arena::drawNotificationUI(sf::RenderWindow& window, const sf::Font* font) {
     float boxX = (winW - boxW) * 0.5f;
     float boxY = 45.0f;
 
-    sf::RectangleShape box({boxW, boxH});
-    box.setPosition({boxX, boxY});
-    box.setFillColor(sf::Color(8, 10, 14, 240));
-    box.setOutlineColor(_notificationColor);
-    box.setOutlineThickness(1.5f);
-    window.draw(box);
+    _cachedNotifBox.setSize({boxW, boxH});
+    _cachedNotifBox.setPosition({boxX, boxY});
+    _cachedNotifBox.setFillColor(sf::Color(8, 10, 14, 240));
+    _cachedNotifBox.setOutlineColor(_notificationColor);
+    _cachedNotifBox.setOutlineThickness(1.5f);
+    window.draw(_cachedNotifBox);
 
-    // Верхняя неоновая полоса
-    sf::RectangleShape topStrip({boxW, 2.5f});
-    topStrip.setPosition({boxX, boxY});
-    topStrip.setFillColor(_notificationColor);
-    window.draw(topStrip);
+    _cachedNotifStrip.setSize({boxW, 2.5f});
+    _cachedNotifStrip.setPosition({boxX, boxY});
+    _cachedNotifStrip.setFillColor(_notificationColor);
+    window.draw(_cachedNotifStrip);
 
-    notifText.setPosition({boxX + padX - bounds.position.x, boxY + padY - bounds.position.y});
-    window.draw(notifText);
+    _cachedNotifText->setPosition({boxX + padX - bounds.position.x, boxY + padY - bounds.position.y});
+    window.draw(*_cachedNotifText);
 }

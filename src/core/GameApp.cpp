@@ -17,6 +17,17 @@ namespace {
         } catch (...) {}
         return {};
     }
+
+    EnemyType resolveEnemyType(const EnemySpawnConfig& sp) {
+        if (sp.type == 1) return EnemyType::TANK;
+        if (sp.type == 2) return EnemyType::DUELIST;
+        if (sp.type == 3) return EnemyType::DUELIST_PASSIVE;
+        if (sp.type == 4) return EnemyType::DUMMY;
+        if (sp.type == 5 || sp.type == static_cast<int>(EnemyType::BOSS_1) || sp.enemyId == "boss_1") {
+            return EnemyType::BOSS_1;
+        }
+        return EnemyType::NORMAL;
+    }
 }
 
 GameApp::GameApp()
@@ -147,6 +158,15 @@ void GameApp::applyFpsMode(FpsMode mode) {
     }
 }
 
+void GameApp::spawnEnemyFromConfig(const EnemySpawnConfig& sp) {
+    _enemies.emplace_back(sp.position, resolveEnemyType(sp));
+    if (!sp.enemyId.empty()) {
+        _enemies.back().setEnemyId(sp.enemyId);
+    }
+    _enemies.back().setSmartAI(_isSmartAIMode);
+    _enemies.back().reset();
+}
+
 void GameApp::respawnEnemies() {
     _enemies.clear();
     if (_isTrainingMode) {
@@ -163,22 +183,12 @@ void GameApp::respawnEnemies() {
     const auto& spawns = _arena.getEnemySpawns();
     if (spawns.empty()) {
         _enemies.emplace_back(_arena.getEnemySpawnPosition(), EnemyType::NORMAL);
+        _enemies.back().setSmartAI(_isSmartAIMode);
+        _enemies.back().reset();
     } else {
         for (const auto& sp : spawns) {
-            EnemyType t = (sp.type == 1) ? EnemyType::TANK : 
-                          (sp.type == 2) ? EnemyType::DUELIST : 
-                          (sp.type == 3) ? EnemyType::DUELIST_PASSIVE : 
-                          (sp.type == 4) ? EnemyType::DUMMY :
-                          (sp.type == 5 || sp.type == static_cast<int>(EnemyType::BOSS_1) || sp.enemyId == "boss_1") ? EnemyType::BOSS_1 : EnemyType::NORMAL;
-            _enemies.emplace_back(sp.position, t);
-            if (!sp.enemyId.empty()) {
-                _enemies.back().setEnemyId(sp.enemyId);
-            }
+            spawnEnemyFromConfig(sp);
         }
-    }
-    for (auto& e : _enemies) {
-        e.setSmartAI(_isSmartAIMode);
-        e.reset();
     }
 }
 
@@ -382,10 +392,9 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
     _combat.update(dt, _player, _enemies);
 
     // Проверка активации настраиваемых блоков дверей (тайл 3)
-    static float doorCooldown = 0.0f;
-    if (doorCooldown > 0.0f) doorCooldown -= dt;
+    if (_doorCooldown > 0.0f) _doorCooldown -= dt;
 
-    if (doorCooldown <= 0.0f) {
+    if (_doorCooldown <= 0.0f) {
         auto doorOpt = _arena.getOverlappingDoor(_player.position.x, _player.position.y,
                                                 Player::HALF_W, Player::TOP_OFFSET, Player::BOTTOM_OFFSET);
         if (doorOpt.has_value()) {
@@ -429,7 +438,7 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
                     respawnEnemies();
                     _combat.reset();
                 }
-                doorCooldown = 1.0f;
+                _doorCooldown = 1.0f;
                 std::cout << "[DOOR TRANSITION] Переход в комнату " << (isDiffRoom ? targetRoomName : _arena.getCurrentRoomName()) << std::endl;
             }
         }
@@ -439,17 +448,7 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
     if (_arena.hasPendingEnemySpawns()) {
         auto pending = _arena.consumePendingEnemySpawns();
         for (const auto& sp : pending) {
-            EnemyType t = (sp.type == 1) ? EnemyType::TANK : 
-                          (sp.type == 2) ? EnemyType::DUELIST : 
-                          (sp.type == 3) ? EnemyType::DUELIST_PASSIVE : 
-                          (sp.type == 4) ? EnemyType::DUMMY :
-                          (sp.type == 5 || sp.type == static_cast<int>(EnemyType::BOSS_1) || sp.enemyId == "boss_1") ? EnemyType::BOSS_1 : EnemyType::NORMAL;
-            _enemies.emplace_back(sp.position, t);
-            if (!sp.enemyId.empty()) {
-                _enemies.back().setEnemyId(sp.enemyId);
-            }
-            _enemies.back().setSmartAI(_isSmartAIMode);
-            _enemies.back().reset();
+            spawnEnemyFromConfig(sp);
         }
     }
 
@@ -500,15 +499,14 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
     }
 
     // Перезапуск при гибели (полный сброс арены, камеры и музыки!)
-    static float playerDeathTimer = 2.0f;
     if (_player.isDead) {
-        playerDeathTimer -= dt;
+        _playerDeathTimer -= dt;
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) ||
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Enter)) {
-            playerDeathTimer = 0.0f;
+            _playerDeathTimer = 0.0f;
         }
 
-        if (playerDeathTimer <= 0.0f) {
+        if (_playerDeathTimer <= 0.0f) {
             _arena.loadRoom(1);
             _arena.resetCameraLock();
             _player.reset(_arena.getSpawnPosition());
@@ -517,10 +515,11 @@ void GameApp::update(float dt, const sf::Vector2f& mouseWorld) {
             _camera.setSize({1280.0f, 720.0f});
             _camera.setCenter(_player.position);
             SoundManager::get().playGameMusic();
-            playerDeathTimer = 2.0f;
+            _playerDeathTimer = 2.0f;
+            _doorCooldown = 0.0f;
         }
     } else {
-        playerDeathTimer = 2.0f;
+        _playerDeathTimer = 2.0f;
     }
 }
 
@@ -566,24 +565,28 @@ void GameApp::render() {
 
         if (_player.isDead && _combat.getFont()) {
             const sf::Font& font = *_combat.getFont();
-            sf::RectangleShape deathBg({winSize.x, winSize.y});
-            deathBg.setFillColor(sf::Color(10, 0, 0, 160));
-            _window.draw(deathBg);
+            _hudOverlayRect.setSize({winSize.x, winSize.y});
+            _hudOverlayRect.setFillColor(sf::Color(10, 0, 0, 160));
+            _window.draw(_hudOverlayRect);
 
-            sf::Text deathText(font, toSfString("ВЫ ПОГИБЛИ"), 54);
-            deathText.setStyle(sf::Text::Bold);
-            deathText.setFillColor(sf::Color(255, 60, 60));
-            sf::FloatRect tb = deathText.getLocalBounds();
-            deathText.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
-            deathText.setPosition(sf::Vector2f(winSize.x * 0.5f, winSize.y * 0.45f));
-            _window.draw(deathText);
+            if (!_deathTitleText) {
+                _deathTitleText.emplace(font, toSfString("ВЫ ПОГИБЛИ"), 54);
+                _deathTitleText->setStyle(sf::Text::Bold);
+                _deathTitleText->setFillColor(sf::Color(255, 60, 60));
+                sf::FloatRect tb = _deathTitleText->getLocalBounds();
+                _deathTitleText->setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
+            }
+            _deathTitleText->setPosition(sf::Vector2f(winSize.x * 0.5f, winSize.y * 0.45f));
+            _window.draw(*_deathTitleText);
 
-            sf::Text deathSub(font, toSfString("[SPACE] или [ENTER] — Возродиться"), 20);
-            deathSub.setFillColor(sf::Color(220, 220, 220));
-            sf::FloatRect sb = deathSub.getLocalBounds();
-            deathSub.setOrigin({sb.position.x + sb.size.x * 0.5f, sb.position.y + sb.size.y * 0.5f});
-            deathSub.setPosition(sf::Vector2f(winSize.x * 0.5f, winSize.y * 0.54f));
-            _window.draw(deathSub);
+            if (!_deathSubText) {
+                _deathSubText.emplace(font, toSfString("[SPACE] или [ENTER] — Возродиться"), 20);
+                _deathSubText->setFillColor(sf::Color(220, 220, 220));
+                sf::FloatRect sb = _deathSubText->getLocalBounds();
+                _deathSubText->setOrigin({sb.position.x + sb.size.x * 0.5f, sb.position.y + sb.size.y * 0.5f});
+            }
+            _deathSubText->setPosition(sf::Vector2f(winSize.x * 0.5f, winSize.y * 0.54f));
+            _window.draw(*_deathSubText);
         } else if (_crosshair) {
             _crosshair->Draw(_window);
         }
@@ -596,12 +599,12 @@ void GameApp::render() {
             float barX = winSize.x * 0.5f - barW * 0.5f;
             float barY = 12.0f;
 
-            sf::RectangleShape banner({barW, barH});
-            banner.setPosition({barX, barY});
-            banner.setFillColor(sf::Color(18, 18, 22, 245));
-            banner.setOutlineThickness(1.5f);
-            banner.setOutlineColor(sf::Color(55, 55, 62, 230));
-            _window.draw(banner);
+            _trainingBannerRect.setSize({barW, barH});
+            _trainingBannerRect.setPosition({barX, barY});
+            _trainingBannerRect.setFillColor(sf::Color(18, 18, 22, 245));
+            _trainingBannerRect.setOutlineThickness(1.5f);
+            _trainingBannerRect.setOutlineColor(sf::Color(55, 55, 62, 230));
+            _window.draw(_trainingBannerRect);
 
             std::string blockStr = (_dummyBlockMode == DummyBlockMode::NONE)      ? "БЕЗ БЛОКА" :
                                    (_dummyBlockMode == DummyBlockMode::HIGH)      ? "ВЕРХНИЙ БЛОК" :
@@ -609,12 +612,16 @@ void GameApp::render() {
                                    (_dummyBlockMode == DummyBlockMode::AUTO)      ? "АВТО-РЕАКЦИЯ" :
                                                                                    "КОНТРАТАКА (1с)";
             std::string infoStr = "РЕЖИМ ТРЕНИРОВКИ  |  Манекен: Бессмертный  |  [F6] Блок: " + blockStr + "  |  [Backspace] Сброс";
-            sf::Text bannerText(font, toSfString(infoStr), 13);
-            bannerText.setFillColor(sf::Color::White);
-            sf::FloatRect tb = bannerText.getLocalBounds();
-            bannerText.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
-            bannerText.setPosition(sf::Vector2f(winSize.x * 0.5f, barY + barH * 0.5f));
-            _window.draw(bannerText);
+            if (!_trainingBannerText) {
+                _trainingBannerText.emplace(font, toSfString(infoStr), 13);
+                _trainingBannerText->setFillColor(sf::Color::White);
+            } else {
+                _trainingBannerText->setString(toSfString(infoStr));
+            }
+            sf::FloatRect tb = _trainingBannerText->getLocalBounds();
+            _trainingBannerText->setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
+            _trainingBannerText->setPosition(sf::Vector2f(winSize.x * 0.5f, barY + barH * 0.5f));
+            _window.draw(*_trainingBannerText);
         }
     }
 
@@ -643,21 +650,25 @@ void GameApp::render() {
         float badgeX = winSize.x - badgeW - 20.0f;
         float badgeY = 12.0f;
 
-        sf::RectangleShape badge({badgeW, badgeH});
-        badge.setPosition({badgeX, badgeY});
-        badge.setFillColor(sf::Color(15, 18, 25, 215));
-        badge.setOutlineThickness(1.5f);
+        _fpsBadgeRect.setSize({badgeW, badgeH});
+        _fpsBadgeRect.setPosition({badgeX, badgeY});
+        _fpsBadgeRect.setFillColor(sf::Color(15, 18, 25, 215));
+        _fpsBadgeRect.setOutlineThickness(1.5f);
 
         sf::Color fpsColor = (_currentFps >= 55.0f) ? sf::Color(80, 240, 110) :
                              (_currentFps >= 30.0f) ? sf::Color(255, 215, 60) :
                                                      sf::Color(255, 80, 80);
-        badge.setOutlineColor(sf::Color(fpsColor.r, fpsColor.g, fpsColor.b, 160));
-        _window.draw(badge);
+        _fpsBadgeRect.setOutlineColor(sf::Color(fpsColor.r, fpsColor.g, fpsColor.b, 160));
+        _window.draw(_fpsBadgeRect);
 
-        sf::Text fpsText(font, toSfString(fpsBuf), 12);
-        fpsText.setFillColor(fpsColor);
-        fpsText.setPosition({badgeX + 8.0f, badgeY + 4.0f});
-        _window.draw(fpsText);
+        if (!_fpsText) {
+            _fpsText.emplace(font, toSfString(fpsBuf), 12);
+        } else {
+            _fpsText->setString(toSfString(fpsBuf));
+        }
+        _fpsText->setFillColor(fpsColor);
+        _fpsText->setPosition({badgeX + 8.0f, badgeY + 4.0f});
+        _window.draw(*_fpsText);
     }
 }
 

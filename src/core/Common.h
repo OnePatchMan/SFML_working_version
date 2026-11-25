@@ -11,6 +11,9 @@
 #include <optional>
 #include <functional>
 #include <random>
+#include <fstream>
+#include <cctype>
+#include <string_view>
 
 constexpr float TILE_SIZE = 64.0f;
 constexpr int ARENA_WIDTH = 80;
@@ -121,4 +124,121 @@ inline sf::String toSfString(std::string_view str) {
     return sf::String::fromUtf8(str.begin(), str.end());
 }
 #endif
+
+namespace kv {
+    /** Tokenizes a Key-Values line, respecting double-quoted strings, braces, and // or #/; comments. */
+    inline std::vector<std::string> tokenizeLine(const std::string& line) {
+        std::vector<std::string> tokens;
+        size_t i = 0;
+        while (i < line.size()) {
+            while (i < line.size() && (line[i] == ' ' || line[i] == '\t' || line[i] == '\r' ||
+                                       line[i] == '\n' || line[i] == '=' || line[i] == ':')) {
+                ++i;
+            }
+            if (i >= line.size()) break;
+            if ((line[i] == '/' && i + 1 < line.size() && line[i + 1] == '/') ||
+                line[i] == '#' || line[i] == ';') {
+                break;
+            }
+            if (line[i] == '"') {
+                ++i;
+                const size_t start = i;
+                while (i < line.size() && line[i] != '"') ++i;
+                tokens.push_back(line.substr(start, i - start));
+                if (i < line.size() && line[i] == '"') ++i;
+            } else if (line[i] == '{' || line[i] == '}') {
+                tokens.push_back(std::string(1, line[i]));
+                ++i;
+            } else {
+                const size_t start = i;
+                while (i < line.size() && line[i] != ' ' && line[i] != '\t' && line[i] != '\r' &&
+                       line[i] != '\n' && line[i] != '=' && line[i] != ':' &&
+                       line[i] != '{' && line[i] != '}' && line[i] != '"') {
+                    ++i;
+                }
+                tokens.push_back(line.substr(start, i - start));
+            }
+        }
+        return tokens;
+    }
+
+    inline bool tryParseFloat(const std::string& str, float& outVal) {
+        try {
+            outVal = std::stof(str);
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    inline bool tryParseInt(const std::string& str, int& outVal) {
+        try {
+            outVal = std::stoi(str);
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    inline float parseFloatSafe(const std::string& str, float fallback = 0.0f) {
+        float v = fallback;
+        tryParseFloat(str, v);
+        return v;
+    }
+
+    inline int parseIntSafe(const std::string& str, int fallback = 0) {
+        int v = fallback;
+        tryParseInt(str, v);
+        return v;
+    }
+
+    inline bool assignFramesSeconds(const std::string& str, float& outSeconds) {
+        float frames = 0.0f;
+        if (!tryParseFloat(str, frames)) return false;
+        outSeconds = frames / 60.0f;
+        return true;
+    }
+
+    inline bool parseBool(const std::string& str, bool fallback = false) {
+        if (str == "1" || str == "true" || str == "TRUE") return true;
+        if (str == "0" || str == "false" || str == "FALSE") return false;
+        int n = fallback ? 1 : 0;
+        if (tryParseInt(str, n)) return n != 0;
+        return fallback;
+    }
+
+    /** Streams key-value pairs with active block stack through a callback(stack, lowerKey, val). */
+    template <typename Callback>
+    inline bool forEachPair(const std::string& filepath, Callback&& onPair) {
+        std::ifstream file(filepath);
+        if (!file.is_open()) return false;
+
+        std::vector<std::string> blockStack;
+        std::string pendingBlock;
+        std::string line;
+        while (std::getline(file, line)) {
+            auto tokens = tokenizeLine(line);
+            if (tokens.empty()) continue;
+
+            for (size_t t = 0; t < tokens.size(); ++t) {
+                const std::string& tok = tokens[t];
+                if (tok == "{") {
+                    blockStack.push_back(pendingBlock);
+                    pendingBlock.clear();
+                } else if (tok == "}") {
+                    if (!blockStack.empty()) blockStack.pop_back();
+                } else if (t + 1 < tokens.size() && tokens[t + 1] != "{" && tokens[t + 1] != "}") {
+                    std::string key = tok;
+                    const std::string& val = tokens[++t];
+                    std::transform(key.begin(), key.end(), key.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    onPair(blockStack, key, val);
+                } else {
+                    pendingBlock = tok;
+                }
+            }
+        }
+        return true;
+    }
+}
 

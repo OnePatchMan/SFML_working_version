@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cmath>
 #include <algorithm>
+#include <cstdint>
 #include <queue>
 
 using namespace map_editor_internal;
@@ -359,10 +360,10 @@ void MapEditor::floodFill(int startX, int startY, Arena& arena, int fillTile) {
     pushUndo(arena);
     int w = arena.getWidth();
     int h = arena.getHeight();
-    std::vector<bool> visited(w * h, false);
+    std::vector<std::uint8_t> visited(w * h, 0);
     std::deque<sf::Vector2i> q;
     q.push_back({startX, startY});
-    visited[startY * w + startX] = true;
+    visited[startY * w + startX] = 1;
 
     int filledCount = 0;
     while (!q.empty()) {
@@ -381,7 +382,7 @@ void MapEditor::floodFill(int startX, int startY, Arena& arena, int fillTile) {
             if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
                 int idx = ny * w + nx;
                 if (!visited[idx] && arena.getTile(nx, ny) == targetTile) {
-                    visited[idx] = true;
+                    visited[idx] = 1;
                     q.push_back({nx, ny});
                 }
             }

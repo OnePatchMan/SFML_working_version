@@ -325,19 +325,7 @@ void Player::handleInput(const std::optional<sf::Event>& event) {
                 } else {
                     cancelSprint();
                     // 2. Уворот на месте при отсутствии движения (Spot Dodge на земле)
-                    const auto& pcfg = PlayerConfig::get();
-                    _isSpotDodging = true;
-                    _spotDodgeTimer = pcfg.spotDodgeDuration;
-                    _spotDodgeCooldown = pcfg.spotDodgeCooldown;
-                    _dashCooldown = pcfg.spotDodgeCooldown;
-                    _iframeTimer = pcfg.spotDodgeDuration;
-                    _perfectDodgeWindowTimer = pcfg.perfectDodgeWindow; // Окно идеального уворота в первые доли секунды
-                    _dashWindowTimer = 0.20f; // Короткое окно для атаки из уворота
-                    velocity.x = 0.0f;
-
-                    // Оставляем призрачный фантом на месте уворота
-                    _dashGhosts.emplace_back(_animation.getCurrentSprite(), 220.0f, 0.22f);
-                    _dashGhosts.back().sprite.setColor(sf::Color(140, 220, 255, 210));
+                    triggerSpotDodge(true);
                 }
             }
         }
@@ -440,13 +428,6 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
     if (_blockStunTimer > 0.0f) {
         _blockStunTimer -= dt;
         moveX = 0.0f; // Персонаж находится в коротком блок-стане от каждого заблокированного удара
-    }
-
-    // Взаимодействие с дверьми на клавишу [E]
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E)) {
-        if (auto* act = Arena::getActive()) {
-            act->interactDoorNear(position, 96.0f);
-        }
     }
 
     // Шкала прочности блока (Guard / Poise):
@@ -637,18 +618,19 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
     }
 
     // Затухание фантомов шлейфа
-    for (auto it = _dashGhosts.begin(); it != _dashGhosts.end(); ) {
-        it->lifetime -= dt;
-        it->alpha -= (180.0f / 0.15f) * dt;
-        if (it->lifetime <= 0.0f || it->alpha <= 0.0f) {
-            it = _dashGhosts.erase(it);
-        } else {
-            sf::Color c = it->sprite.getColor();
-            c.a = static_cast<std::uint8_t>(std::clamp(it->alpha, 0.0f, 255.0f));
-            it->sprite.setColor(c);
-            ++it;
+    for (auto& ghost : _dashGhosts) {
+        ghost.lifetime -= dt;
+        if (ghost.lifetime > 0.0f) {
+            ghost.alpha = ghost.maxAlpha * (ghost.lifetime / ghost.maxLifetime);
+            sf::Color c = ghost.sprite.getColor();
+            c.a = static_cast<std::uint8_t>(std::clamp(ghost.alpha, 0.0f, 255.0f));
+            ghost.sprite.setColor(c);
         }
     }
+    _dashGhosts.erase(
+        std::remove_if(_dashGhosts.begin(), _dashGhosts.end(),
+                       [](const DashGhost& g) { return g.lifetime <= 0.0f || g.alpha <= 0.0f; }),
+        _dashGhosts.end());
 
     // Защита от застревания в стенах при сильных ударах (De-penetration / Unstuck logic)
     if (_collisionEnabled && arena.overlapsSolid(position.x, position.y, HALF_W, TOP_OFFSET, BOTTOM_OFFSET)) {
@@ -714,16 +696,7 @@ void Player::update(float dt, const Arena& arena, const sf::Vector2f& mouseWorld
             }
         }
         if (hitX) {
-            if (_dashTimer > 0.0f) {
-                if (auto* act = Arena::getActive()) {
-                    sf::FloatRect hitBox = getBounds();
-                    if (_dashDirX > 0.0f) hitBox.size.x += 28.0f;
-                    else { hitBox.position.x -= 28.0f; hitBox.size.x += 28.0f; }
-                    if (act->checkAndBreakDoorOverlap(hitBox, sf::Vector2f(_dashDirX * 600.0f, 0.0f), false)) {
-                        position.x += _dashDirX * 36.0f;
-                    }
-                }
-            } else if (_stunTimer > 0.0f) {
+            if (_dashTimer <= 0.0f && _stunTimer > 0.0f) {
                 if (auto* act = Arena::getActive()) {
                     act->checkAndBreakDoorOverlap(getBounds(), velocity, true);
                 }
@@ -873,8 +846,8 @@ void Player::draw(sf::RenderWindow& window) {
     }
 
     float moveX = 0.0f;
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) moveX -= 1.0f;
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) moveX += 1.0f;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left) || _simulatedMoveDir < -0.1f) moveX -= 1.0f;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right) || _simulatedMoveDir > 0.1f) moveX += 1.0f;
 
     // Лямбда отрисовки булавы (за спиной героя или спереди во время удара)
     auto drawHeldMace = [&](bool behindPlayer) {

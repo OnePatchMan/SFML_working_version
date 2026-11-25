@@ -27,18 +27,18 @@ void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, Bo
         float u = i / static_cast<float>(sparkCount);
 
         if (type == BossSlashType::WHIRLWIND_360) {
-            float angle = static_cast<float>(rand() % 360);
+            float angle = randRange(0.0f, 360.0f);
             float rad = angle * 3.14159f / 180.0f;
-            float rDist = (w * 0.22f) + static_cast<float>(rand() % static_cast<int>(w * 0.26f + 1.0f));
+            float rDist = (w * 0.22f) + randRange(0.0f, w * 0.26f);
             s.pos = {x + w * 0.5f + std::cos(rad) * rDist, y + h * 0.52f + std::sin(rad) * (rDist * 0.85f)};
-            float spd = 340.0f + static_cast<float>(rand() % 340);
+            float spd = randRange(340.0f, 680.0f);
             s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
         } else if (type == BossSlashType::PIERCING_THRUST) {
             float fx = pivotX + dir * (w * (0.2f + 0.75f * u));
-            float fy = y + h * 0.52f + ((rand() % 36) - 18.0f);
+            float fy = y + h * 0.52f + randRange(-18.0f, 18.0f);
             s.pos = {fx, fy};
-            float spd = 560.0f + static_cast<float>(rand() % 420);
-            float ang = (facingLeft ? 180.0f : 0.0f) + (-16.0f + static_cast<float>(rand() % 32));
+            float spd = randRange(560.0f, 980.0f);
+            float ang = (facingLeft ? 180.0f : 0.0f) + randRange(-16.0f, 16.0f);
             float rad = ang * 3.14159f / 180.0f;
             s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
         } else if (type == BossSlashType::UPWARD_CLEAVE) {
@@ -46,8 +46,8 @@ void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, Bo
             float px = pivotX + dir * std::cos(ang) * (w * 0.85f);
             float py = y + h * 0.62f + std::sin(ang) * (h * 0.50f);
             s.pos = {px, py};
-            float spd = 320.0f + static_cast<float>(rand() % 340);
-            float outAng = (facingLeft ? 180.0f : 0.0f) + (-65.0f - static_cast<float>(rand() % 50));
+            float spd = randRange(320.0f, 660.0f);
+            float outAng = (facingLeft ? 180.0f : 0.0f) - randRange(65.0f, 115.0f);
             float rad = outAng * 3.14159f / 180.0f;
             s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
         } else if (type == BossSlashType::HEAVY_OVERHEAD) {
@@ -55,8 +55,8 @@ void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, Bo
             float px = pivotX + dir * std::cos(ang) * (w * 0.78f);
             float py = y + h * 0.18f + std::sin(ang) * (h * 0.82f);
             s.pos = {px, py};
-            float spd = 360.0f + static_cast<float>(rand() % 380);
-            float outAng = (facingLeft ? 180.0f : 0.0f) + (35.0f + static_cast<float>(rand() % 55));
+            float spd = randRange(360.0f, 740.0f);
+            float outAng = (facingLeft ? 180.0f : 0.0f) + randRange(35.0f, 90.0f);
             float rad = outAng * 3.14159f / 180.0f;
             s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
         } else if (type == BossSlashType::CROSS_X) {
@@ -66,8 +66,8 @@ void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, Bo
             float px = pivotX + dir * std::cos(ang) * (w * 0.82f);
             float py = y + pyOff + std::sin(ang) * (h * 0.45f);
             s.pos = {px, py};
-            float spd = 300.0f + static_cast<float>(rand() % 350);
-            float baseAngle = (facingLeft ? 180.0f : 0.0f) + (-45.0f + static_cast<float>(rand() % 90));
+            float spd = randRange(300.0f, 650.0f);
+            float baseAngle = (facingLeft ? 180.0f : 0.0f) + randRange(-45.0f, 45.0f);
             float rad = baseAngle * 3.14159f / 180.0f;
             s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
         } else { // HORIZONTAL_CLEAVE
@@ -75,15 +75,15 @@ void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, Bo
             float px = pivotX + dir * std::cos(ang) * (w * 0.86f);
             float py = y + h * 0.52f + std::sin(ang) * (h * 0.42f);
             s.pos = {px, py};
-            float spd = 300.0f + static_cast<float>(rand() % 320);
-            float baseAngle = (facingLeft ? 180.0f : 0.0f) + (-35.0f + static_cast<float>(rand() % 70));
+            float spd = randRange(300.0f, 620.0f);
+            float baseAngle = (facingLeft ? 180.0f : 0.0f) + randRange(-35.0f, 35.0f);
             float rad = baseAngle * 3.14159f / 180.0f;
             s.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
         }
 
         s.prevPos = s.pos;
         s.timer = 0.0f;
-        s.maxLife = 0.22f + (rand() % 100) / 400.0f;
+        s.maxLife = randRange(0.22f, 0.47f);
         s.size = (i % 4 == 0) ? 3.0f : 1.8f;
         s.color = (i % 3 == 0) ? sf::Color(255, 255, 240) :
                   ((i % 3 == 1) ? sf::Color(255, 195, 45) : sf::Color(255, 65, 20));
@@ -98,15 +98,15 @@ void BossVfxManager::spawnSlash(const sf::FloatRect& hitbox, bool facingLeft, Bo
         float sparkX = pivotX + dir * (w * 0.55f);
         for (int k = 0; k < floorSparks; ++k) {
             BossSlashInstance::Spark fs;
-            fs.pos = {sparkX + ((rand() % 40) - 20.0f), inst.groundY - 2.0f};
+            fs.pos = {sparkX + randRange(-20.0f, 20.0f), inst.groundY - 2.0f};
             fs.prevPos = fs.pos;
-            float fspd = 280.0f + static_cast<float>(rand() % 380);
+            float fspd = randRange(280.0f, 660.0f);
             float fdir = (k % 3 == 0) ? -dir : dir;
-            float fAng = (fdir > 0.0f ? 0.0f : 180.0f) + (-10.0f - (rand() % 35));
+            float fAng = (fdir > 0.0f ? 0.0f : 180.0f) - randRange(10.0f, 45.0f);
             float frad = fAng * 3.14159f / 180.0f;
             fs.vel = {std::cos(frad) * fspd, std::sin(frad) * fspd};
             fs.timer = 0.0f;
-            fs.maxLife = 0.16f + (rand() % 100) / 500.0f;
+            fs.maxLife = randRange(0.16f, 0.36f);
             fs.size = 2.2f;
             fs.color = (k % 2 == 0) ? sf::Color(255, 250, 220) : sf::Color(255, 160, 40);
             fs.isFloorSpark = true;
@@ -122,9 +122,9 @@ void BossVfxManager::spawnDustCloud(const sf::Vector2f& pos, const sf::Vector2f&
     p.pos = pos;
     p.vel = vel;
     p.currentRadius = radius * 0.45f;
-    p.maxRadius = radius * (1.3f + (rand() % 40) / 100.0f);
-    p.rot = static_cast<float>(rand() % 360);
-    p.rotSpeed = -140.0f + static_cast<float>(rand() % 280);
+    p.maxRadius = radius * randRange(1.3f, 1.7f);
+    p.rot = randRange(0.0f, 360.0f);
+    p.rotSpeed = randRange(-140.0f, 140.0f);
     p.timer = 0.0f;
     p.maxDuration = life;
     p.color = color;
@@ -163,13 +163,13 @@ void BossVfxManager::spawnGroundImpact(const sf::Vector2f& groundPos, float widt
     // 1. Огромный купол клубящейся пыли в эпицентре удара (пыль поднимается высоко в воздух!)
     int centerPuffs = intense ? 36 : 24;
     for (int i = 0; i < centerPuffs; ++i) {
-        float offX = ((rand() % 100) / 50.0f - 1.0f) * (halfW * 0.75f);
+        float offX = randRange(-1.0f, 1.0f) * (halfW * 0.75f);
         sf::Vector2f pPos = {groundPos.x + offX, groundPos.y - 4.0f};
-        float upwardSpeed = 120.0f + static_cast<float>(rand() % 240);
-        float horizSpeed = offX * 1.8f + (-40.0f + static_cast<float>(rand() % 80));
+        float upwardSpeed = randRange(120.0f, 360.0f);
+        float horizSpeed = offX * 1.8f + randRange(-40.0f, 40.0f);
         sf::Color dustCol = (i % 3 == 0) ? sf::Color(175, 145, 110) :
                             ((i % 3 == 1) ? sf::Color(115, 95, 80) : sf::Color(70, 58, 52));
-        spawnDustCloud(pPos, {horizSpeed, -upwardSpeed}, (intense ? 28.0f : 20.0f) + (rand() % 16), dustCol, 1.0f + (rand() % 40) / 100.0f);
+        spawnDustCloud(pPos, {horizSpeed, -upwardSpeed}, (intense ? 28.0f : 20.0f) + randRange(0.0f, 16.0f), dustCol, randRange(1.0f, 1.4f));
     }
 
     // 2. Растущие каменные шипы из разлома земли
@@ -177,13 +177,13 @@ void BossVfxManager::spawnGroundImpact(const sf::Vector2f& groundPos, float widt
     for (int i = 0; i < spikeCount; ++i) {
         BossGroundSpike sp;
         float offsetRatio = (i / static_cast<float>(spikeCount - 1)) * 2.0f - 1.0f; // -1 to 1
-        float jitter = ((rand() % 100) / 100.0f - 0.5f) * (width / spikeCount) * 0.4f;
+        float jitter = randRange(-0.5f, 0.5f) * (width / spikeCount) * 0.4f;
         sp.basePos = {groundPos.x + offsetRatio * (halfW * 0.85f) + jitter, groundPos.y};
-        sp.width = (intense ? 28.0f : 22.0f) + (rand() % 14);
-        sp.targetHeight = (intense ? 65.0f : 45.0f) + (rand() % 35);
+        sp.width = (intense ? 28.0f : 22.0f) + randRange(0.0f, 14.0f);
+        sp.targetHeight = (intense ? 65.0f : 45.0f) + randRange(0.0f, 35.0f);
         if (std::abs(offsetRatio) < 0.35f) sp.targetHeight *= 1.40f;
         sp.currentHeight = 0.0f;
-        sp.tilt = offsetRatio * 0.28f + ((rand() % 100) / 100.0f - 0.5f) * 0.15f;
+        sp.tilt = offsetRatio * 0.28f + randRange(-0.5f, 0.5f) * 0.15f;
         sp.timer = 0.0f;
         sp.maxDuration = intense ? 1.15f : 0.85f;
         sp.rockColor = (i % 2 == 0) ? sf::Color(72, 60, 55) : sf::Color(95, 82, 74);
@@ -201,7 +201,7 @@ void BossVfxManager::spawnGroundImpact(const sf::Vector2f& groundPos, float widt
     int segs = 14;
     for (int i = 0; i <= segs; ++i) {
         float px = groundPos.x - crack.length * 0.5f + (i / static_cast<float>(segs)) * crack.length;
-        float py = groundPos.y + ((rand() % 100) / 100.0f - 0.5f) * 8.0f;
+        float py = groundPos.y + randRange(-4.0f, 4.0f);
         crack.jaggedPoints.push_back({px, py});
     }
     m_cracks.push_back(crack);
@@ -225,16 +225,16 @@ void BossVfxManager::spawnGroundImpact(const sf::Vector2f& groundPos, float widt
     int rockCount = intense ? 26 : 16;
     for (int i = 0; i < rockCount; ++i) {
         BossDebrisChunk d;
-        d.pos = {groundPos.x + ((rand() % 100) / 50.0f - 1.0f) * (halfW * 0.45f), groundPos.y - 4.0f};
-        float angle = -165.0f + (rand() % 150);
-        float spd = 240.0f + (rand() % 420);
+        d.pos = {groundPos.x + randRange(-1.0f, 1.0f) * (halfW * 0.45f), groundPos.y - 4.0f};
+        float angle = randRange(-165.0f, -15.0f);
+        float spd = randRange(240.0f, 660.0f);
         float rad = angle * 3.14159f / 180.0f;
         d.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
-        d.rot = static_cast<float>(rand() % 360);
-        d.rotSpeed = -400.0f + (rand() % 800);
-        d.size = 6.0f + (rand() % 10);
+        d.rot = randRange(0.0f, 360.0f);
+        d.rotSpeed = randRange(-400.0f, 400.0f);
+        d.size = randRange(6.0f, 16.0f);
         d.timer = 0.0f;
-        d.maxDuration = 0.65f + (rand() % 100) / 250.0f;
+        d.maxDuration = randRange(0.65f, 1.05f);
         d.color = (i % 3 == 0) ? sf::Color(65, 55, 58) : ((i % 3 == 1) ? sf::Color(105, 90, 78) : sf::Color(195, 75, 38));
         d.active = true;
         m_debris.push_back(d);
@@ -261,7 +261,7 @@ void BossVfxManager::spawnJumpSlamBeam(const sf::FloatRect& hitbox, float durati
         int pts = 10;
         for (int i = 0; i <= pts; ++i) {
             float y = startY + (i / static_cast<float>(pts)) * (endY - startY);
-            curX += (-18.0f + (rand() % 36));
+            curX += randRange(-18.0f, 18.0f);
             branch.push_back({curX, y});
         }
         p.lightningBranches.push_back(branch);
@@ -282,15 +282,15 @@ void BossVfxManager::spawnWallCrash(const sf::Vector2f& impactPos, float dirX) {
     for (int i = 0; i < chunkCount; ++i) {
         BossDebrisChunk d;
         d.pos = impactPos;
-        float angle = (dirX > 0.0f) ? (100.0f + (rand() % 160)) : (-80.0f + (rand() % 160));
-        float spd = 260.0f + (rand() % 480);
+        float angle = (dirX > 0.0f) ? randRange(100.0f, 260.0f) : randRange(-80.0f, 80.0f);
+        float spd = randRange(260.0f, 740.0f);
         float rad = angle * 3.14159f / 180.0f;
         d.vel = {std::cos(rad) * spd, std::sin(rad) * spd};
-        d.rot = static_cast<float>(rand() % 360);
-        d.rotSpeed = -450.0f + (rand() % 900);
-        d.size = 5.0f + (rand() % 10);
+        d.rot = randRange(0.0f, 360.0f);
+        d.rotSpeed = randRange(-450.0f, 450.0f);
+        d.size = randRange(5.0f, 15.0f);
         d.timer = 0.0f;
-        d.maxDuration = 0.65f + (rand() % 100) / 250.0f;
+        d.maxDuration = randRange(0.65f, 1.05f);
         d.color = (i % 2 == 0) ? sf::Color(78, 68, 65) : sf::Color(120, 105, 95);
         d.active = true;
         w.chunks.push_back(d);
@@ -298,9 +298,9 @@ void BossVfxManager::spawnWallCrash(const sf::Vector2f& impactPos, float dirX) {
 
     // Выброс облака пыли из точки сокрушения о стену
     for (int p = 0; p < 16; ++p) {
-        float vy = -80.0f + static_cast<float>(rand() % 160);
-        float vx = (dirX > 0.0f ? -1.0f : 1.0f) * (110.0f + static_cast<float>(rand() % 180));
-        spawnDustCloud(impactPos, {vx, vy}, 22.0f + (rand() % 14), sf::Color(150, 130, 110), 0.85f);
+        float vy = randRange(-80.0f, 80.0f);
+        float vx = (dirX > 0.0f ? -1.0f : 1.0f) * randRange(110.0f, 290.0f);
+        spawnDustCloud(impactPos, {vx, vy}, randRange(22.0f, 36.0f), sf::Color(150, 130, 110), 0.85f);
     }
 
     m_wallCrashes.push_back(w);
@@ -409,10 +409,10 @@ void BossVfxManager::update(float dt) {
         if (w.puffTimer <= 0.0f) {
             w.puffTimer = 0.024f;
             float pY = w.groundY - 6.0f;
-            float upwardVel = 110.0f + static_cast<float>(rand() % 190);
-            float horizVel = w.dir * (40.0f + static_cast<float>(rand() % 70));
-            sf::Color col = ((rand() % 2 == 0) ? sf::Color(165, 138, 105) : sf::Color(120, 100, 82));
-            spawnDustCloud({w.x + ((rand() % 20) - 10.0f), pY}, {horizVel, -upwardVel}, 18.0f + (rand() % 14), col, 0.95f + (rand() % 30) / 100.0f);
+            float upwardVel = randRange(110.0f, 300.0f);
+            float horizVel = w.dir * randRange(40.0f, 110.0f);
+            sf::Color col = (randRange(0.0f, 1.0f) < 0.5f) ? sf::Color(165, 138, 105) : sf::Color(120, 100, 82);
+            spawnDustCloud({w.x + randRange(-10.0f, 10.0f), pY}, {horizVel, -upwardVel}, randRange(18.0f, 32.0f), col, randRange(0.95f, 1.25f));
         }
 
         if (w.currentDist >= w.maxDist) {
@@ -522,7 +522,17 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
         target.draw(inner);
     }
 
-    // 3. Отрисовка каменных шипов
+    // 3. Отрисовка каменных шипов (батчем в одном VertexArray + безопасный clamp каналов цвета)
+    auto shiftColor = [](sf::Color base, int delta, std::uint8_t alpha) -> sf::Color {
+        return sf::Color(
+            static_cast<std::uint8_t>(std::clamp(static_cast<int>(base.r) + delta, 0, 255)),
+            static_cast<std::uint8_t>(std::clamp(static_cast<int>(base.g) + delta, 0, 255)),
+            static_cast<std::uint8_t>(std::clamp(static_cast<int>(base.b) + delta, 0, 255)),
+            alpha
+        );
+    };
+
+    m_spikeVA.clear();
     for (const auto& sp : m_spikes) {
         if (!sp.active || sp.currentHeight <= 1.0f) continue;
         float prog = sp.timer / sp.maxDuration;
@@ -536,18 +546,14 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
         float tipY = by - sp.currentHeight;
 
         // Теневая грань шипа
-        sf::VertexArray shadowSide(sf::PrimitiveType::Triangles, 3);
-        shadowSide[0] = {{bx - hw, by}, sf::Color(sp.rockColor.r - 20, sp.rockColor.g - 20, sp.rockColor.b - 20, a), {0.0f, 0.0f}};
-        shadowSide[1] = {{tipX, tipY}, sf::Color(sp.rockColor.r + 10, sp.rockColor.g + 10, sp.rockColor.b + 10, a), {0.0f, 0.0f}};
-        shadowSide[2] = {{bx, by + 2.0f}, sf::Color(sp.rockColor.r - 15, sp.rockColor.g - 15, sp.rockColor.b - 15, a), {0.0f, 0.0f}};
-        target.draw(shadowSide);
+        m_spikeVA.append({{bx - hw, by}, shiftColor(sp.rockColor, -20, a), {0.0f, 0.0f}});
+        m_spikeVA.append({{tipX, tipY}, shiftColor(sp.rockColor, +10, a), {0.0f, 0.0f}});
+        m_spikeVA.append({{bx, by + 2.0f}, shiftColor(sp.rockColor, -15, a), {0.0f, 0.0f}});
 
         // Освещенная грань шипа
-        sf::VertexArray lightSide(sf::PrimitiveType::Triangles, 3);
-        lightSide[0] = {{bx, by + 2.0f}, sf::Color(sp.rockColor.r + 25, sp.rockColor.g + 25, sp.rockColor.b + 25, a), {0.0f, 0.0f}};
-        lightSide[1] = {{tipX, tipY}, sf::Color(230, 200, 160, a), {0.0f, 0.0f}};
-        lightSide[2] = {{bx + hw, by}, sf::Color(sp.rockColor.r + 15, sp.rockColor.g + 15, sp.rockColor.b + 15, a), {0.0f, 0.0f}};
-        target.draw(lightSide);
+        m_spikeVA.append({{bx, by + 2.0f}, shiftColor(sp.rockColor, +25, a), {0.0f, 0.0f}});
+        m_spikeVA.append({{tipX, tipY}, sf::Color(230, 200, 160, a), {0.0f, 0.0f}});
+        m_spikeVA.append({{bx + hw, by}, shiftColor(sp.rockColor, +15, a), {0.0f, 0.0f}});
 
         // Огненная подсветка у основания шипа
         sf::CircleShape baseGlow(hw * 0.9f);
@@ -555,6 +561,9 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
         baseGlow.setPosition({bx, by});
         baseGlow.setFillColor(sf::Color(255, 90, 20, static_cast<std::uint8_t>(a * 0.35f)));
         target.draw(baseGlow);
+    }
+    if (m_spikeVA.getVertexCount() > 0) {
+        target.draw(m_spikeVA);
     }
 
     // 4. Отрисовка осколков камней
@@ -966,20 +975,40 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
             float midY = y + h * 0.52f;
             float curReachX = startX + (endX - startX) * std::min(1.0f, prog / 0.25f);
 
-            // Копьевидный сердечник
-            sf::VertexArray spear(sf::PrimitiveType::TriangleStrip);
+            // Копьевидный сердечник (две симметричные полосы треугольников с горящим ядром в центре)
+            m_spearVA.clear();
             int segs = 16;
-            for (int i = 0; i <= segs; ++i) {
-                float u = i / static_cast<float>(segs);
-                float curX = startX + (curReachX - startX) * u;
-                float th = (1.0f - u) * 16.0f + u * 3.0f;
-                std::uint8_t aSp = static_cast<std::uint8_t>(a * (0.4f + 0.6f * u));
+            for (int i = 0; i < segs; ++i) {
+                float u0 = i / static_cast<float>(segs);
+                float u1 = (i + 1) / static_cast<float>(segs);
+                float x0 = startX + (curReachX - startX) * u0;
+                float x1 = startX + (curReachX - startX) * u1;
+                float th0 = (1.0f - u0) * 16.0f + u0 * 3.0f;
+                float th1 = (1.0f - u1) * 16.0f + u1 * 3.0f;
+                std::uint8_t a0 = static_cast<std::uint8_t>(a * (0.4f + 0.6f * u0));
+                std::uint8_t a1 = static_cast<std::uint8_t>(a * (0.4f + 0.6f * u1));
 
-                spear.append({{curX, midY - th}, sf::Color(255, 90, 20, aSp), {0.0f, 0.0f}});
-                spear.append({{curX, midY}, sf::Color(255, 255, 245, aSp), {0.0f, 0.0f}});
-                spear.append({{curX, midY + th}, sf::Color(255, 190, 40, aSp), {0.0f, 0.0f}});
+                sf::Color top0(255, 90, 20, a0),  top1(255, 90, 20, a1);
+                sf::Color mid0(255, 255, 245, a0), mid1(255, 255, 245, a1);
+                sf::Color bot0(255, 190, 40, a0), bot1(255, 190, 40, a1);
+
+                // Верхний скат
+                m_spearVA.append({{x0, midY - th0}, top0, {0.0f, 0.0f}});
+                m_spearVA.append({{x1, midY - th1}, top1, {0.0f, 0.0f}});
+                m_spearVA.append({{x1, midY},       mid1, {0.0f, 0.0f}});
+                m_spearVA.append({{x0, midY - th0}, top0, {0.0f, 0.0f}});
+                m_spearVA.append({{x1, midY},       mid1, {0.0f, 0.0f}});
+                m_spearVA.append({{x0, midY},       mid0, {0.0f, 0.0f}});
+
+                // Нижний скат
+                m_spearVA.append({{x0, midY},       mid0, {0.0f, 0.0f}});
+                m_spearVA.append({{x1, midY},       mid1, {0.0f, 0.0f}});
+                m_spearVA.append({{x1, midY + th1}, bot1, {0.0f, 0.0f}});
+                m_spearVA.append({{x0, midY},       mid0, {0.0f, 0.0f}});
+                m_spearVA.append({{x1, midY + th1}, bot1, {0.0f, 0.0f}});
+                m_spearVA.append({{x0, midY + th0}, bot0, {0.0f, 0.0f}});
             }
-            target.draw(spear);
+            target.draw(m_spearVA);
 
             // Конические ударные волны рассечения воздуха
             for (int r = 0; r < 3; ++r) {
@@ -1007,15 +1036,15 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
         }
 
         // Шлейфы искр со скоростными штрихами и раскаленными ядрами
-        sf::VertexArray sparkLines(sf::PrimitiveType::Lines);
+        m_sparkLinesVA.clear();
         for (const auto& sp : s.sparks) {
             float sProg = sp.timer / sp.maxLife;
             if (sProg >= 1.0f) continue;
             float spA = (1.0f - sProg) * a;
             std::uint8_t sparkAlpha = static_cast<std::uint8_t>(std::clamp(spA, 0.0f, 255.0f));
 
-            sparkLines.append({sp.pos, sf::Color(sp.color.r, sp.color.g, sp.color.b, sparkAlpha), {0.0f, 0.0f}});
-            sparkLines.append({sp.prevPos, sf::Color(255, 60, 20, static_cast<std::uint8_t>(sparkAlpha * 0.35f)), {0.0f, 0.0f}});
+            m_sparkLinesVA.append({sp.pos, sf::Color(sp.color.r, sp.color.g, sp.color.b, sparkAlpha), {0.0f, 0.0f}});
+            m_sparkLinesVA.append({sp.prevPos, sf::Color(255, 60, 20, static_cast<std::uint8_t>(sparkAlpha * 0.35f)), {0.0f, 0.0f}});
 
             if (sp.size > 2.2f) {
                 sf::RectangleShape sparkHead({sp.size, sp.size});
@@ -1026,7 +1055,7 @@ void BossVfxManager::draw(sf::RenderTarget& target) {
                 target.draw(sparkHead);
             }
         }
-        target.draw(sparkLines);
+        target.draw(m_sparkLinesVA);
     }
 
     // 9. Отрисовка обломков и пыли врезания тарана в стену

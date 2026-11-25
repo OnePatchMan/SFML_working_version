@@ -10,9 +10,11 @@ class Arena;
 struct DashGhost {
     sf::Sprite sprite;
     float alpha = 180.0f;
+    float maxAlpha = 180.0f;
     float lifetime = 0.15f;
+    float maxLifetime = 0.15f;
     DashGhost(const sf::Sprite& spr, float a = 180.0f, float life = 0.15f)
-        : sprite(spr), alpha(a), lifetime(life) {}
+        : sprite(spr), alpha(a), maxAlpha(a), lifetime(life), maxLifetime(life > 0.0f ? life : 0.15f) {}
 };
 
 enum class AttackAnimType {
@@ -91,7 +93,7 @@ public:
     bool isSprinting() const { return _isSprinting; }
     void cancelSprint() { _isSprinting = false; _sprintDirX = 0.0f; }
     bool isSpotDodging() const { return _isSpotDodging; }
-    void triggerSpotDodge() {
+    void triggerSpotDodge(bool spawnGhost = false) {
         const auto& pcfg = PlayerConfig::get();
         _isSpotDodging = true;
         _spotDodgeTimer = pcfg.spotDodgeDuration;
@@ -101,6 +103,10 @@ public:
         _perfectDodgeWindowTimer = pcfg.perfectDodgeWindow;
         _dashWindowTimer = 0.20f;
         velocity.x = 0.0f;
+        if (spawnGhost) {
+            _dashGhosts.emplace_back(_animation.getCurrentSprite(), 220.0f, pcfg.spotDodgeDuration);
+            _dashGhosts.back().sprite.setColor(sf::Color(140, 220, 255, 210));
+        }
     }
     bool isInvulnerable() const { return _iframeTimer > 0.0f; }
     bool isPerfectDodgeActive() const { return _perfectDodgeWindowTimer > 0.0f; }
@@ -157,15 +163,15 @@ public:
     // Система защиты / блока (верхний и нижний блок, снижение урона на 80%, удержание F/E, строго на земле)
     BlockType getBlockType() const { return _isOnGround ? _blockType : BlockType::NONE; }
     void setBlockType(BlockType bt) {
-        if (!_isOnGround && bt != BlockType::NONE) {
+        if ((!_isOnGround || isGuardBroken()) && bt != BlockType::NONE) {
             _blockType = BlockType::NONE;
             return;
         }
         _blockType = bt;
     }
-    bool isBlocking() const { return _isOnGround && (_blockType != BlockType::NONE); }
+    bool isBlocking() const { return _isOnGround && !isGuardBroken() && (_blockType != BlockType::NONE); }
     void setBlocking(bool b) {
-        if (!_isOnGround && b) {
+        if ((!_isOnGround || isGuardBroken()) && b) {
             _blockType = BlockType::NONE;
             return;
         }

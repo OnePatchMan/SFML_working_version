@@ -256,75 +256,15 @@ public:
     }
 
     static bool loadKVFile(const std::string& filepath) {
-        std::ifstream file(filepath);
-        if (!file.is_open()) return false;
-
-        std::vector<std::string> blockStack;
-        std::string pendingBlock = "";
-
-        std::string line;
-        while (std::getline(file, line)) {
-            auto tokens = tokenizeLine(line);
-            if (tokens.empty()) continue;
-
-            for (size_t t = 0; t < tokens.size(); ++t) {
-                const std::string& tok = tokens[t];
-                if (tok == "{") {
-                    blockStack.push_back(pendingBlock);
-                    pendingBlock.clear();
-                } else if (tok == "}") {
-                    if (!blockStack.empty()) blockStack.pop_back();
-                } else {
-                    if (t + 1 < tokens.size() && (tokens[t+1] != "{" && tokens[t+1] != "}")) {
-                        std::string key = tok;
-                        std::string val = tokens[t+1];
-                        t++;
-                        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
-
-                        applyKV(blockStack, key, val);
-                    } else {
-                        pendingBlock = tok;
-                    }
-                }
-            }
-        }
-        return true;
+        return kv::forEachPair(filepath, [](const std::vector<std::string>& stack, const std::string& key, const std::string& val) {
+            applyKV(stack, key, val);
+        });
     }
 
     static bool loadArchetypeKVFile(const std::string& filepath, EnemyArchetypeData& arch) {
-        std::ifstream file(filepath);
-        if (!file.is_open()) return false;
-
-        std::vector<std::string> blockStack;
-        std::string pendingBlock = "";
-
-        std::string line;
-        while (std::getline(file, line)) {
-            auto tokens = tokenizeLine(line);
-            if (tokens.empty()) continue;
-
-            for (size_t t = 0; t < tokens.size(); ++t) {
-                const std::string& tok = tokens[t];
-                if (tok == "{") {
-                    blockStack.push_back(pendingBlock);
-                    pendingBlock.clear();
-                } else if (tok == "}") {
-                    if (!blockStack.empty()) blockStack.pop_back();
-                } else {
-                    if (t + 1 < tokens.size() && (tokens[t+1] != "{" && tokens[t+1] != "}")) {
-                        std::string key = tok;
-                        std::string val = tokens[t+1];
-                        t++;
-                        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
-
-                        applyArchetypeKV(arch, blockStack, key, val);
-                    } else {
-                        pendingBlock = tok;
-                    }
-                }
-            }
-        }
-        return true;
+        return kv::forEachPair(filepath, [&arch](const std::vector<std::string>& stack, const std::string& key, const std::string& val) {
+            applyArchetypeKV(arch, stack, key, val);
+        });
     }
 
 private:
@@ -430,21 +370,23 @@ private:
     }
 
     static void parseAttackField(EnemyAttackStats& st, const std::string& key, const std::string& val) {
-        if (key == "active_time" || key == "activetime") st.activeTime = std::stof(val);
-        else if (key == "active_frames" || key == "activeframes") st.activeTime = std::stof(val) / 60.0f;
+        if (key == "active_time" || key == "activetime") kv::tryParseFloat(val, st.activeTime);
+        else if (key == "active_frames" || key == "activeframes") kv::assignFramesSeconds(val, st.activeTime);
         else if (key == "duration_frames" || key == "durationframes" || key == "total_frames") {
-            float totalTime = std::stof(val) / 60.0f;
-            st.recoveryTime = std::max(0.01f, totalTime - st.windup - st.activeTime);
+            float totalTime = 0.0f;
+            if (kv::assignFramesSeconds(val, totalTime)) {
+                st.recoveryTime = std::max(0.01f, totalTime - st.windup - st.activeTime);
+            }
         }
-        else if (key == "recovery_time" || key == "recoverytime" || key == "recovery") st.recoveryTime = std::stof(val);
-        else if (key == "damage") st.damage = std::stof(val);
-        else if (key == "knock_x" || key == "knockx") st.knockX = std::stof(val);
-        else if (key == "knock_y" || key == "knocky") st.knockY = std::stof(val);
-        else if (key == "stun") st.stun = std::stof(val);
-        else if (key == "lunge") st.lunge = std::stof(val);
-        else if (key == "hitbox_w" || key == "hitboxw") st.hbw = std::stof(val);
-        else if (key == "hitbox_h" || key == "hitboxh") st.hbh = std::stof(val);
-        else if (key == "hitbox_offset_y" || key == "hitboxoffsety") st.hbyOffset = std::stof(val);
+        else if (key == "recovery_time" || key == "recoverytime" || key == "recovery") kv::tryParseFloat(val, st.recoveryTime);
+        else if (key == "damage") kv::tryParseFloat(val, st.damage);
+        else if (key == "knock_x" || key == "knockx") kv::tryParseFloat(val, st.knockX);
+        else if (key == "knock_y" || key == "knocky") kv::tryParseFloat(val, st.knockY);
+        else if (key == "stun") kv::tryParseFloat(val, st.stun);
+        else if (key == "lunge") kv::tryParseFloat(val, st.lunge);
+        else if (key == "hitbox_w" || key == "hitboxw") kv::tryParseFloat(val, st.hbw);
+        else if (key == "hitbox_h" || key == "hitboxh") kv::tryParseFloat(val, st.hbh);
+        else if (key == "hitbox_offset_y" || key == "hitboxoffsety") kv::tryParseFloat(val, st.hbyOffset);
     }
 
     static void applyArchetypeKV(EnemyArchetypeData& arch, const std::vector<std::string>& stack, const std::string& key, const std::string& val) {
@@ -452,71 +394,71 @@ private:
         const std::string& root = stack[1];
 
         if (root == "Stats") {
-            if (key == "max_hp" || key == "hp" || key == "maxhp") arch.hp = std::stof(val);
-            else if (key == "speed") arch.speed = std::stof(val);
-            else if (key == "approach_speed" || key == "approachspeed") arch.approachSpeed = std::stof(val);
-            else if (key == "damage_multiplier" || key == "damagemultiplier" || key == "damagemult") arch.damageMult = std::stof(val);
-            else if (key == "scale") arch.scale = std::stof(val);
-            else if (key == "hitbox_scale" || key == "hitboxscale") arch.hitboxScale = std::stof(val);
-            else if (key == "stun_multiplier" || key == "stunmult") arch.stunMult = std::stof(val);
-            else if (key == "knock_multiplier" || key == "knockmult") arch.knockMult = std::stof(val);
-            else if (key == "windup_multiplier" || key == "windupmult") arch.windupMult = std::stof(val);
-            else if (key == "can_counter" || key == "cancounter") arch.canCounter = (std::stoi(val) != 0);
-            else if (key == "can_block" || key == "canblock") arch.canBlock = (std::stoi(val) != 0);
-            else if (key == "can_dodge" || key == "candodge") arch.canDodge = (std::stoi(val) != 0);
-            else if (key == "aggressiveness") arch.aggressiveness = std::stof(val);
-            else if (key == "intelligence") arch.intelligence = std::stof(val);
-            else if (key == "dodge_cooldown" || key == "dodgecooldown") arch.dodgeCooldown = std::stof(val);
-            else if (key == "spacing_distance" || key == "spacingdistance") arch.spacingDistance = std::stof(val);
-            else if (key == "idle_attack_delay" || key == "idleattackdelay") arch.idleAttackDelay = std::stof(val);
-            else if (key == "invis_duration" || key == "invisduration") arch.invisDuration = std::stof(val);
-            else if (key == "invis_cooldown" || key == "inviscooldown") arch.invisCooldown = std::stof(val);
-            else if (key == "whiff_recovery" || key == "whiffrecovery") arch.stats.whiffRecovery = std::stof(val);
-            else if (key == "hit_recovery" || key == "hitrecovery") arch.stats.hitRecovery = std::stof(val);
-            else if (key == "attack_cooldown" || key == "attackcooldown") arch.stats.attackCooldown = std::stof(val);
-            else if (key == "gravity") arch.stats.gravity = std::stof(val);
+            if (key == "max_hp" || key == "hp" || key == "maxhp") kv::tryParseFloat(val, arch.hp);
+            else if (key == "speed") kv::tryParseFloat(val, arch.speed);
+            else if (key == "approach_speed" || key == "approachspeed") kv::tryParseFloat(val, arch.approachSpeed);
+            else if (key == "damage_multiplier" || key == "damagemultiplier" || key == "damagemult") kv::tryParseFloat(val, arch.damageMult);
+            else if (key == "scale") kv::tryParseFloat(val, arch.scale);
+            else if (key == "hitbox_scale" || key == "hitboxscale") kv::tryParseFloat(val, arch.hitboxScale);
+            else if (key == "stun_multiplier" || key == "stunmult") kv::tryParseFloat(val, arch.stunMult);
+            else if (key == "knock_multiplier" || key == "knockmult") kv::tryParseFloat(val, arch.knockMult);
+            else if (key == "windup_multiplier" || key == "windupmult") kv::tryParseFloat(val, arch.windupMult);
+            else if (key == "can_counter" || key == "cancounter") arch.canCounter = kv::parseBool(val, arch.canCounter);
+            else if (key == "can_block" || key == "canblock") arch.canBlock = kv::parseBool(val, arch.canBlock);
+            else if (key == "can_dodge" || key == "candodge") arch.canDodge = kv::parseBool(val, arch.canDodge);
+            else if (key == "aggressiveness") kv::tryParseFloat(val, arch.aggressiveness);
+            else if (key == "intelligence") kv::tryParseFloat(val, arch.intelligence);
+            else if (key == "dodge_cooldown" || key == "dodgecooldown") kv::tryParseFloat(val, arch.dodgeCooldown);
+            else if (key == "spacing_distance" || key == "spacingdistance") kv::tryParseFloat(val, arch.spacingDistance);
+            else if (key == "idle_attack_delay" || key == "idleattackdelay") kv::tryParseFloat(val, arch.idleAttackDelay);
+            else if (key == "invis_duration" || key == "invisduration") kv::tryParseFloat(val, arch.invisDuration);
+            else if (key == "invis_cooldown" || key == "inviscooldown") kv::tryParseFloat(val, arch.invisCooldown);
+            else if (key == "whiff_recovery" || key == "whiffrecovery") kv::tryParseFloat(val, arch.stats.whiffRecovery);
+            else if (key == "hit_recovery" || key == "hitrecovery") kv::tryParseFloat(val, arch.stats.hitRecovery);
+            else if (key == "attack_cooldown" || key == "attackcooldown") kv::tryParseFloat(val, arch.stats.attackCooldown);
+            else if (key == "gravity") kv::tryParseFloat(val, arch.stats.gravity);
         } else if (root == "Perception") {
-            if (key == "view_distance" || key == "viewdistance") arch.perception.viewDistance = std::stof(val);
-            else if (key == "rear_view_distance" || key == "rearviewdistance") arch.perception.rearViewDistance = std::stof(val);
-            else if (key == "vertical_view_span" || key == "verticalviewspan") arch.perception.verticalViewSpan = std::stof(val);
-            else if (key == "patrol_speed" || key == "patrolspeed") arch.perception.patrolSpeed = std::stof(val);
-            else if (key == "patrol_radius" || key == "patrolradius") arch.perception.patrolRadius = std::stof(val);
-            else if (key == "patrol_wait_time" || key == "patrolwaittime") arch.perception.patrolWaitTime = std::stof(val);
-            else if (key == "alert_duration" || key == "alertduration") arch.perception.alertDuration = std::stof(val);
-            else if (key == "lost_sight_timeout" || key == "lostsighttimeout") arch.perception.lostSightTimeout = std::stof(val);
-            else if (key == "jump_speed" || key == "jumpspeed") arch.perception.jumpSpeed = std::stof(val);
-            else if (key == "jump_cooldown" || key == "jumpcooldown") arch.perception.jumpCooldown = std::stof(val);
+            if (key == "view_distance" || key == "viewdistance") kv::tryParseFloat(val, arch.perception.viewDistance);
+            else if (key == "rear_view_distance" || key == "rearviewdistance") kv::tryParseFloat(val, arch.perception.rearViewDistance);
+            else if (key == "vertical_view_span" || key == "verticalviewspan") kv::tryParseFloat(val, arch.perception.verticalViewSpan);
+            else if (key == "patrol_speed" || key == "patrolspeed") kv::tryParseFloat(val, arch.perception.patrolSpeed);
+            else if (key == "patrol_radius" || key == "patrolradius") kv::tryParseFloat(val, arch.perception.patrolRadius);
+            else if (key == "patrol_wait_time" || key == "patrolwaittime") kv::tryParseFloat(val, arch.perception.patrolWaitTime);
+            else if (key == "alert_duration" || key == "alertduration") kv::tryParseFloat(val, arch.perception.alertDuration);
+            else if (key == "lost_sight_timeout" || key == "lostsighttimeout") kv::tryParseFloat(val, arch.perception.lostSightTimeout);
+            else if (key == "jump_speed" || key == "jumpspeed") kv::tryParseFloat(val, arch.perception.jumpSpeed);
+            else if (key == "jump_cooldown" || key == "jumpcooldown") kv::tryParseFloat(val, arch.perception.jumpCooldown);
         } else if (root == "Counter") {
-            if (key == "window") arch.counter.window = std::stof(val);
-            else if (key == "active_frames" || key == "activeframes") arch.counter.window = std::stof(val) / 60.0f;
-            else if (key == "cooldown") arch.counter.cooldown = std::stof(val);
-            else if (key == "whiff_stun" || key == "whiffstun") arch.counter.whiffStun = std::stof(val);
-            else if (key == "player_stun" || key == "playerstun") arch.counter.playerStun = std::stof(val);
-            else if (key == "damage") arch.counter.damage = std::stof(val);
-            else if (key == "knock_x" || key == "knockx") arch.counter.knockX = std::stof(val);
-            else if (key == "knock_y" || key == "knocky") arch.counter.knockY = std::stof(val);
-            else if (key == "trigger_distance" || key == "triggerdistance") arch.counter.triggerDistance = std::stof(val);
+            if (key == "window") kv::tryParseFloat(val, arch.counter.window);
+            else if (key == "active_frames" || key == "activeframes") kv::assignFramesSeconds(val, arch.counter.window);
+            else if (key == "cooldown") kv::tryParseFloat(val, arch.counter.cooldown);
+            else if (key == "whiff_stun" || key == "whiffstun") kv::tryParseFloat(val, arch.counter.whiffStun);
+            else if (key == "player_stun" || key == "playerstun") kv::tryParseFloat(val, arch.counter.playerStun);
+            else if (key == "damage") kv::tryParseFloat(val, arch.counter.damage);
+            else if (key == "knock_x" || key == "knockx") kv::tryParseFloat(val, arch.counter.knockX);
+            else if (key == "knock_y" || key == "knocky") kv::tryParseFloat(val, arch.counter.knockY);
+            else if (key == "trigger_distance" || key == "triggerdistance") kv::tryParseFloat(val, arch.counter.triggerDistance);
         } else if (root == "DummyAttack") {
-            if (key == "windup") arch.stats.dummyWindup = std::stof(val);
-            else if (key == "windup_frames" || key == "windupframes") arch.stats.dummyWindup = std::stof(val) / 60.0f;
-            else if (key == "active_time" || key == "activetime") arch.stats.dummyActiveTime = std::stof(val);
-            else if (key == "active_frames" || key == "activeframes") arch.stats.dummyActiveTime = std::stof(val) / 60.0f;
-            else if (key == "recovery") arch.stats.dummyRecovery = std::stof(val);
-            else if (key == "damage") arch.stats.dummyDamage = std::stof(val);
-            else if (key == "knock_x" || key == "knockx") arch.stats.dummyKnockX = std::stof(val);
-            else if (key == "knock_y" || key == "knocky") arch.stats.dummyKnockY = std::stof(val);
-            else if (key == "stun") arch.stats.dummyStun = std::stof(val);
-            else if (key == "cooldown") arch.stats.dummyCooldown = std::stof(val);
-            else if (key == "hitbox_w" || key == "hitboxw") arch.stats.dummyHbw = std::stof(val);
-            else if (key == "hitbox_h" || key == "hitboxh") arch.stats.dummyHbh = std::stof(val);
-            else if (key == "hitbox_offset_y" || key == "hitboxoffsety") arch.stats.dummyHbyOffset = std::stof(val);
+            if (key == "windup") kv::tryParseFloat(val, arch.stats.dummyWindup);
+            else if (key == "windup_frames" || key == "windupframes") kv::assignFramesSeconds(val, arch.stats.dummyWindup);
+            else if (key == "active_time" || key == "activetime") kv::tryParseFloat(val, arch.stats.dummyActiveTime);
+            else if (key == "active_frames" || key == "activeframes") kv::assignFramesSeconds(val, arch.stats.dummyActiveTime);
+            else if (key == "recovery") kv::tryParseFloat(val, arch.stats.dummyRecovery);
+            else if (key == "damage") kv::tryParseFloat(val, arch.stats.dummyDamage);
+            else if (key == "knock_x" || key == "knockx") kv::tryParseFloat(val, arch.stats.dummyKnockX);
+            else if (key == "knock_y" || key == "knocky") kv::tryParseFloat(val, arch.stats.dummyKnockY);
+            else if (key == "stun") kv::tryParseFloat(val, arch.stats.dummyStun);
+            else if (key == "cooldown") kv::tryParseFloat(val, arch.stats.dummyCooldown);
+            else if (key == "hitbox_w" || key == "hitboxw") kv::tryParseFloat(val, arch.stats.dummyHbw);
+            else if (key == "hitbox_h" || key == "hitboxh") kv::tryParseFloat(val, arch.stats.dummyHbh);
+            else if (key == "hitbox_offset_y" || key == "hitboxoffsety") kv::tryParseFloat(val, arch.stats.dummyHbyOffset);
         } else if (root == "Combos" && stack.size() >= 3) {
             const std::string& comboId = stack[2];
 
             if (comboId == "1f2d1") {
                 if (stack.size() == 3) {
-                    if (key == "windup") arch.starter1.windup = std::stof(val);
-                    else if (key == "windup_frames" || key == "windupframes") arch.starter1.windup = std::stof(val) / 60.0f;
+                    if (key == "windup") kv::tryParseFloat(val, arch.starter1.windup);
+                    else if (key == "windup_frames" || key == "windupframes") kv::assignFramesSeconds(val, arch.starter1.windup);
                 } else if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "hit1") parseAttackField(arch.starter1.hit1, key, val);
@@ -525,8 +467,8 @@ private:
                 }
             } else if (comboId == "112") {
                 if (stack.size() == 3) {
-                    if (key == "windup") arch.starter2.windup = std::stof(val);
-                    else if (key == "windup_frames" || key == "windupframes") arch.starter2.windup = std::stof(val) / 60.0f;
+                    if (key == "windup") kv::tryParseFloat(val, arch.starter2.windup);
+                    else if (key == "windup_frames" || key == "windupframes") kv::assignFramesSeconds(val, arch.starter2.windup);
                 } else if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "hit1") parseAttackField(arch.starter2.hit1, key, val);
@@ -535,34 +477,34 @@ private:
                 }
             } else if (comboId == "21db1") {
                 if (stack.size() == 3) {
-                    if (key == "windup") arch.starter3.windup = std::stof(val);
-                    else if (key == "windup_frames" || key == "windupframes") arch.starter3.windup = std::stof(val) / 60.0f;
+                    if (key == "windup") kv::tryParseFloat(val, arch.starter3.windup);
+                    else if (key == "windup_frames" || key == "windupframes") kv::assignFramesSeconds(val, arch.starter3.windup);
                 } else if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "hit2") parseAttackField(arch.starter3.hit2, key, val);
                     else if (sub == "hit1") parseAttackField(arch.starter3.hit1, key, val);
                     else if (sub == "dash_behind") {
-                        if (key == "duration") arch.starter3.dashBehindDuration = std::stof(val);
-                        else if (key == "duration_frames" || key == "durationframes") arch.starter3.dashBehindDuration = std::stof(val) / 60.0f;
-                        else if (key == "offset") arch.starter3.dashBehindOffset = std::stof(val);
+                        if (key == "duration") kv::tryParseFloat(val, arch.starter3.dashBehindDuration);
+                        else if (key == "duration_frames" || key == "durationframes") kv::assignFramesSeconds(val, arch.starter3.dashBehindDuration);
+                        else if (key == "offset") kv::tryParseFloat(val, arch.starter3.dashBehindOffset);
                     } else if (sub == "sweep_db1") {
                         parseAttackField(arch.starter3.hitSweep, key, val);
                     }
                 }
             } else if (comboId == "GrapplePull") {
-                if (key == "windup") arch.grapplePull.windup = std::stof(val);
-                else if (key == "windup_frames" || key == "windupframes") arch.grapplePull.windup = std::stof(val) / 60.0f;
-                else if (key == "pull_speed" || key == "pullspeed") arch.grapplePull.pullSpeed = std::stof(val);
+                if (key == "windup") kv::tryParseFloat(val, arch.grapplePull.windup);
+                else if (key == "windup_frames" || key == "windupframes") kv::assignFramesSeconds(val, arch.grapplePull.windup);
+                else if (key == "pull_speed" || key == "pullspeed") kv::tryParseFloat(val, arch.grapplePull.pullSpeed);
                 else parseAttackField(arch.grapplePull.hit, key, val);
             } else if (comboId == "AirFollowup1") {
                 if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "chase_jump") {
-                        if (key == "jump_vel_y" || key == "jumpvely") arch.air1.jumpVelY = std::stof(val);
-                        else if (key == "duration") arch.air1.jumpDuration = std::stof(val);
-                        else if (key == "duration_frames" || key == "durationframes") arch.air1.jumpDuration = std::stof(val) / 60.0f;
-                        else if (key == "horiz_factor" || key == "horizfactor") arch.air1.jumpHorizFactor = std::stof(val);
-                        else if (key == "max_speed_x" || key == "maxspeedx") arch.air1.jumpMaxSpeedX = std::stof(val);
+                        if (key == "jump_vel_y" || key == "jumpvely") kv::tryParseFloat(val, arch.air1.jumpVelY);
+                        else if (key == "duration") kv::tryParseFloat(val, arch.air1.jumpDuration);
+                        else if (key == "duration_frames" || key == "durationframes") kv::assignFramesSeconds(val, arch.air1.jumpDuration);
+                        else if (key == "horiz_factor" || key == "horizfactor") kv::tryParseFloat(val, arch.air1.jumpHorizFactor);
+                        else if (key == "max_speed_x" || key == "maxspeedx") kv::tryParseFloat(val, arch.air1.jumpMaxSpeedX);
                     } else if (sub == "a1") {
                         parseAttackField(arch.air1.hitA1, key, val);
                     } else if (sub == "adw2") {
@@ -573,21 +515,21 @@ private:
                 if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "ground_advance") {
-                        if (key == "duration") arch.air2.groundAdvanceDuration = std::stof(val);
-                        else if (key == "duration_frames" || key == "durationframes") arch.air2.groundAdvanceDuration = std::stof(val) / 60.0f;
-                        else if (key == "advance_dist" || key == "advancedist") arch.air2.groundAdvanceDist = std::stof(val);
+                        if (key == "duration") kv::tryParseFloat(val, arch.air2.groundAdvanceDuration);
+                        else if (key == "duration_frames" || key == "durationframes") kv::assignFramesSeconds(val, arch.air2.groundAdvanceDuration);
+                        else if (key == "advance_dist" || key == "advancedist") kv::tryParseFloat(val, arch.air2.groundAdvanceDist);
                     } else if (sub == "chase_jump") {
-                        if (key == "jump_vel_y" || key == "jumpvely") arch.air2.jumpVelY = std::stof(val);
-                        else if (key == "duration") arch.air2.jumpDuration = std::stof(val);
-                        else if (key == "duration_frames" || key == "durationframes") arch.air2.jumpDuration = std::stof(val) / 60.0f;
+                        if (key == "jump_vel_y" || key == "jumpvely") kv::tryParseFloat(val, arch.air2.jumpVelY);
+                        else if (key == "duration") kv::tryParseFloat(val, arch.air2.jumpDuration);
+                        else if (key == "duration_frames" || key == "durationframes") kv::assignFramesSeconds(val, arch.air2.jumpDuration);
                     } else if (sub == "a1_first") {
                         parseAttackField(arch.air2.hitA1_1, key, val);
                     } else if (sub == "a1_second") {
                         parseAttackField(arch.air2.hitA1_2, key, val);
                     } else if (sub == "adw2_final") {
                         parseAttackField(arch.air2.hitAdw2, key, val);
-                        if (key == "dive_vel_y" || key == "divevely") arch.air2.diveSpeedY = std::stof(val);
-                        else if (key == "knock_x_vertical" || key == "knockxvertical") arch.air2.finalKnockXVertical = std::stof(val);
+                        if (key == "dive_vel_y" || key == "divevely") kv::tryParseFloat(val, arch.air2.diveSpeedY);
+                        else if (key == "knock_x_vertical" || key == "knockxvertical") kv::tryParseFloat(val, arch.air2.finalKnockXVertical);
                     }
                 }
             }
@@ -599,103 +541,103 @@ private:
         const std::string& root = stack[1];
 
         if (root == "Stats") {
-            if (key == "max_hp" || key == "maxhp") _config.stats.maxHp = std::stof(val);
-            else if (key == "gravity") _config.stats.gravity = std::stof(val);
-            else if (key == "whiff_recovery" || key == "whiffrecovery") _config.stats.whiffRecovery = std::stof(val);
-            else if (key == "hit_recovery" || key == "hitrecovery") _config.stats.hitRecovery = std::stof(val);
-            else if (key == "neutral_pursuit_speed" || key == "neutralpursuitspeed") _config.stats.neutralPursuitSpeed = std::stof(val);
-            else if (key == "approach_speed" || key == "approachspeed") _config.stats.approachSpeed = std::stof(val);
-            else if (key == "attack_cooldown" || key == "attackcooldown") _config.stats.attackCooldown = std::stof(val);
+            if (key == "max_hp" || key == "maxhp") kv::tryParseFloat(val, _config.stats.maxHp);
+            else if (key == "gravity") kv::tryParseFloat(val, _config.stats.gravity);
+            else if (key == "whiff_recovery" || key == "whiffrecovery") kv::tryParseFloat(val, _config.stats.whiffRecovery);
+            else if (key == "hit_recovery" || key == "hitrecovery") kv::tryParseFloat(val, _config.stats.hitRecovery);
+            else if (key == "neutral_pursuit_speed" || key == "neutralpursuitspeed") kv::tryParseFloat(val, _config.stats.neutralPursuitSpeed);
+            else if (key == "approach_speed" || key == "approachspeed") kv::tryParseFloat(val, _config.stats.approachSpeed);
+            else if (key == "attack_cooldown" || key == "attackcooldown") kv::tryParseFloat(val, _config.stats.attackCooldown);
         } else if (root == "Normal") {
-            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.normal.hp = std::stof(val);
-            else if (key == "speed") _config.normal.speed = std::stof(val);
-            else if (key == "approach_speed" || key == "approachspeed") _config.normal.approachSpeed = std::stof(val);
-            else if (key == "damage_multiplier" || key == "damagemult") _config.normal.damageMult = std::stof(val);
-            else if (key == "scale") _config.normal.scale = std::stof(val);
-            else if (key == "can_counter" || key == "cancounter") _config.normal.canCounter = (std::stoi(val) != 0);
-            else if (key == "can_block" || key == "canblock") _config.normal.canBlock = (std::stoi(val) != 0);
-            else if (key == "can_dodge" || key == "candodge") _config.normal.canDodge = (std::stoi(val) != 0);
+            if (key == "hp" || key == "max_hp" || key == "maxhp") kv::tryParseFloat(val, _config.normal.hp);
+            else if (key == "speed") kv::tryParseFloat(val, _config.normal.speed);
+            else if (key == "approach_speed" || key == "approachspeed") kv::tryParseFloat(val, _config.normal.approachSpeed);
+            else if (key == "damage_multiplier" || key == "damagemult") kv::tryParseFloat(val, _config.normal.damageMult);
+            else if (key == "scale") kv::tryParseFloat(val, _config.normal.scale);
+            else if (key == "can_counter" || key == "cancounter") _config.normal.canCounter = kv::parseBool(val, _config.normal.canCounter);
+            else if (key == "can_block" || key == "canblock") _config.normal.canBlock = kv::parseBool(val, _config.normal.canBlock);
+            else if (key == "can_dodge" || key == "candodge") _config.normal.canDodge = kv::parseBool(val, _config.normal.canDodge);
         } else if (root == "Tank") {
-            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.tank.hp = std::stof(val);
-            else if (key == "speed") _config.tank.speed = std::stof(val);
-            else if (key == "approach_speed" || key == "approachspeed") _config.tank.approachSpeed = std::stof(val);
-            else if (key == "damage_multiplier" || key == "damagemult") _config.tank.damageMult = std::stof(val);
-            else if (key == "hitbox_scale" || key == "hitboxscale") _config.tank.hitboxScale = std::stof(val);
-            else if (key == "scale") _config.tank.scale = std::stof(val);
-            else if (key == "stun_multiplier" || key == "stunmult") _config.tank.stunMult = std::stof(val);
-            else if (key == "knock_multiplier" || key == "knockmult") _config.tank.knockMult = std::stof(val);
-            else if (key == "windup_multiplier" || key == "windupmult") _config.tank.windupMult = std::stof(val);
-            else if (key == "can_counter" || key == "cancounter") _config.tank.canCounter = (std::stoi(val) != 0);
-            else if (key == "can_block" || key == "canblock") _config.tank.canBlock = (std::stoi(val) != 0);
+            if (key == "hp" || key == "max_hp" || key == "maxhp") kv::tryParseFloat(val, _config.tank.hp);
+            else if (key == "speed") kv::tryParseFloat(val, _config.tank.speed);
+            else if (key == "approach_speed" || key == "approachspeed") kv::tryParseFloat(val, _config.tank.approachSpeed);
+            else if (key == "damage_multiplier" || key == "damagemult") kv::tryParseFloat(val, _config.tank.damageMult);
+            else if (key == "hitbox_scale" || key == "hitboxscale") kv::tryParseFloat(val, _config.tank.hitboxScale);
+            else if (key == "scale") kv::tryParseFloat(val, _config.tank.scale);
+            else if (key == "stun_multiplier" || key == "stunmult") kv::tryParseFloat(val, _config.tank.stunMult);
+            else if (key == "knock_multiplier" || key == "knockmult") kv::tryParseFloat(val, _config.tank.knockMult);
+            else if (key == "windup_multiplier" || key == "windupmult") kv::tryParseFloat(val, _config.tank.windupMult);
+            else if (key == "can_counter" || key == "cancounter") _config.tank.canCounter = kv::parseBool(val, _config.tank.canCounter);
+            else if (key == "can_block" || key == "canblock") _config.tank.canBlock = kv::parseBool(val, _config.tank.canBlock);
         } else if (root == "Duelist") {
-            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.duelist.hp = std::stof(val);
-            else if (key == "speed") _config.duelist.speed = std::stof(val);
-            else if (key == "approach_speed" || key == "approachspeed") _config.duelist.approachSpeed = std::stof(val);
-            else if (key == "damage_multiplier" || key == "damagemult") _config.duelist.damageMult = std::stof(val);
-            else if (key == "scale") _config.duelist.scale = std::stof(val);
-            else if (key == "can_counter" || key == "cancounter") _config.duelist.canCounter = (std::stoi(val) != 0);
-            else if (key == "can_block" || key == "canblock") _config.duelist.canBlock = (std::stoi(val) != 0);
-            else if (key == "can_dodge" || key == "candodge") _config.duelist.canDodge = (std::stoi(val) != 0);
-            else if (key == "aggressiveness") _config.duelist.aggressiveness = std::stof(val);
-            else if (key == "intelligence") _config.duelist.intelligence = std::stof(val);
-            else if (key == "dodge_cooldown" || key == "dodgecooldown") _config.duelist.dodgeCooldown = std::stof(val);
-            else if (key == "spacing_distance" || key == "spacingdistance") _config.duelist.spacingDistance = std::stof(val);
-            else if (key == "idle_attack_delay" || key == "idleattackdelay") _config.duelist.idleAttackDelay = std::stof(val);
+            if (key == "hp" || key == "max_hp" || key == "maxhp") kv::tryParseFloat(val, _config.duelist.hp);
+            else if (key == "speed") kv::tryParseFloat(val, _config.duelist.speed);
+            else if (key == "approach_speed" || key == "approachspeed") kv::tryParseFloat(val, _config.duelist.approachSpeed);
+            else if (key == "damage_multiplier" || key == "damagemult") kv::tryParseFloat(val, _config.duelist.damageMult);
+            else if (key == "scale") kv::tryParseFloat(val, _config.duelist.scale);
+            else if (key == "can_counter" || key == "cancounter") _config.duelist.canCounter = kv::parseBool(val, _config.duelist.canCounter);
+            else if (key == "can_block" || key == "canblock") _config.duelist.canBlock = kv::parseBool(val, _config.duelist.canBlock);
+            else if (key == "can_dodge" || key == "candodge") _config.duelist.canDodge = kv::parseBool(val, _config.duelist.canDodge);
+            else if (key == "aggressiveness") kv::tryParseFloat(val, _config.duelist.aggressiveness);
+            else if (key == "intelligence") kv::tryParseFloat(val, _config.duelist.intelligence);
+            else if (key == "dodge_cooldown" || key == "dodgecooldown") kv::tryParseFloat(val, _config.duelist.dodgeCooldown);
+            else if (key == "spacing_distance" || key == "spacingdistance") kv::tryParseFloat(val, _config.duelist.spacingDistance);
+            else if (key == "idle_attack_delay" || key == "idleattackdelay") kv::tryParseFloat(val, _config.duelist.idleAttackDelay);
         } else if (root == "DuelistPassive") {
-            if (key == "hp" || key == "max_hp" || key == "maxhp") _config.duelistPassive.hp = std::stof(val);
-            else if (key == "speed") _config.duelistPassive.speed = std::stof(val);
-            else if (key == "approach_speed" || key == "approachspeed") _config.duelistPassive.approachSpeed = std::stof(val);
-            else if (key == "damage_multiplier" || key == "damagemult") _config.duelistPassive.damageMult = std::stof(val);
-            else if (key == "scale") _config.duelistPassive.scale = std::stof(val);
-            else if (key == "can_counter" || key == "cancounter") _config.duelistPassive.canCounter = (std::stoi(val) != 0);
-            else if (key == "can_block" || key == "canblock") _config.duelistPassive.canBlock = (std::stoi(val) != 0);
-            else if (key == "can_dodge" || key == "candodge") _config.duelistPassive.canDodge = (std::stoi(val) != 0);
-            else if (key == "aggressiveness") _config.duelistPassive.aggressiveness = std::stof(val);
-            else if (key == "intelligence") _config.duelistPassive.intelligence = std::stof(val);
-            else if (key == "dodge_cooldown" || key == "dodgecooldown") _config.duelistPassive.dodgeCooldown = std::stof(val);
-            else if (key == "spacing_distance" || key == "spacingdistance") _config.duelistPassive.spacingDistance = std::stof(val);
-            else if (key == "invis_duration" || key == "invisduration") _config.duelistPassive.invisDuration = std::stof(val);
-            else if (key == "invis_cooldown" || key == "inviscooldown") _config.duelistPassive.invisCooldown = std::stof(val);
+            if (key == "hp" || key == "max_hp" || key == "maxhp") kv::tryParseFloat(val, _config.duelistPassive.hp);
+            else if (key == "speed") kv::tryParseFloat(val, _config.duelistPassive.speed);
+            else if (key == "approach_speed" || key == "approachspeed") kv::tryParseFloat(val, _config.duelistPassive.approachSpeed);
+            else if (key == "damage_multiplier" || key == "damagemult") kv::tryParseFloat(val, _config.duelistPassive.damageMult);
+            else if (key == "scale") kv::tryParseFloat(val, _config.duelistPassive.scale);
+            else if (key == "can_counter" || key == "cancounter") _config.duelistPassive.canCounter = kv::parseBool(val, _config.duelistPassive.canCounter);
+            else if (key == "can_block" || key == "canblock") _config.duelistPassive.canBlock = kv::parseBool(val, _config.duelistPassive.canBlock);
+            else if (key == "can_dodge" || key == "candodge") _config.duelistPassive.canDodge = kv::parseBool(val, _config.duelistPassive.canDodge);
+            else if (key == "aggressiveness") kv::tryParseFloat(val, _config.duelistPassive.aggressiveness);
+            else if (key == "intelligence") kv::tryParseFloat(val, _config.duelistPassive.intelligence);
+            else if (key == "dodge_cooldown" || key == "dodgecooldown") kv::tryParseFloat(val, _config.duelistPassive.dodgeCooldown);
+            else if (key == "spacing_distance" || key == "spacingdistance") kv::tryParseFloat(val, _config.duelistPassive.spacingDistance);
+            else if (key == "invis_duration" || key == "invisduration") kv::tryParseFloat(val, _config.duelistPassive.invisDuration);
+            else if (key == "invis_cooldown" || key == "inviscooldown") kv::tryParseFloat(val, _config.duelistPassive.invisCooldown);
         } else if (root == "DummyAttack") {
-            if (key == "windup") _config.stats.dummyWindup = std::stof(val);
-            else if (key == "windup_frames" || key == "windupframes") _config.stats.dummyWindup = std::stof(val) / 60.0f;
-            else if (key == "active_time" || key == "activetime") _config.stats.dummyActiveTime = std::stof(val);
-            else if (key == "active_frames" || key == "activeframes") _config.stats.dummyActiveTime = std::stof(val) / 60.0f;
-            else if (key == "recovery") _config.stats.dummyRecovery = std::stof(val);
-            else if (key == "damage") _config.stats.dummyDamage = std::stof(val);
-            else if (key == "knock_x" || key == "knockx") _config.stats.dummyKnockX = std::stof(val);
-            else if (key == "knock_y" || key == "knocky") _config.stats.dummyKnockY = std::stof(val);
-            else if (key == "stun") _config.stats.dummyStun = std::stof(val);
-            else if (key == "cooldown") _config.stats.dummyCooldown = std::stof(val);
-            else if (key == "hitbox_w" || key == "hitboxw") _config.stats.dummyHbw = std::stof(val);
-            else if (key == "hitbox_h" || key == "hitboxh") _config.stats.dummyHbh = std::stof(val);
-            else if (key == "hitbox_offset_y" || key == "hitboxoffsety") _config.stats.dummyHbyOffset = std::stof(val);
+            if (key == "windup") kv::tryParseFloat(val, _config.stats.dummyWindup);
+            else if (key == "windup_frames" || key == "windupframes") kv::assignFramesSeconds(val, _config.stats.dummyWindup);
+            else if (key == "active_time" || key == "activetime") kv::tryParseFloat(val, _config.stats.dummyActiveTime);
+            else if (key == "active_frames" || key == "activeframes") kv::assignFramesSeconds(val, _config.stats.dummyActiveTime);
+            else if (key == "recovery") kv::tryParseFloat(val, _config.stats.dummyRecovery);
+            else if (key == "damage") kv::tryParseFloat(val, _config.stats.dummyDamage);
+            else if (key == "knock_x" || key == "knockx") kv::tryParseFloat(val, _config.stats.dummyKnockX);
+            else if (key == "knock_y" || key == "knocky") kv::tryParseFloat(val, _config.stats.dummyKnockY);
+            else if (key == "stun") kv::tryParseFloat(val, _config.stats.dummyStun);
+            else if (key == "cooldown") kv::tryParseFloat(val, _config.stats.dummyCooldown);
+            else if (key == "hitbox_w" || key == "hitboxw") kv::tryParseFloat(val, _config.stats.dummyHbw);
+            else if (key == "hitbox_h" || key == "hitboxh") kv::tryParseFloat(val, _config.stats.dummyHbh);
+            else if (key == "hitbox_offset_y" || key == "hitboxoffsety") kv::tryParseFloat(val, _config.stats.dummyHbyOffset);
         } else if (root == "Counter") {
-            if (key == "window") _config.counter.window = std::stof(val);
-            else if (key == "cooldown") _config.counter.cooldown = std::stof(val);
-            else if (key == "whiff_stun" || key == "whiffstun") _config.counter.whiffStun = std::stof(val);
-            else if (key == "player_stun" || key == "playerstun") _config.counter.playerStun = std::stof(val);
-            else if (key == "damage") _config.counter.damage = std::stof(val);
-            else if (key == "knock_x" || key == "knockx") _config.counter.knockX = std::stof(val);
-            else if (key == "knock_y" || key == "knocky") _config.counter.knockY = std::stof(val);
-            else if (key == "trigger_distance" || key == "triggerdistance") _config.counter.triggerDistance = std::stof(val);
+            if (key == "window") kv::tryParseFloat(val, _config.counter.window);
+            else if (key == "cooldown") kv::tryParseFloat(val, _config.counter.cooldown);
+            else if (key == "whiff_stun" || key == "whiffstun") kv::tryParseFloat(val, _config.counter.whiffStun);
+            else if (key == "player_stun" || key == "playerstun") kv::tryParseFloat(val, _config.counter.playerStun);
+            else if (key == "damage") kv::tryParseFloat(val, _config.counter.damage);
+            else if (key == "knock_x" || key == "knockx") kv::tryParseFloat(val, _config.counter.knockX);
+            else if (key == "knock_y" || key == "knocky") kv::tryParseFloat(val, _config.counter.knockY);
+            else if (key == "trigger_distance" || key == "triggerdistance") kv::tryParseFloat(val, _config.counter.triggerDistance);
         } else if (root == "Perception") {
-            if (key == "view_distance" || key == "viewdistance") _config.perception.viewDistance = std::stof(val);
-            else if (key == "rear_view_distance" || key == "rearviewdistance") _config.perception.rearViewDistance = std::stof(val);
-            else if (key == "vertical_view_span" || key == "verticalviewspan") _config.perception.verticalViewSpan = std::stof(val);
-            else if (key == "patrol_speed" || key == "patrolspeed") _config.perception.patrolSpeed = std::stof(val);
-            else if (key == "patrol_radius" || key == "patrolradius") _config.perception.patrolRadius = std::stof(val);
-            else if (key == "patrol_wait_time" || key == "patrolwaittime") _config.perception.patrolWaitTime = std::stof(val);
-            else if (key == "alert_duration" || key == "alertduration") _config.perception.alertDuration = std::stof(val);
-            else if (key == "lost_sight_timeout" || key == "lostsighttimeout") _config.perception.lostSightTimeout = std::stof(val);
-            else if (key == "jump_speed" || key == "jumpspeed") _config.perception.jumpSpeed = std::stof(val);
-            else if (key == "jump_cooldown" || key == "jumpcooldown") _config.perception.jumpCooldown = std::stof(val);
+            if (key == "view_distance" || key == "viewdistance") kv::tryParseFloat(val, _config.perception.viewDistance);
+            else if (key == "rear_view_distance" || key == "rearviewdistance") kv::tryParseFloat(val, _config.perception.rearViewDistance);
+            else if (key == "vertical_view_span" || key == "verticalviewspan") kv::tryParseFloat(val, _config.perception.verticalViewSpan);
+            else if (key == "patrol_speed" || key == "patrolspeed") kv::tryParseFloat(val, _config.perception.patrolSpeed);
+            else if (key == "patrol_radius" || key == "patrolradius") kv::tryParseFloat(val, _config.perception.patrolRadius);
+            else if (key == "patrol_wait_time" || key == "patrolwaittime") kv::tryParseFloat(val, _config.perception.patrolWaitTime);
+            else if (key == "alert_duration" || key == "alertduration") kv::tryParseFloat(val, _config.perception.alertDuration);
+            else if (key == "lost_sight_timeout" || key == "lostsighttimeout") kv::tryParseFloat(val, _config.perception.lostSightTimeout);
+            else if (key == "jump_speed" || key == "jumpspeed") kv::tryParseFloat(val, _config.perception.jumpSpeed);
+            else if (key == "jump_cooldown" || key == "jumpcooldown") kv::tryParseFloat(val, _config.perception.jumpCooldown);
         } else if (root == "Combos" && stack.size() >= 3) {
             const std::string& comboId = stack[2];
 
             if (comboId == "1f2d1") {
                 if (stack.size() == 3 && key == "windup") {
-                    _config.starter1.windup = std::stof(val);
+                    kv::tryParseFloat(val, _config.starter1.windup);
                 } else if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "hit1") parseAttackField(_config.starter1.hit1, key, val);
@@ -704,7 +646,7 @@ private:
                 }
             } else if (comboId == "112") {
                 if (stack.size() == 3 && key == "windup") {
-                    _config.starter2.windup = std::stof(val);
+                    kv::tryParseFloat(val, _config.starter2.windup);
                 } else if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "hit1") parseAttackField(_config.starter2.hit1, key, val);
@@ -713,14 +655,14 @@ private:
                 }
             } else if (comboId == "21db1") {
                 if (stack.size() == 3 && key == "windup") {
-                    _config.starter3.windup = std::stof(val);
+                    kv::tryParseFloat(val, _config.starter3.windup);
                 } else if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "hit2") parseAttackField(_config.starter3.hit2, key, val);
                     else if (sub == "hit1") parseAttackField(_config.starter3.hit1, key, val);
                     else if (sub == "dash_behind") {
-                        if (key == "duration") _config.starter3.dashBehindDuration = std::stof(val);
-                        else if (key == "offset") _config.starter3.dashBehindOffset = std::stof(val);
+                        if (key == "duration") kv::tryParseFloat(val, _config.starter3.dashBehindDuration);
+                        else if (key == "offset") kv::tryParseFloat(val, _config.starter3.dashBehindOffset);
                     } else if (sub == "sweep_db1") {
                         parseAttackField(_config.starter3.hitSweep, key, val);
                     }
@@ -729,10 +671,10 @@ private:
                 if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "chase_jump") {
-                        if (key == "jump_vel_y" || key == "jumpvely") _config.air1.jumpVelY = std::stof(val);
-                        else if (key == "duration") _config.air1.jumpDuration = std::stof(val);
-                        else if (key == "horiz_factor" || key == "horizfactor") _config.air1.jumpHorizFactor = std::stof(val);
-                        else if (key == "max_speed_x" || key == "maxspeedx") _config.air1.jumpMaxSpeedX = std::stof(val);
+                        if (key == "jump_vel_y" || key == "jumpvely") kv::tryParseFloat(val, _config.air1.jumpVelY);
+                        else if (key == "duration") kv::tryParseFloat(val, _config.air1.jumpDuration);
+                        else if (key == "horiz_factor" || key == "horizfactor") kv::tryParseFloat(val, _config.air1.jumpHorizFactor);
+                        else if (key == "max_speed_x" || key == "maxspeedx") kv::tryParseFloat(val, _config.air1.jumpMaxSpeedX);
                     } else if (sub == "a1") {
                         parseAttackField(_config.air1.hitA1, key, val);
                     } else if (sub == "adw2") {
@@ -743,57 +685,23 @@ private:
                 if (stack.size() >= 4) {
                     const std::string& sub = stack[3];
                     if (sub == "ground_advance") {
-                        if (key == "duration") _config.air2.groundAdvanceDuration = std::stof(val);
-                        else if (key == "advance_dist" || key == "advancedist") _config.air2.groundAdvanceDist = std::stof(val);
+                        if (key == "duration") kv::tryParseFloat(val, _config.air2.groundAdvanceDuration);
+                        else if (key == "advance_dist" || key == "advancedist") kv::tryParseFloat(val, _config.air2.groundAdvanceDist);
                     } else if (sub == "chase_jump") {
-                        if (key == "jump_vel_y" || key == "jumpvely") _config.air2.jumpVelY = std::stof(val);
-                        else if (key == "duration") _config.air2.jumpDuration = std::stof(val);
+                        if (key == "jump_vel_y" || key == "jumpvely") kv::tryParseFloat(val, _config.air2.jumpVelY);
+                        else if (key == "duration") kv::tryParseFloat(val, _config.air2.jumpDuration);
                     } else if (sub == "a1_first") {
                         parseAttackField(_config.air2.hitA1_1, key, val);
                     } else if (sub == "a1_second") {
                         parseAttackField(_config.air2.hitA1_2, key, val);
                     } else if (sub == "adw2_final") {
                         parseAttackField(_config.air2.hitAdw2, key, val);
-                        if (key == "dive_vel_y" || key == "divevely") _config.air2.diveSpeedY = std::stof(val);
-                        else if (key == "knock_x_vertical" || key == "knockxvertical") _config.air2.finalKnockXVertical = std::stof(val);
+                        if (key == "dive_vel_y" || key == "divevely") kv::tryParseFloat(val, _config.air2.diveSpeedY);
+                        else if (key == "knock_x_vertical" || key == "knockxvertical") kv::tryParseFloat(val, _config.air2.finalKnockXVertical);
                     }
                 }
             }
         }
-    }
-
-    static std::vector<std::string> tokenizeLine(const std::string& line) {
-        std::vector<std::string> tokens;
-        size_t i = 0;
-        while (i < line.size()) {
-            while (i < line.size() && (line[i] == ' ' || line[i] == '\t' || line[i] == '\r' || line[i] == '\n' || line[i] == '=' || line[i] == ':')) {
-                i++;
-            }
-            if (i >= line.size()) break;
-
-            if (line[i] == '/' && i + 1 < line.size() && line[i+1] == '/') break;
-            if (line[i] == '#' || line[i] == ';') break;
-
-            if (line[i] == '"') {
-                i++;
-                size_t start = i;
-                while (i < line.size() && line[i] != '"') {
-                    i++;
-                }
-                tokens.push_back(line.substr(start, i - start));
-                if (i < line.size() && line[i] == '"') i++;
-            } else if (line[i] == '{' || line[i] == '}') {
-                tokens.push_back(std::string(1, line[i]));
-                i++;
-            } else {
-                size_t start = i;
-                while (i < line.size() && line[i] != ' ' && line[i] != '\t' && line[i] != '\r' && line[i] != '\n' && line[i] != '=' && line[i] != ':' && line[i] != '{' && line[i] != '}') {
-                    i++;
-                }
-                tokens.push_back(line.substr(start, i - start));
-            }
-        }
-        return tokens;
     }
 };
 

@@ -181,7 +181,7 @@ public:
     ~Arena();
 
     static Arena* getActive() { return s_activeArena; }
-    static void setActive(Arena* a) { s_activeArena = a; }
+    static void setActive(Arena* a);
 
     void spawnFinisherBlood(sf::Vector2f pos, sf::Vector2f burstDir, int count = 65, float maxHp = 45.0f);
     void spawnKillBlood(sf::Vector2f pos, sf::Vector2f knockDir = {0.0f, -1.0f}, float maxHp = 45.0f);
@@ -504,6 +504,7 @@ private:
     std::string _tilesetPath = "assets/sprites/BlocksTest.png";
 
     static Arena* s_activeArena;
+    static std::vector<Arena*> s_arenaStack;
     std::vector<BloodDecal> _bloodDecals;
     std::vector<BloodParticle> _bloodParticles;
     std::vector<BackgroundBloodStreak> _bgBloodStreaks;
@@ -520,7 +521,7 @@ private:
     bool _lampConeTextureInitialized = false;
     void ensureLampConeTextureInitialized();
     mutable sf::VertexArray _coneVA{sf::PrimitiveType::Triangles};
-    mutable sf::VertexArray _lampHaloVA{sf::PrimitiveType::TriangleFan};
+    mutable sf::VertexArray _lampHaloVA{sf::PrimitiveType::Triangles};
     mutable sf::VertexArray _volBeamsVA{sf::PrimitiveType::Triangles};
     mutable sf::VertexArray _bgBloodVA{sf::PrimitiveType::Triangles};
     mutable sf::VertexArray _fgBloodVA{sf::PrimitiveType::Triangles};
@@ -530,6 +531,11 @@ private:
     float _notificationTimer = 0.0f;
     float _notificationDuration = 3.0f;
     sf::Color _notificationColor{100, 255, 180};
+    mutable std::optional<sf::Text> _cachedNotifText;
+    mutable std::string _lastCachedNotifStr;
+    mutable sf::RectangleShape _cachedNotifBox;
+    mutable sf::RectangleShape _cachedNotifStrip;
+    mutable sf::VertexArray _blackoutVA{sf::PrimitiveType::Triangles, 24};
 
     // Модульные фазы освещения (SRP)
     void renderLightingLightmapPass(const sf::View& camera);

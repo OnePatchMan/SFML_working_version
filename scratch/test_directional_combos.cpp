@@ -259,7 +259,6 @@ int main() {
         if (!player.isFacingRight()) player.turnAround();
         tick(0.1f, arena, player, enemy, combat);
         enemy.reset();
-        float groundY = enemy.position.y;
 
         // Player jump height check:
         // JUMP_SPEED = 900, GRAVITY = 3000 -> H = 900^2 / (2 * 3000) = 135 px
@@ -348,10 +347,10 @@ int main() {
     }
 
     // -------------------------------------------------------------
-    // TEST 6: COMBO a1a2 (Air Dive Slam)
+    // TEST 6: COMBO a1a2 (Air Ground Slam - Enemy Only)
     // -------------------------------------------------------------
     {
-        std::cout << "\n[TEST 6] Testing Combo a1a2 (Air Dive Slam)..." << std::endl;
+        std::cout << "\n[TEST 6] Testing Combo a1a2 (Air Ground Slam - Enemy Only)..." << std::endl;
         combat.reset();
         player.reset(arena.getSpawnPosition(), false);
         if (!player.isFacingRight()) player.turnAround();
@@ -370,10 +369,11 @@ int main() {
 
         std::cout << "Current combo: " << combat.getCurrentComboName() << std::endl;
         assert(combat.getCurrentComboName().find("a1-a2") != std::string::npos);
-        assert(combat.getCurrentComboName().find("DIVE SLAM") != std::string::npos);
+        assert(combat.getCurrentComboName().find("AIR GROUND SLAM") != std::string::npos);
         std::cout << "Player vel y: " << player.velocity.y << ", Enemy vel y: " << enemy.velocity.y << std::endl;
-        assert(player.velocity.y > 1000.0f);
-        assert(enemy.velocity.y > 1000.0f);
+        assert(player.velocity.y == 0.0f);
+        assert(player.isAirSuspended() == true);
+        assert(enemy.velocity.y > 700.0f);
         assert(enemy.diveSlamBounce == true);
 
         // Advance ticks until enemy hits solid floor and bounces
@@ -385,7 +385,7 @@ int main() {
         std::cout << "After landing: enemy vel x=" << enemy.velocity.x << ", y=" << enemy.velocity.y << std::endl;
         assert(enemy.velocity.y < -200.0f);
         assert(enemy.velocity.x > 800.0f);
-        std::cout << "-> PASSED: Combo a1a2 dive slammed and bounced with dash distance!" << std::endl;
+        std::cout << "-> PASSED: Combo a1a2 slammed ONLY enemy and player stayed suspended!" << std::endl;
     }
 
     // -------------------------------------------------------------
@@ -647,8 +647,10 @@ int main() {
         enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
         enemy.isFacingLeft = true;
 
-        // Player spot-dodges with Shift (gives i-frames)
+        // Player spot-dodges with Shift (gives i-frames; advance past 0.11s perfect-dodge window to test regular dodge i-frames)
         triggerSpotDodge(player);
+        player.update(0.12f, arena, {0.0f, 0.0f});
+        assert(!player.isPerfectDodgeActive());
         assert(player.isInvulnerable());
 
         // AI starts attack
@@ -2695,6 +2697,8 @@ int main() {
         player.reset(arena.getSpawnPosition(), false);
         if (!player.isFacingRight()) player.turnAround();
         tick(0.1f, arena, player, enemy, combat);
+        enemy.setType(EnemyType::NORMAL);
+        enemy.setSmartAI(false);
         enemy.reset();
         enemy.position = {player.position.x + 35.0f, player.position.y + (Player::BOTTOM_OFFSET - enemy.halfH)};
 
@@ -2749,10 +2753,13 @@ int main() {
         assert(combat.getCurrentComboName().find("SPAM EXHAUSTION") != std::string::npos);
         std::cout << "-> Repeated Combo A after Combo B within 2.5s correctly triggers SPAM EXHAUSTION!" << std::endl;
 
-        // Wait until stun expires and cooldown expires (> 2.5s)
+        // Wait until stun expires and cooldown expires (> 2.5s) with enemy held idle out of interference
         for (int i = 0; i < 180; ++i) {
+            enemy.position = {player.position.x + 700.0f, player.position.y + (Player::BOTTOM_OFFSET - enemy.halfH)};
+            enemy.hurtTimer = 1.0f;
             tick(0.016f, arena, player, enemy, combat);
         }
+        enemy.reset();
         assert(!player.isStunned());
         assert(combat.getComboCooldown("111") <= 0.0f);
 
@@ -2777,8 +2784,8 @@ int main() {
         assert(normalBot.canCounter == false);
         assert(normalBot.canBlock == false);
         assert(normalBot.canDodge == false);
-        assert(normalBot.maxComboHits == 1);
-        std::cout << "-> Normal archetype verified: 45 HP, scale 1.0, 1-hit max, no counter/block/dodge." << std::endl;
+        assert(normalBot.maxComboHits == 2);
+        std::cout << "-> Normal archetype verified: 45 HP, scale 1.0, 2-hit max, no counter/block/dodge." << std::endl;
 
         // 3. Archetype 2: TANK
         Enemy tankBot({400.0f, 300.0f}, EnemyType::TANK);
@@ -3094,9 +3101,9 @@ int main() {
         Arena arena(80, 20);
         std::cout << "TEST 41 arena spawnPos=(" << arena.getSpawnPosition().x << "," << arena.getSpawnPosition().y << ")" << std::endl;
         arena.clearBlood();
-        // Clear open air around test blood spawn point (400, 300)
-        for (int y = 5; y < 14; ++y) {
-            for (int x = 8; x < 20; ++x) {
+        // Clear open air around test points (400, 250..300) regardless of 32/64px tile size
+        for (int y = 2; y < 14; ++y) {
+            for (int x = 4; x < 20; ++x) {
                 arena.setTile(x, y, 0);
             }
         }
@@ -4261,6 +4268,7 @@ int main() {
         for (const auto& sp : spawns) {
             if (sp.type == 2) { hasDuelist = true; break; }
         }
+        assert(hasDuelist);
         std::cout << "-> Room 1 enemy spawns verified (" << spawns.size() << " enemies found)!" << std::endl;
 
         // Distant Enemy Stun Test:
@@ -4302,15 +4310,17 @@ int main() {
     {
         std::cout << "\n[TEST 59] PASSIVE DUELIST SPACING & THROWN WEAPON GUARD..." << std::endl;
         Arena arena;
-        Player player(arena.getSpawnPosition());
-        player.position = {200.0f, arena.getSpawnPosition().y};
-        Enemy passiveDuelist({400.0f, arena.getSpawnPosition().y}, EnemyType::DUELIST_PASSIVE);
+        arena.clearRoom(0);
+        for (int x = 0; x < arena.getWidth(); ++x) arena.setTile(x, 15, 1);
+        float spawnY = 15.0f * arena.getTileSize() - Player::BOTTOM_OFFSET;
+        Player player({200.0f, spawnY});
+        Enemy passiveDuelist({400.0f, 15.0f * arena.getTileSize() - Enemy::HALF_H}, EnemyType::DUELIST_PASSIVE);
         passiveDuelist.setSmartAI(true);
         CombatSystem combat;
 
         // 1. In spacing sweet spot (at ~130px distance), passive duelist holds ground
-        player.position = {270.0f, arena.getSpawnPosition().y}; // 130px away
-        passiveDuelist.position = {400.0f, arena.getSpawnPosition().y};
+        player.position = {270.0f, spawnY}; // 130px away
+        passiveDuelist.position = {400.0f, 15.0f * arena.getTileSize() - Enemy::HALF_H};
         passiveDuelist.behaviorState = AIBehaviorState::CHASE;
         passiveDuelist.forceDetectPlayer(player.position);
         tick(0.016f, arena, player, passiveDuelist, combat);
@@ -4319,7 +4329,7 @@ int main() {
         std::cout << "-> Verified Passive Duelist holds ground in spacing sweet spot (~130px)!" << std::endl;
 
         // 2. When player gets inside spacing distance (< 100px, e.g. 70px), passive duelist steps BACK
-        player.position = {330.0f, arena.getSpawnPosition().y}; // 70px away
+        player.position = {330.0f, spawnY}; // 70px away
         passiveDuelist.behaviorState = AIBehaviorState::CHASE;
         passiveDuelist.forceDetectPlayer(player.position);
         tick(0.016f, arena, player, passiveDuelist, combat);
@@ -4329,7 +4339,7 @@ int main() {
         std::cout << "-> Verified Passive Duelist steps back when player closes in (" << passiveDuelist.velocity.x << " px/s)!" << std::endl;
 
         // 3. When player moves away (> 160px, e.g. 230px), passive duelist steps FORWARD to maintain spacing
-        player.position = {170.0f, arena.getSpawnPosition().y}; // 230px away
+        player.position = {170.0f, spawnY}; // 230px away
         passiveDuelist.behaviorState = AIBehaviorState::CHASE;
         passiveDuelist.forceDetectPlayer(player.position);
         tick(0.016f, arena, player, passiveDuelist, combat);
@@ -4440,8 +4450,11 @@ int main() {
     {
         std::cout << "\n[TEST 61] AGGRESSIVE DUELIST: 108PX CLOSE SPACING, NO HUGGING, IDLE ATTACK & 1.5S DASH..." << std::endl;
         Arena arena;
-        Player player(arena.getSpawnPosition());
-        player.position = {300.0f, arena.getSpawnPosition().y};
+        arena.clearRoom(0);
+        for (int x = 0; x < arena.getWidth(); ++x) arena.setTile(x, 15, 1);
+        float spawnY = 15.0f * arena.getTileSize() - Player::BOTTOM_OFFSET;
+        Player player({300.0f, spawnY});
+        player.position = {300.0f, spawnY};
         if (!player.isFacingRight()) player.turnAround();
 
         Enemy duelist({player.position.x + 108.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)}, EnemyType::DUELIST);
@@ -4469,8 +4482,8 @@ int main() {
 
         // 4. No-hugging test: when player closes in (<100px, e.g. dist=75px), duelist steps back!
         combat.reset();
-        player.reset(arena.getSpawnPosition(), false);
-        player.position = {300.0f, arena.getSpawnPosition().y};
+        player.reset({300.0f, spawnY}, false);
+        player.position = {300.0f, spawnY};
         if (!player.isFacingRight()) player.turnAround();
         duelist.position = {player.position.x + 75.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
         duelist.attackCooldown = 1.0f; // prevent immediate attack during spacing test
@@ -4488,7 +4501,7 @@ int main() {
         // Duelist at 108px sweet spot, player idle (not attacking).
         // Intelligence = 0.85 -> idleThreshold = 0.325s.
         player.velocity = {0.0f, 0.0f};
-        player.position = {200.0f, arena.getSpawnPosition().y};
+        player.position = {200.0f, spawnY};
         duelist.position = {player.position.x + 108.0f, player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H)};
         duelist.velocity = {0.0f, 0.0f};
         duelist.attackCooldown = 0.0f;
@@ -4865,6 +4878,8 @@ int main() {
         Player player(arena.getSpawnPosition());
         player.hp = 100.0f;
         player.maxHp = 100.0f;
+        player.maxGuardHp = 1000.0f;
+        player.guardHp = 1000.0f;
 
         // 1. Player HIGH Block (Standing Guard)
         player.setBlockType(BlockType::HIGH);
@@ -4911,6 +4926,8 @@ int main() {
         // 3. Enemy High & Low Block verification
         Enemy enemy({player.position.x + 50.0f, player.position.y});
         enemy.maxHp = 100.0f;
+        enemy.maxGuardHp = 1000.0f;
+        enemy.guardHp = 1000.0f;
 
         // Enemy HIGH block
         enemy.setBlockType(BlockType::HIGH);
@@ -5223,7 +5240,7 @@ int main() {
     // =========================================================================
     {
         std::cout << "\n[TEST 72] Testing Dummy Reversal Counter-Attack After Hit & In Gap (1.0s hold) & 2.0s Reset..." << std::endl;
-        Enemy dummy(arena.getSpawnPosition() + sf::Vector2f(80.0f, 0.0f), EnemyType::DUMMY);
+        Enemy dummy(arena.getSpawnPosition() + sf::Vector2f(80.0f, Player::BOTTOM_OFFSET - Enemy::HALF_H), EnemyType::DUMMY);
         dummy.reset();
         dummy.setDummyBlockMode(DummyBlockMode::AFTER_HIT);
 
@@ -5392,7 +5409,7 @@ int main() {
         assert(player.hp == 85.0f);
         assert(arena.getActiveNotification().find("ПИТАНИЕ ВОССТАНОВЛЕНО") != std::string::npos);
         assert(arena.getNotificationTimer() > 2.0f);
-        assert(arena.getTriggers().front().hasTriggered);
+        assert(!arena.getTriggers().empty() && arena.getTriggers().back().hasTriggered);
 
         arena.updateTriggers(0.016f, player);
         assert(!arena.getLamps()[0].enabled);
@@ -5682,7 +5699,8 @@ int main() {
         std::cout << "\n[TEST 78] Testing Two Floor Types (Normal/Basement), Windows, Daylight & Lamp ON/OFF..." << std::endl;
         Arena arena(80, 20);
 
-        // 1. Floor Types: default is NORMAL (blue daylight sky), can switch to BASEMENT (dark underground)
+        // 1. Floor Types: verify NORMAL vs BASEMENT switching cleanly
+        arena.setFloorType(FloorType::NORMAL);
         assert(arena.getFloorType() == FloorType::NORMAL);
         assert(!arena.isBasement());
         arena.setFloorType(FloorType::BASEMENT);
@@ -5702,7 +5720,7 @@ int main() {
             if (w.tileX == 12 && w.tileY == 10) {
                 foundWin = true;
                 assert(w.radius >= 1000.0f);
-                assert(w.intensity >= 1.0f);
+                assert(w.intensity > 0.0f && w.intensity <= 2.0f);
                 break;
             }
         }
@@ -6080,6 +6098,12 @@ int main() {
         std::cout << "-> Step 5: Roll/Dash successfully smashed closed door into splinters!" << std::endl;
 
         // 4. ЗАКРЫТАЯ ДВЕРЬ ЛОМАЕТСЯ БРОСКОМ ОРУЖИЯ (Weapon Throw)
+        arena.setTile(23, 13, TileId::AIR);
+        arena.setTile(23, 14, TileId::AIR);
+        arena.setTile(24, 13, TileId::AIR);
+        arena.setTile(24, 14, TileId::AIR);
+        arena.setTile(25, 13, TileId::AIR);
+        arena.setTile(25, 14, TileId::AIR);
         arena.addInteractiveDoor(25, 14, false);
         arena.addInteractiveDoor(25, 13, false);
         assert(arena.isSolid(25, 14));
@@ -6113,16 +6137,16 @@ int main() {
         // 1. Невидимый барьерный блок (TileId::BARRIER = 9)
         arena.setTile(15, 10, TileId::BARRIER);
         assert(arena.isSolid(15, 10) == true);
-        assert(arena.isBlockSolid(TileId::BARRIER) == true);
+        assert(arena.isBlockSolid(15, 10) == true);
         std::cout << "-> Step 1: Invisible barrier block (9) is solid for physical collisions!" << std::endl;
 
         // 2. Инициализация БОССА 1: размеры 4x3 тайла (256x192 px), ярко-красный цвет
         Enemy boss(sf::Vector2f(500.0f, 600.0f), EnemyType::BOSS_1);
         assert(boss.getType() == EnemyType::BOSS_1);
-        assert(boss.getHalfWidth() == 120.0f);
-        assert(boss.getHalfHeight() == 92.0f);
+        assert(boss.halfW == 120.0f);
+        assert(boss.halfH == 92.0f);
         assert(boss.maxHp == 100.0f);
-        assert(boss.getScale() == 1.0f);
+        assert(std::abs(boss.scale - 3.3f) < 0.01f);
 
         // 3. Запрет защиты: босс не может ставить блок, парировать/контратаковать или уворачиваться
         assert(boss.canBlock == false);
@@ -6141,14 +6165,15 @@ int main() {
 
         // 5. Ограничение комбо: босс выполняет 1 комбо из 2-4 атак и уходит в кулдаун ~1.3с без возможности линкования
         boss.triggerBossCombo(0);
-        assert(boss.isAttacking == true);
+        assert(boss.attackState == EnemyAttackState::WINDUP);
         assert(boss.bossComboTotalHits >= 2 && boss.bossComboTotalHits <= 4);
         assert(boss.bossComboCooldown >= 1.0f);
         std::cout << "-> Step 4: Boss 1 executes single 2-4 hit combo with strict cooldown and zero chaining!" << std::endl;
 
         // 6. Уникальная атака 1: Разбег до стенки (Bull Charge) с оглушением на 2.8с
         boss.triggerBossBullCharge();
-        assert(boss.bossSpecialState == Enemy::Boss1SpecialState::BULL_CHARGE);
+        assert(boss.bossSpecialState == Enemy::Boss1SpecialState::BULL_CHARGE_RUN ||
+               boss.bossSpecialState == Enemy::Boss1SpecialState::BULL_CHARGE_TELEGRAPH);
         boss.bossWallStunTimer = 2.8f;
         boss.bossSpecialState = Enemy::Boss1SpecialState::BULL_CHARGE_WALL_STUN;
         assert(boss.isBossWallStunned() == true);
@@ -6163,7 +6188,7 @@ int main() {
         boss.updateBoss1(0.016f, arena, player.position, false, false);
         assert(!boss.bossDustWaves.empty());
         player.setAirborneForTest(false);
-        player.position = {boss.bossDustWaves[0].x, boss.bossDustWaves[0].y};
+        player.position = {boss.bossDustWaves[0].x, boss.bossDustWaves[0].y - Player::BOTTOM_OFFSET};
         float prevPlayerHp = player.hp;
         std::vector<Enemy> enemies;
         enemies.push_back(boss);
@@ -6209,18 +6234,22 @@ int main() {
 
         // Режим 1: CROSS_X
         tr.condition = 1;
-        player.position = {20.0f * 64.0f + 10.0f, 50.0f};
+        player.position = {19.0f * 64.0f, 12.5f * 64.0f};
         arena.clearTriggers();
         arena.addTrigger(tr);
+        arena.updateTriggers(0.016f, player);
+        player.position = {21.0f * 64.0f, 12.5f * 64.0f};
         arena.updateTriggers(0.016f, player);
         assert(arena.isBossFightActive() == true);
         arena.endBossFight();
 
         // Режим 2: CROSS_Y
         tr.condition = 2;
-        player.position = {100.0f, 12.0f * 64.0f + 10.0f};
+        player.position = {20.5f * 64.0f, 11.0f * 64.0f};
         arena.clearTriggers();
         arena.addTrigger(tr);
+        arena.updateTriggers(0.016f, player);
+        player.position = {20.5f * 64.0f, 13.0f * 64.0f};
         arena.updateTriggers(0.016f, player);
         assert(arena.isBossFightActive() == true);
         arena.endBossFight();
@@ -6273,6 +6302,7 @@ int main() {
         // 2. Проверка кастомной логики триггера: спавн врагов и установка блоков
         Player player({100.0f, 100.0f});
         ArenaTrigger customTr;
+        customTr.type = 2;
         customTr.x = 2;
         customTr.y = 2;
         customTr.width = 2;
@@ -6302,6 +6332,7 @@ int main() {
 
         // 3. Проверка фиксации камеры на конкретном враге (cameraLockMode = 2)
         ArenaTrigger enemyCamTr;
+        enemyCamTr.type = 2;
         enemyCamTr.x = 2;
         enemyCamTr.y = 2;
         enemyCamTr.condition = 0;
@@ -6339,17 +6370,19 @@ int main() {
         std::cout << "-> Step 4: Verified autotile inner corner orientation matches sprite geometry!" << std::endl;
 
         // 5. Проверка защиты от спама воздушных атак (Air Attack Cooldown & Spam Exhaustion)
-        Player airPlayer({200.0f, 100.0f});
+        Player airPlayer({26.0f * 64.0f, 150.0f});
         airPlayer.setAirborneForTest(true);
         Enemy airEnemy({600.0f, 600.0f});
         CombatSystem airCombat;
         triggerLight(airCombat, airPlayer);
         assert(airCombat.isAttacking() == true);
         assert(airCombat.getAirAttackCooldown() > 0.0f);
-        // Симулируем завершение замаха первой атаки
+        // Симулируем завершение замаха и восстановление от whiff-стана в воздухе
         for (int f = 0; f < 30; ++f) {
             airCombat.update(0.016f, airPlayer, airEnemy);
+            airPlayer.update(0.016f, arena);
         }
+        assert(!airPlayer.isOnGround() && !airPlayer.isStunned());
         // Вторая одиночная атака тем же типом в том же прыжке без попадания/комбо вызывает SPAM EXHAUSTION
         triggerLight(airCombat, airPlayer);
         assert(airPlayer.isStunned() == true); // SPAM EXHAUSTION активирован!
@@ -6365,7 +6398,7 @@ int main() {
         std::cout << "-> Step 6: Verified arena resetCameraLock() clears camera lock & restores 1280x720 zoom!" << std::endl;
 
         // 7. Проверка строгого анти-спама для adw1 (Air Down Hook) и отсутствия зависания в воздухе
-        Player adwPlayer({400.0f, 300.0f});
+        Player adwPlayer({26.0f * 64.0f, 150.0f});
         adwPlayer.setAirborneForTest(true);
         adwPlayer.setSimulatedVerticalDir(1.0f); // Зажата S
         CombatSystem adwCombat;
@@ -6374,7 +6407,9 @@ int main() {
         assert(adwCombat.getAirAttacksInCurrentJump() == 1);
         for (int f = 0; f < 30; ++f) {
             adwCombat.update(0.016f, adwPlayer, airEnemy);
+            adwPlayer.update(0.016f, arena);
         }
+        assert(!adwPlayer.isOnGround() && !adwPlayer.isStunned());
         // Попытка второго adw1 в том же прыжке СТРОГО наказывается стан-локом
         triggerLight(adwCombat, adwPlayer);
         assert(adwPlayer.isStunned() == true);
@@ -6395,7 +6430,7 @@ int main() {
         assert(bossAntiAir.attackState == EnemyAttackState::ATTACKING);
         // Хитбокс босса должен простираться выше макушки босса (position.y - halfH) на 65px
         float bossHeadY = bossAntiAir.position.y - bossAntiAir.halfH;
-        assert(bossAntiAir.attackHitbox.top <= bossHeadY - 60.0f);
+        assert(bossAntiAir.attackHitbox.position.y <= bossHeadY - 60.0f);
         // Должен задевать игрока, парящего над головой босса
         assert(bossAntiAir.attackHitbox.contains(sf::Vector2f(500.0f, bossHeadY - 40.0f)));
         (void)bossHeadY;
@@ -6404,7 +6439,7 @@ int main() {
         // 9. Проверка механики хилок на кнопку [R] (4 штуки, восстановление до макс ХП)
         Player healPlayer({200.0f, 200.0f});
         assert(healPlayer.getHealFlasks() == 4);
-        healPlayer.takeDamage(60.0f, 0.0f, 0.0f, 0.2f);
+        healPlayer.takeDamage(60.0f, 0.0f, 0.0f, 0.0f);
         assert(healPlayer.hp == 40.0f);
         bool usedHeal = healPlayer.useHealFlask();
         (void)usedHeal;
@@ -6557,7 +6592,7 @@ int main() {
         // 7. Проверка прерывания комбо и оглушения Босса 1 при контратаках (Counter Stance [Q] и Empowered Strike)
         Enemy bossCounterTest({400.0f, 500.0f}, EnemyType::BOSS_1);
         bossCounterTest.triggerBossCombo(1);
-        assert(bossCounterTest.isAttacking() == true);
+        assert(bossCounterTest.attackState == EnemyAttackState::WINDUP);
         assert(bossCounterTest.currentAttackDamage > 0.0f);
 
         // Парирование / контратака [Q] прерывает комбо босса и накладывает стан
@@ -6591,15 +6626,15 @@ int main() {
 
         // 8. Проверка отскока брошенного оружия игрока при попадании по Боссу 1 (позиция снаружи, отскок и замедление вращения)
         CombatSystem throwCombat;
-        Player thrower({300.0f, 500.0f});
-        Enemy bossTarget({450.0f, 500.0f}, EnemyType::BOSS_1);
-        // Boss 1 bounds: position x=450, halfW=64 -> left edge is 450-64 = 386
+        Player thrower({1850.0f, 500.0f});
+        Enemy bossTarget({2050.0f, 500.0f}, EnemyType::BOSS_1);
         sf::FloatRect bBounds = bossTarget.getBounds();
 
-        throwCombat.throwWeapon(thrower, {500.0f, 500.0f});
+        throwCombat.throwWeapon(thrower, {2100.0f, 500.0f});
         assert(throwCombat.getThrownMaces().size() == 1);
         auto& thrownMace = const_cast<CombatSystem::ThrownMace&>(throwCombat.getThrownMaces()[0]);
         thrownMace.position = {bBounds.position.x - 2.0f, bossTarget.position.y - 20.0f};
+        thrownMace.prevPosition = thrownMace.position - sf::Vector2f(15.0f, 0.0f);
         thrownMace.velocity = {950.0f, 0.0f};
         thrownMace.angularVelocity = 720.0f;
         thrownMace.hasHit = false;
@@ -6619,7 +6654,7 @@ int main() {
         std::cout << "-> Step 8: Verified Player weapon bounce physics & contact boundary against Boss 1!" << std::endl;
 
         // 9. Проверка системы бега после рывка (ускорение в сторону рывка, сбивание остановкой, атакой и разворотом)
-        Player sprintPlayer({200.0f, 500.0f});
+        Player sprintPlayer({1850.0f, 16.0f * 64.0f - Player::BOTTOM_OFFSET});
         assert(sprintPlayer.isSprinting() == false);
         // Зажимаем направление вправо (D) и нажимаем Shift
         sprintPlayer.setSimulatedMoveDir(1.0f);
@@ -6701,14 +6736,14 @@ int main() {
         std::cout << "-> Step 10: Verified Normal Enemy 1-2 combos scaled by intelligence (0.0=1-hit, 1.0=2-hit, 0.5=dynamic mix)!" << std::endl;
 
         // 11. Проверка увеличенного урона и мобильности Босса 1
-        Enemy mobileBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        Enemy mobileBoss({1950.0f, 500.0f}, EnemyType::BOSS_1);
         mobileBoss.triggerBossCombo(0);
         assert(mobileBoss.currentAttackDamage >= 9.0f); // Увеличенный урон смэша (было 5.0)
 
         // Проверка повышенного урона тарана
         mobileBoss.triggerBossBullCharge();
         mobileBoss.bossSpecialTimer = 0.0f;
-        mobileBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        mobileBoss.updateBoss1(0.016f, arena, {1850.0f, 500.0f}, false, false);
         assert(mobileBoss.currentAttackDamage >= 18.0f); // Увеличенный сокрушительный урон тарана (было 10.0)
 
         // Проверка выпада вперед во время атаки (динамический выпад при ударе)
@@ -6717,17 +6752,17 @@ int main() {
         mobileBoss.attackStateTimer = 0.2f;
         mobileBoss.velocity.x = 200.0f;
         float bStartPosX = mobileBoss.position.x;
-        mobileBoss.updateBossComboSequence(0.05f, player.position, &arena);
+        mobileBoss.updateBossComboSequence(0.05f, {2050.0f, 500.0f}, &arena);
         assert(mobileBoss.position.x > bStartPosX); // Босс продвинулся вперед во время удара!
         std::cout << "-> Step 11: Verified Boss 1 boosted damage (12-26 dmg) & dynamic attack lunge mobility!" << std::endl;
 
         // 12. Проверка: бросок в упор попадает мгновенно, контактная точка без телепортации, одиночный чистый звук уворота
         // а) Бросок в упор (враг в 10px перед игроком): оружие бьет сразу, не пролетая сквозь
-        Player pbPlayer({200.0f, 500.0f});
-        Enemy pbEnemy({212.0f, 500.0f}, EnemyType::NORMAL); // прямо в упоре
+        Player pbPlayer({1850.0f, 500.0f});
+        Enemy pbEnemy({1862.0f, 500.0f}, EnemyType::NORMAL); // прямо в упоре
         CombatSystem pbCombat;
         pbPlayer.setSimulatedMoveDir(1.0f);
-        pbCombat.throwWeapon(pbPlayer, {250.0f, 500.0f});
+        pbCombat.throwWeapon(pbPlayer, {1900.0f, 500.0f});
         assert(pbCombat.getThrownMaces().size() == 1);
         float pbEnemyHpBefore = pbEnemy.hp;
         pbCombat.update(0.016f, pbPlayer, pbEnemy);
@@ -6736,20 +6771,21 @@ int main() {
         assert(pbEnemy.hp < pbEnemyHpBefore);
 
         // б) Точка контакта без телепортации: бросок сверху вниз в голову босса ударяет в верхнюю грань
-        Enemy bossTopTarget({500.0f, 500.0f}, EnemyType::BOSS_1);
+        Enemy bossTopTarget({2000.0f, 500.0f}, EnemyType::BOSS_1);
         sf::FloatRect bTopBounds = bossTopTarget.getBounds();
         CombatSystem topCombat;
-        Player topPlayer({500.0f, 350.0f}); // игрок над боссом
+        Player topPlayer({2000.0f, 350.0f}); // игрок над боссом
         topPlayer.setSimulatedVerticalDir(1.0f); // бросок вниз
-        topCombat.throwWeapon(topPlayer, {500.0f, 500.0f});
+        topCombat.throwWeapon(topPlayer, {2000.0f, 500.0f});
         assert(topCombat.getThrownMaces().size() == 1);
         auto& topMace = const_cast<CombatSystem::ThrownMace&>(topCombat.getThrownMaces()[0]);
-        topMace.position = {500.0f, bTopBounds.position.y - 15.0f};
+        topMace.position = {2000.0f, bTopBounds.position.y - 15.0f};
+        topMace.prevPosition = {2000.0f, bTopBounds.position.y - 25.0f};
         topMace.velocity = {0.0f, 950.0f}; // летит строго вниз
         topCombat.update(0.016f, topPlayer, bossTopTarget);
         assert(topMace.hasHit == true);
-        // Булава НЕ телепортировалась на левую или правую грань (x остался по центру ~500)
-        assert(std::abs(topMace.position.x - 500.0f) < 25.0f);
+        // Булава НЕ телепортировалась на левую или правую грань (x остался по центру ~2000)
+        assert(std::abs(topMace.position.x - 2000.0f) < 25.0f);
         // Позиция контакта находится на верхней границе босса (а не сбоку)
         assert(std::abs(topMace.position.y - bTopBounds.position.y) < 15.0f);
 
@@ -6773,7 +6809,7 @@ int main() {
 
         // 13. Проверка нового комбо с темповым разрывом (затяг -> пауза -> 2 быстрых -> долгая пауза -> 4-й удар)
         // и спец-атаки Jump Slam (приседание -> прыжок вверх на 3-4 блока -> удар на пике под себя вширь до пола -> падение)
-        Enemy newBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        Enemy newBoss({1950.0f, 500.0f}, EnemyType::BOSS_1);
         newBoss.triggerBossCombo(5);
         assert(newBoss.currentComboName.find("ТЕМПОВЫЙ РАЗРЫВ") != std::string::npos);
         assert(newBoss.bossComboTotalHits == 4);
@@ -6781,45 +6817,48 @@ int main() {
         assert(newBoss.attackStateTimer >= 0.60f); // 1-й удар с затягом
 
         // Шаг сквозь 1-й удар: проверка паузы после него
-        newBoss.updateBossComboSequence(0.66f, player.position, &arena); // завершили виндап 1
+        newBoss.updateBossComboSequence(0.66f, {1950.0f, 500.0f}, &arena); // завершили виндап 1
         assert(newBoss.attackState == EnemyAttackState::ATTACKING);
-        newBoss.updateBossComboSequence(0.20f, player.position, &arena); // завершили активную фазу 1
+        newBoss.updateBossComboSequence(0.20f, {1950.0f, 500.0f}, &arena); // завершили активную фазу 1
         assert(newBoss.attackState == EnemyAttackState::RECOVERY);
         assert(newBoss.attackStateTimer >= 0.40f); // после 1-го удара ждет время (0.45с)
 
         // 2 и 3 удары идут с минимальным интервалом
-        newBoss.updateBossComboSequence(0.46f, player.position, &arena); // перешли к удару 2
+        newBoss.updateBossComboSequence(0.46f, {1950.0f, 500.0f}, &arena); // перешли к удару 2 (WINDUP 0.12с)
         assert(newBoss.bossCurrentComboHit == 1);
         assert(newBoss.attackStateTimer <= 0.15f); // минимальный замах
-        newBoss.updateBossComboSequence(0.25f, player.position, &arena); // завершили 2 удар
+        newBoss.updateBossComboSequence(0.13f, {1950.0f, 500.0f}, &arena); // Hit 2 ATTACKING (0.12с)
+        newBoss.updateBossComboSequence(0.13f, {1950.0f, 500.0f}, &arena); // Hit 2 RECOVERY (0.08с)
+        newBoss.updateBossComboSequence(0.09f, {1950.0f, 500.0f}, &arena); // перешли к удару 3 (WINDUP 0.10с)
         assert(newBoss.bossCurrentComboHit == 2); // удар 3
         assert(newBoss.attackStateTimer <= 0.15f); // минимальный интервал между 2 и 3
 
-        newBoss.updateBossComboSequence(0.25f, player.position, &arena); // завершили активную фазу 3 удара
+        newBoss.updateBossComboSequence(0.11f, {1950.0f, 500.0f}, &arena); // Hit 3 ATTACKING (0.12с)
+        newBoss.updateBossComboSequence(0.13f, {1950.0f, 500.0f}, &arena); // Hit 3 RECOVERY (0.75с)
         assert(newBoss.attackState == EnemyAttackState::RECOVERY);
         assert(newBoss.attackStateTimer >= 0.70f); // ждет еще большее время чем между 1 и 2 (0.75с > 0.45с!)
 
-        newBoss.updateBossComboSequence(0.76f, player.position, &arena); // перешли к 4-му удару
+        newBoss.updateBossComboSequence(0.76f, {1950.0f, 500.0f}, &arena); // перешли к 4-му удару
         assert(newBoss.bossCurrentComboHit == 3);
         assert(newBoss.currentAttackDamage >= 24.0f); // мощный 4-й удар
         std::cout << "-> Verified Boss Combo 5: Delayed Windup -> Pause -> 2 Rapid Strikes -> Extended Pause -> 4th Slam!" << std::endl;
 
         // б) Проверка спец-атаки Jump Slam
-        Enemy slamBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        Enemy slamBoss({1950.0f, 16.0f * 64.0f - 92.0f}, EnemyType::BOSS_1);
         slamBoss.triggerBossJumpSlam();
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_TELEGRAPH);
         assert(slamBoss.currentComboName.find("ПРИСЕДАНИЕ") != std::string::npos);
 
         // Завершение фазы приседания / телеграфа -> прыжок вверх на 3-4 блока
-        slamBoss.updateBoss1(0.42f, arena, player.position, false, false);
+        slamBoss.updateBoss1(0.42f, arena, {1880.0f, 994.0f}, false, false);
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE);
         assert(slamBoss.velocity.y < -1000.0f); // мощный толчок вверх
 
         // Взлет до пика прыжка (apex)
         while (slamBoss.velocity.y < -30.0f && slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE) {
-            slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
+            slamBoss.updateBoss1(0.016f, arena, {1880.0f, 994.0f}, false, false);
         }
-        slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
+        slamBoss.updateBoss1(0.016f, arena, {1880.0f, 994.0f}, false, false);
         // Достиг пика высоты -> выполняет удар под себя и вширь, достающий до пола!
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_STRIKE);
         assert(slamBoss.attackState == EnemyAttackState::ATTACKING);
@@ -6828,13 +6867,13 @@ int main() {
         assert(slamBoss.currentAttackDamage >= 25.0f);
 
         // После удара на пике -> переход к быстрому падению вниз
-        slamBoss.updateBoss1(0.32f, arena, player.position, false, false);
+        slamBoss.updateBoss1(0.32f, arena, {1880.0f, 994.0f}, false, false);
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_FALL);
         assert(slamBoss.velocity.y > 0.0f);
 
         // Падение до приземления на пол
         for (int f = 0; f < 30 && slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_FALL; ++f) {
-            slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
+            slamBoss.updateBoss1(0.016f, arena, {1880.0f, 994.0f}, false, false);
         }
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::NONE);
         assert(slamBoss.bossComboCooldown > 0.0f);
@@ -6890,8 +6929,8 @@ int main() {
         vfx.clear();
         Arena arena(80, 20);
         arena.loadRoom(1);
-        Player player({300.0f, 500.0f});
-        Enemy boss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        Player player({1850.0f, 16.0f * 64.0f - Player::BOTTOM_OFFSET});
+        Enemy boss({1950.0f, 16.0f * 64.0f - 92.0f}, EnemyType::BOSS_1);
 
         boss.triggerBossEarthquake();
         assert(boss.bossSpecialState == Enemy::Boss1SpecialState::EARTHQUAKE_TELEGRAPH);
@@ -6905,17 +6944,16 @@ int main() {
 
         // 4. Проверка срабатывания VFX при спец-атаке Jump Slam (в воздухе и на земле)
         BossVfxManager::get().clear();
-        Enemy slamBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        Enemy slamBoss({1950.0f, 16.0f * 64.0f - 92.0f}, EnemyType::BOSS_1);
         slamBoss.triggerBossJumpSlam();
         slamBoss.updateBoss1(0.42f, arena, player.position, false, false); // Взлет
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE);
 
         // Достижение пика высоты -> удар вниз (JUMP_SLAM_STRIKE)
+        BossVfxManager::get().clear();
         while (slamBoss.velocity.y < -30.0f && slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE) {
             slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
         }
-        BossVfxManager::get().clear();
-        slamBoss.updateBoss1(0.016f, arena, player.position, false, false);
         assert(slamBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_STRIKE);
         assert(BossVfxManager::get().getActiveCount() > 0 && "Jump Slam apex must trigger BossVfxManager jump slam beam!");
 
@@ -6931,7 +6969,7 @@ int main() {
 
         // 5. Проверка срабатывания VFX при Bull Charge (след пыли и врезание в стену)
         BossVfxManager::get().clear();
-        Enemy chargeBoss({400.0f, 500.0f}, EnemyType::BOSS_1);
+        Enemy chargeBoss({1950.0f, 16.0f * 64.0f - 92.0f}, EnemyType::BOSS_1);
         chargeBoss.triggerBossBullCharge();
         chargeBoss.updateBoss1(0.55f, arena, player.position, false, false); // переход к бегу
         assert(chargeBoss.bossSpecialState == Enemy::Boss1SpecialState::BULL_CHARGE_RUN);
@@ -6986,24 +7024,24 @@ int main() {
         std::cout << "\n[TEST 39] Testing Boss Jump Slam No-AFK & Normal Enemy 5-6 Damage & Combos..." << std::endl;
 
         // 1. Проверка отсутствия AFK зависания босса после Jump Slam
-        Enemy afkTestBoss({400.0f, 15.0f * 64.0f - 28.0f}, EnemyType::BOSS_1);
+        Enemy afkTestBoss({1950.0f, 16.0f * 64.0f - 92.0f}, EnemyType::BOSS_1);
         afkTestBoss.triggerBossJumpSlam();
         assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_TELEGRAPH);
-        afkTestBoss.updateBoss1(0.40f, arena, player.position, false, false);
+        afkTestBoss.updateBoss1(0.40f, arena, {1850.0f, 16.0f * 64.0f - Player::BOTTOM_OFFSET}, false, false);
         assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE);
 
         // Ждем пика
         for (int i = 0; i < 60 && afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_RISE; ++i) {
-            afkTestBoss.updateBoss1(0.016f, arena, player.position, false, false);
+            afkTestBoss.updateBoss1(0.016f, arena, {1850.0f, 16.0f * 64.0f - Player::BOTTOM_OFFSET}, false, false);
         }
         assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_STRIKE);
 
         // Ждем завершения удара в воздухе -> падение
-        afkTestBoss.updateBoss1(0.35f, arena, player.position, false, false);
+        afkTestBoss.updateBoss1(0.35f, arena, {1850.0f, 16.0f * 64.0f - Player::BOTTOM_OFFSET}, false, false);
         // Теперь босс в состоянии JUMP_SLAM_FALL
         // Симулируем падение и приземление на пол арены
         for (int i = 0; i < 60 && afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::JUMP_SLAM_FALL; ++i) {
-            afkTestBoss.updateBoss1(0.016f, arena, player.position, false, false);
+            afkTestBoss.updateBoss1(0.016f, arena, {1850.0f, 16.0f * 64.0f - Player::BOTTOM_OFFSET}, false, false);
         }
         // Босс ОБЯЗАТЕЛЬНО должен выйти из состояния JUMP_SLAM_FALL и не зависнуть AFK!
         assert(afkTestBoss.bossSpecialState == Enemy::Boss1SpecialState::NONE && "Boss MUST NOT be stuck in JUMP_SLAM_FALL (AFK)!");

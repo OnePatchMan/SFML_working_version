@@ -227,11 +227,19 @@ private:
     mutable std::optional<sf::Text> _scaleText;
     mutable std::optional<sf::Text> _stunText;
     mutable std::optional<sf::Text> _counterText;
+    mutable std::optional<sf::Text> _guardLabelText;
+    mutable std::optional<sf::Text> _healLabelText;
     mutable bool _uiTextsInitialized = false;
     mutable int _lastCachedHp = -999;
+    mutable int _lastCachedGuardHp = -999;
+    mutable bool _lastCachedGuardBroken = false;
+    mutable int _lastCachedFlasks = -999;
+    mutable int _lastCachedMaxFlasks = -999;
     mutable std::string _lastCachedComboName;
     mutable std::string _lastCachedChainStr;
     mutable std::string _lastCachedScaleStr;
+
+    bool isFinisherComboName(const std::string& comboName) const;
 
     // Кешированные графические примитивы мира для 1500+ FPS (устраняют аллокации в цикле)
     mutable sf::RectangleShape _cachedHitboxRect;

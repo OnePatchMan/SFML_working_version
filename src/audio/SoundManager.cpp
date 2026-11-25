@@ -23,6 +23,7 @@ void SoundManager::reload() {
 
     _buffers.clear();
     _musicTracks.clear();
+    _failedTrackPath.clear();
 
     if (!fs::exists(resolvedDir) || !fs::is_directory(resolvedDir)) {
         std::cerr << "[SoundManager] Directory not found: " << resolvedDir << std::endl;
@@ -61,12 +62,13 @@ void SoundManager::reload() {
             }
 
             if (loaded) {
-                _buffers[stem] = std::move(buffer);
+                auto sharedBuf = std::make_shared<sf::SoundBuffer>(std::move(buffer));
+                _buffers[stem] = sharedBuf;
                 count++;
 
                 std::string relKey = fs::path(relPath).replace_extension("").generic_string();
                 if (relKey != stem) {
-                    _buffers[relKey] = _buffers[stem];
+                    _buffers[relKey] = sharedBuf;
                 }
                 std::cout << "[SoundManager] Loaded audio: '" << stem << "' from " << relPath << std::endl;
             } else {
@@ -153,9 +155,13 @@ void SoundManager::playAttack(const std::string& attackType, const std::string& 
     }
 }
 
+float SoundManager::scaledVolume(float localVolume) const {
+    return std::clamp((localVolume * _masterVolume) / 100.0f, 0.0f, 100.0f);
+}
+
 void SoundManager::play(const std::string& key, float volume) {
     auto it = _buffers.find(key);
-    if (it == _buffers.end()) return;
+    if (it == _buffers.end() || !it->second) return;
 
     if (_soundPool.empty()) {
         for (size_t i = 0; i < 16; ++i) {
@@ -180,9 +186,8 @@ void SoundManager::play(const std::string& key, float volume) {
         _nextSoundIndex = (_nextSoundIndex + 1) % _soundPool.size();
     }
 
-    soundToUse->setBuffer(it->second);
-    float finalVol = std::clamp((volume * _masterVolume) / 100.0f, 0.0f, 100.0f);
-    soundToUse->setVolume(finalVol);
+    soundToUse->setBuffer(*it->second);
+    soundToUse->setVolume(scaledVolume(volume));
     soundToUse->play();
 }
 
@@ -250,20 +255,25 @@ void SoundManager::playMusic(const std::string& trackName, bool loop, float volu
         _music = std::make_unique<sf::Music>();
     }
 
+    if (targetTrack == _failedTrackPath) {
+        return;
+    }
+
     if (_currentTrackPath == targetTrack && _music->getStatus() == sf::Music::Status::Playing) {
         return;
     }
 
     if (!_music->openFromFile(targetTrack)) {
+        _failedTrackPath = targetTrack;
         std::cerr << "[SoundManager] Failed to load music: " << targetTrack << std::endl;
         return;
     }
 
+    _failedTrackPath.clear();
     _currentTrackPath = targetTrack;
     _musicBaseVolume = volume;
     _music->setLooping(loop);
-    float finalVol = std::clamp((_musicBaseVolume * _masterVolume) / 100.0f, 0.0f, 100.0f);
-    _music->setVolume(finalVol);
+    _music->setVolume(scaledVolume(_musicBaseVolume));
     _music->play();
     std::cout << "[SoundManager] Playing music: " << fs::path(targetTrack).filename().string() << std::endl;
 }
@@ -271,7 +281,7 @@ void SoundManager::playMusic(const std::string& trackName, bool loop, float volu
 void SoundManager::stopMusic() {
     if (_music) {
         _music->stop();
-        _currentTrackPath = "";
+        _currentTrackPath.clear();
     }
 }
 
@@ -294,15 +304,13 @@ bool SoundManager::isMusicPlaying() const {
 void SoundManager::setMusicVolume(float volume) {
     _musicBaseVolume = volume;
     if (_music) {
-        float finalVol = std::clamp((_musicBaseVolume * _masterVolume) / 100.0f, 0.0f, 100.0f);
-        _music->setVolume(finalVol);
+        _music->setVolume(scaledVolume(_musicBaseVolume));
     }
 }
 
 void SoundManager::setMasterVolume(float volume) {
     _masterVolume = volume;
     if (_music) {
-        float finalVol = std::clamp((_musicBaseVolume * _masterVolume) / 100.0f, 0.0f, 100.0f);
-        _music->setVolume(finalVol);
+        _music->setVolume(scaledVolume(_musicBaseVolume));
     }
 }

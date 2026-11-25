@@ -466,7 +466,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     // 2. adw1 (Air Down Hook) не имеет продолжений и не может быть отменена ни в какую другую атаку!
     bool canComboCancel = (!_comboHistory.empty() && _comboResetTimer > 0.0f && _hasHitThisSwing);
     if (inAir) {
-        if (attackType == "adw1" || _lastAirAttackType == attackType || _lastAirAttackType == "adw1") {
+        if ((attackType == "adw1" && _airAttacksInCurrentJump > 0) ||
+            _lastAirAttackType == attackType ||
+            _lastAirAttackType == "adw1") {
             // Исключение: a1 -> a1 при подтвержденном комбо-хите
             if (attackType == "a1" && _lastAirAttackType == "a1" && _airAttacksInCurrentJump < 2 && canComboCancel) {
                 // Разрешено для выхода в трипл комбо a1-a1-adw2
@@ -474,13 +476,9 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
                 canComboCancel = false;
             }
         }
-        // Строгий запрет спама одиночной одинаковой атаки в воздухе (adw1, a2, adw2, повтор a1 вне комбо)
-        if (_lastAirAttackType == attackType) {
-            if (attackType != "a1" || !canComboCancel || _airAttacksInCurrentJump >= 2) {
-                return;
-            }
-        }
-        if (attackType == "adw1" && _airAttacksInCurrentJump >= 1) {
+        // Повтор тяжелых атак в воздухе (a2, adw2 и т.п.) без смены приема строго блокируется;
+        // повтор a1 (вне комбо) или adw1 доходит до проверки спама и наказывается AIR SPAM EXHAUSTION!
+        if (_lastAirAttackType == attackType && attackType != "a1" && attackType != "adw1") {
             return;
         }
     }
@@ -498,14 +496,6 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         return;
     }
 
-    // Отменяем остаток кулдауна при успешном продолжении комбо
-    _attackCooldown = 0.0f;
-    _bufferedAttackInput.reset();
-    _bufferedInputTimer = 0.0f;
-
-    _attackDirection = player.isFacingRight() ? 1 : -1;
-    _hasHitThisSwing = false;
-
     // Комбо-правило для воздуха:
     // Персонаж может нанести a1, затем a1 (связка a1a1), но после нее разрешен ТОЛЬКО
     // завершитель adw2 (Dual Air Dive Slam), либо ничего (любые другие атаки, включая a1, отклоняются).
@@ -514,12 +504,20 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         bool endsWithA1A1 = (_comboHistory[n - 1] == "a1" || _comboHistory[n - 1] == "af1") &&
                             (_comboHistory[n - 2] == "a1" || _comboHistory[n - 2] == "af1");
         if (endsWithA1A1) {
-            bool isAdw2 = (attackType == "adw2" || attackType == "addw2" || attackType == "a2" || attackType == "af2" || attackType == "ad2");
+            bool isAdw2 = (attackType == "adw2" || attackType == "addw2");
             if (!isAdw2) {
-                return; // Разрешен ТОЛЬКО adw2 / a2 либо ничего!
+                return; // Разрешен ТОЛЬКО завершитель adw2 (Dual Air Dive Slam) либо ничего!
             }
         }
     }
+
+    // Отменяем остаток кулдауна только ПОСЛЕ прохождения всех проверок отклонённых атак
+    _attackCooldown = 0.0f;
+    _bufferedAttackInput.reset();
+    _bufferedInputTimer = 0.0f;
+
+    _attackDirection = player.isFacingRight() ? 1 : -1;
+    _hasHitThisSwing = false;
 
     _currentAttackType = attackType;
     _isEmpoweredStrike = false;
@@ -577,9 +575,8 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         if (actual == "2" && expected == "u2") return true;
         if ((actual == "af1" && expected == "a1") || (actual == "a1" && expected == "af1")) return true;
         if ((actual == "af2" && expected == "a2") || (actual == "a2" && expected == "af2")) return true;
-        if ((actual == "adw2" && expected == "a2") || (actual == "a2" && expected == "adw2")) return true;
         if ((actual == "ad2" && expected == "a2") || (actual == "a2" && expected == "ad2")) return true;
-        if ((actual == "f1" && expected == "1") || (actual == "1" && expected == "f1")) return true;
+        if (actual == "f1" && expected == "1") return true;
         if ((actual == "addw2" && expected == "adw2") || (actual == "adw2" && expected == "addw2")) return true;
         if ((actual == "addw1" && expected == "adw1") || (actual == "adw1" && expected == "addw1")) return true;
         if ((actual == "adu2" && expected == "ad2") || (actual == "ad2" && expected == "adu2")) return true;
@@ -593,48 +590,49 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
         return false;
     };
 
-    auto endsWith = [this, &tokenMatches](const std::vector<std::string>& seq) -> bool {
-        if (_comboHistory.size() >= seq.size()) {
-            size_t start = _comboHistory.size() - seq.size();
-            bool match = true;
-            for (size_t i = 0; i < seq.size(); ++i) {
-                if (!tokenMatches(_comboHistory[start + i], seq[i])) {
-                    match = false;
-                    break;
+    // Возвращает число точных (не алиасных) совпадений токенов, либо -1 если цепочка не подходит
+    auto scoreSequenceMatch = [this, &tokenMatches](const std::vector<std::string>& seq) -> int {
+        auto scoreTail = [&](const std::vector<std::string>& hist, const std::vector<std::string>& target) -> int {
+            if (hist.size() < target.size() || target.empty()) return -1;
+            size_t start = hist.size() - target.size();
+            int exactCount = 0;
+            for (size_t i = 0; i < target.size(); ++i) {
+                if (hist[start + i] == target[i]) {
+                    exactCount++;
+                } else if (!tokenMatches(hist[start + i], target[i])) {
+                    return -1;
                 }
             }
-            if (match) return true;
-        }
+            return exactCount;
+        };
+
+        int directScore = scoreTail(_comboHistory, seq);
+        if (directScore >= 0) return directScore;
 
         // Гибкое сопоставление комбо с прыжками (пропускаем 'j', если игрок прыгнул в тайминг)
         std::vector<std::string> histNoJ;
+        histNoJ.reserve(_comboHistory.size());
         for (const auto& s : _comboHistory) {
             if (s != "j") histNoJ.push_back(s);
         }
         std::vector<std::string> seqNoJ;
+        seqNoJ.reserve(seq.size());
         for (const auto& s : seq) {
             if (s != "j") seqNoJ.push_back(s);
         }
-        if (seqNoJ.size() > 1 && histNoJ.size() >= seqNoJ.size()) {
-            size_t start = histNoJ.size() - seqNoJ.size();
-            bool match = true;
-            for (size_t i = 0; i < seqNoJ.size(); ++i) {
-                if (!tokenMatches(histNoJ[start + i], seqNoJ[i])) {
-                    match = false;
-                    break;
-                }
-            }
-            if (match) return true;
+        if (seqNoJ.size() > 1) {
+            return scoreTail(histNoJ, seqNoJ);
         }
-        return false;
+        return -1;
     };
 
     // ==========================================
     // ПОИСК КОМБО В РЕЕСТРЕ COMBATCONFIG
-    // Приоритет отдается самой длинной цепочке (например, a1a1a2 приоритетнее a1a2)
+    // Приоритет отдается самой длинной цепочке, при равной длине — точным совпадениям
     // ==========================================
     const ComboEntry* matchedCombo = nullptr;
     size_t longestMatchLen = 0;
+    int bestExactMatches = -1;
     for (const auto& entry : CombatConfig::getCombos()) {
         // Разделение комбо: оружие (isWeapon) vs рукопашные
         bool isWeaponCombo = entry.isWeapon || (entry.id.rfind("weapon_", 0) == 0) || 
@@ -642,8 +640,10 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
                               entry.id == "121" || entry.id == "db1u1" || entry.id == "db1up1" || entry.id == "b1u1" ||
                               entry.id == "dw1jadw1" || entry.id == "dw1adw1" ||
                               entry.id == "dw1jadu2" || entry.id == "dw1adu2");
-        if (entry.id == "12" || entry.id == "weapon_12") {
-            // Базовый комбо 1-2 (Ground Slam & Pop-Up) разрешен как для рукопашного боя, так и с оружием (начало для 12f1, 12df2, 121)
+        bool isPureAirCombo = !isWeaponCombo && !entry.sequence.empty() && entry.sequence[0].rfind("a", 0) == 0;
+        if (entry.id == "12" || entry.id == "weapon_12" || isPureAirCombo) {
+            // Базовый комбо 1-2 (Ground Slam & Pop-Up) и воздушные связки (a1a1, a1a2, a1adw2, a1a1adw2, a2ad1)
+            // разрешены как для рукопашного боя, так и с оружием в руках
         } else if (player.hasWeapon()) {
             if (!isWeaponCombo) {
                 continue; // С оружием в руках рукопашные комбо заблокированы
@@ -654,10 +654,13 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
             }
         }
 
-        if (endsWith(entry.sequence)) {
-            if (entry.sequence.size() > longestMatchLen) {
+        int exactScore = scoreSequenceMatch(entry.sequence);
+        if (exactScore >= 0) {
+            if (entry.sequence.size() > longestMatchLen ||
+                (entry.sequence.size() == longestMatchLen && exactScore > bestExactMatches)) {
                 matchedCombo = &entry;
                 longestMatchLen = entry.sequence.size();
+                bestExactMatches = exactScore;
             }
         }
     }
@@ -820,6 +823,26 @@ void CombatSystem::triggerAttack(AttackInput input, Player& player, const sf::Ve
     }
 }
 
+bool CombatSystem::isFinisherComboName(const std::string& comboName) const {
+    if (comboName.empty()) return false;
+    for (const auto& entry : CombatConfig::getCombos()) {
+        if (entry.stats.displayName == comboName && (entry.isFinisher || entry.isUniqueFinisher)) {
+            return true;
+        }
+    }
+    static const char* kFinisherTags[] = {
+        "1-1-b2", "2-1-db1", "a1-a1-adw2", "a1-adw2",
+        "GROUND BOUNCE SLAM", "1-1-2", "1-f2-d1", "1-2-df2",
+        "12df2", "1-2-f1", "12f1", "BAT SWING",
+        "b2-1-u2", "b21u2", "SKY LAUNCHER", "dw1-j-adw1",
+        "SKY HOOK", "a1-a2"
+    };
+    for (const char* tag : kFinisherTags) {
+        if (comboName.find(tag) != std::string::npos) return true;
+    }
+    return false;
+}
+
 void CombatSystem::update(float dt, Player& player, Enemy& enemy) {
     std::vector<Enemy*> list = {&enemy};
     updateInternal(dt, player, list);
@@ -946,6 +969,14 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
     }
 
     // Обработка удержания в воздухе и последующего швырка об пол (Air Grab & Meteor Slam)
+    if (_isAirGrabActive && _grabbedEnemy) {
+        if (std::find(enemiesList.begin(), enemiesList.end(), _grabbedEnemy) == enemiesList.end()) {
+            _isAirGrabActive = false;
+            _grabbedEnemy = nullptr;
+            player.setAirGrabLocked(false);
+            player.setAirSuspended(false);
+        }
+    }
     if (_isAirGrabActive && _grabbedEnemy) {
         if (_grabbedEnemy->isDead) {
             _isAirGrabActive = false;
@@ -1150,33 +1181,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     _currentHitstunDecay  = std::max(hMin, 1.0f - hStep * static_cast<float>(_comboHitCount - 1));
 
                     // Проверка: является ли текущий удар завершающим комбо (Finisher)
-                    bool isFinisher = false;
-                    for (const auto& entry : CombatConfig::getCombos()) {
-                        if (entry.stats.displayName == _comboDisplayName && (entry.isFinisher || entry.isUniqueFinisher)) {
-                            isFinisher = true;
-                            break;
-                        }
-                    }
-                    if (!isFinisher && (_comboDisplayName.find("1-1-b2") != std::string::npos || 
-                                        _comboDisplayName.find("2-1-db1") != std::string::npos || 
-                                        _comboDisplayName.find("a1-a1-adw2") != std::string::npos || 
-                                        _comboDisplayName.find("a1-adw2") != std::string::npos || 
-                                        _comboDisplayName.find("GROUND BOUNCE SLAM") != std::string::npos ||
-                                        _comboDisplayName.find("1-1-2") != std::string::npos ||
-                                        _comboDisplayName.find("1-f2-d1") != std::string::npos ||
-                                        _comboDisplayName.find("1-2-df2") != std::string::npos ||
-                                        _comboDisplayName.find("12df2") != std::string::npos ||
-                                        _comboDisplayName.find("1-2-f1") != std::string::npos ||
-                                        _comboDisplayName.find("12f1") != std::string::npos ||
-                                        _comboDisplayName.find("BAT SWING") != std::string::npos ||
-                                        _comboDisplayName.find("b2-1-u2") != std::string::npos ||
-                                        _comboDisplayName.find("b21u2") != std::string::npos ||
-                                        _comboDisplayName.find("SKY LAUNCHER") != std::string::npos ||
-                                        _comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
-                                        _comboDisplayName.find("SKY HOOK") != std::string::npos ||
-                                        _comboDisplayName.find("a1-a2") != std::string::npos)) {
-                        isFinisher = true;
-                    }
+                    bool isFinisher = isFinisherComboName(_comboDisplayName);
 
                     // Скейлинг урона применяется ко всем ударам комбо (100% -> 90% -> 80% ... минимум 30%)
                     float scaledDamage = _currentDamage * _currentDamageScaling;
@@ -1295,25 +1300,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                         }
 
                         // Проверка: завершающий ли удар комбо в блок?
-                        bool isFinisher = false;
-                        for (const auto& entry : CombatConfig::getCombos()) {
-                            if (entry.stats.displayName == _comboDisplayName && (entry.isFinisher || entry.isUniqueFinisher)) {
-                                isFinisher = true;
-                                break;
-                            }
-                        }
-                        if (!isFinisher && (_comboDisplayName.find("1-1-b2") != std::string::npos || 
-                                            _comboDisplayName.find("2-1-db1") != std::string::npos || 
-                                            _comboDisplayName.find("a1-a1-adw2") != std::string::npos || 
-                                            _comboDisplayName.find("a1-adw2") != std::string::npos || 
-                                            _comboDisplayName.find("GROUND BOUNCE SLAM") != std::string::npos ||
-                                            _comboDisplayName.find("1-1-2") != std::string::npos ||
-                                            _comboDisplayName.find("1-f2-d1") != std::string::npos ||
-                                            _comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
-                                            _comboDisplayName.find("SKY HOOK") != std::string::npos ||
-                                            _comboDisplayName.find("a1-a2") != std::string::npos)) {
-                            isFinisher = true;
-                        }
+                        bool isFinisher = isFinisherComboName(_comboDisplayName);
 
                         if (isFinisher) {
                             // После проведения комбо в блок атакующий получает стан-лок,
@@ -1448,15 +1435,18 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
 
                 // Задерживаем в воздухе ТОЛЬКО ПРИ ПОПАДАНИИ по врагу!
                 if (!player.isOnGround()) {
+                    bool isSkyHookCombo = (_comboDisplayName.find("dw1-j-adw1") != std::string::npos ||
+                                           _comboDisplayName.find("SKY HOOK") != std::string::npos);
+                    bool isSoloAdw1 = (!isSkyHookCombo &&
+                                       (_currentAttackType == "adw1" || _comboDisplayName.find("adw1") != std::string::npos));
                     if (_comboDisplayName.find("dw1-j-adu2") == std::string::npos &&
                         _comboDisplayName.find("METEOR SLAM") == std::string::npos &&
-                        _currentAttackType != "adw1" &&
-                        _comboDisplayName.find("adw1") == std::string::npos) {
+                        !isSoloAdw1) {
                         _airSuspendedRemaining = 0.22f;
                         player.setAirSuspended(true);
                         player.velocity.y = 0.0f;
-                    } else if (_currentAttackType == "adw1" || _comboDisplayName.find("adw1") != std::string::npos) {
-                        // adw1 (удар под себя) направляет персонажа вниз к земле
+                    } else if (isSoloAdw1) {
+                        // Одиночный adw1 (удар под себя) направляет персонажа вниз к земле без зависания
                         _airSuspendedRemaining = 0.0f;
                         player.setAirSuspended(false);
                         if (player.velocity.y < 140.0f) {
@@ -1500,9 +1490,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 } else if (_comboDisplayName.find("a1-a2") != std::string::npos ||
                            _comboDisplayName.find("AIR GROUND SLAM") != std::string::npos) {
                     // a1-a2: Сам игрок остается на месте, а противника сбивает вниз в пол с отскоком!
-                    _airSuspendedRemaining = _attackTimer + 0.15f;
-                    player.setAirSuspended(true);
-                    player.velocity.y = 0.0f;
+                    if (!player.isOnGround()) {
+                        _airSuspendedRemaining = _attackTimer + 0.15f;
+                        player.setAirSuspended(true);
+                        player.velocity.y = 0.0f;
+                    }
                     if (enemy.getType() != EnemyType::BOSS_1) {
                         enemy.velocity.y = 850.0f;
                         enemy.diveSlamBounce = true;
@@ -1510,11 +1502,11 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     }
                 }
 
-                // Атака a2 / комбо a1a2 (толчок по прямой на уровень дэша):
+                // Атака a2 (толчок по прямой на уровень дэша):
                 // Выравниваем врага строго по высоте уровня дэша игрока
                 if (enemy.getType() != EnemyType::BOSS_1 &&
-                    (_comboDisplayName.find("a2") != std::string::npos || _comboDisplayName.find("a1-a2") != std::string::npos) && 
-                    _comboDisplayName.find("SLAM") == std::string::npos && 
+                    _comboDisplayName.find("a2") != std::string::npos &&
+                    _comboDisplayName.find("SLAM") == std::string::npos &&
                     _comboDisplayName.find("LAUNCH") == std::string::npos) {
                     enemy.position.y = player.position.y + (Player::BOTTOM_OFFSET - Enemy::HALF_H);
                     enemy.velocity.y = 0.0f;
@@ -1556,6 +1548,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                     _airGrabTotalDuration = 0.24f;
                     _airGrabDirection = _attackDirection;
                     _grabbedEnemy = &enemy;
+                    player.setAirGrabLocked(true);
 
                     // Хватаем врага и прижимаем прямо перед/над игроком на булаве
                     enemy.position.x = player.position.x + _attackDirection * 18.0f;
@@ -1760,7 +1753,7 @@ void CombatSystem::updateInternal(float dt, Player& player, const std::vector<En
                 // Обычный уворот (кадры неуязвимости):
                 // Игрок увернулся! Удар прошел мимо, комбо ИИ мгновенно сбрасывается
                 enemy.dropCombo();
-                enemy.attackHasHit = true;
+                enemy.attackHasHit = false;
 
                 _comboDisplayName = "DODGE!";
                 _comboDisplayTimer = 0.5f;
@@ -2440,6 +2433,9 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
         _counterText->setPosition({30.0f, 88.0f});
         _counterText->setFillColor(sf::Color(0, 230, 255));
 
+        _guardLabelText.emplace(_font, "", 10);
+        _healLabelText.emplace(_font, "", 11);
+
         _uiTextsInitialized = true;
     }
 
@@ -2516,20 +2512,30 @@ void CombatSystem::drawUI(sf::RenderWindow& window, const Player* player) {
         }
         window.draw(gBar);
 
-        std::string guardStr = player->isGuardBroken() ? "GUARD BROKEN!" : ("GUARD: " + std::to_string(static_cast<int>(player->guardHp)) + "%");
-        sf::Text guardLabel(_font, toSfString(guardStr), 10);
-        guardLabel.setPosition({gBarX + gBarW + 10.0f, gBarY - 3.0f});
-        guardLabel.setFillColor(player->isGuardBroken() ? sf::Color(255, 80, 80) : sf::Color(140, 210, 255));
-        window.draw(guardLabel);
+        int guardInt = static_cast<int>(player->guardHp);
+        bool guardBroken = player->isGuardBroken();
+        if (guardInt != _lastCachedGuardHp || guardBroken != _lastCachedGuardBroken) {
+            _lastCachedGuardHp = guardInt;
+            _lastCachedGuardBroken = guardBroken;
+            std::string guardStr = guardBroken ? "GUARD BROKEN!" : ("GUARD: " + std::to_string(guardInt) + "%");
+            _guardLabelText->setString(toSfString(guardStr));
+        }
+        _guardLabelText->setPosition({gBarX + gBarW + 10.0f, gBarY - 3.0f});
+        _guardLabelText->setFillColor(guardBroken ? sf::Color(255, 80, 80) : sf::Color(140, 210, 255));
+        window.draw(*_guardLabelText);
 
         // Отображение запаса хилок [R]
         int flasks = player->getHealFlasks();
         int maxFlasks = player->getMaxHealFlasks();
-        std::string healStr = "[R] ХИЛКИ: " + std::to_string(flasks) + " / " + std::to_string(maxFlasks);
-        sf::Text healText(_font, toSfString(healStr), 11);
-        healText.setPosition({pBarX, gBarY + gBarH + 5.0f});
-        healText.setFillColor(flasks > 0 ? sf::Color(80, 255, 130) : sf::Color(160, 160, 160, 180));
-        window.draw(healText);
+        if (flasks != _lastCachedFlasks || maxFlasks != _lastCachedMaxFlasks) {
+            _lastCachedFlasks = flasks;
+            _lastCachedMaxFlasks = maxFlasks;
+            std::string healStr = "[R] ХИЛКИ: " + std::to_string(flasks) + " / " + std::to_string(maxFlasks);
+            _healLabelText->setString(toSfString(healStr));
+        }
+        _healLabelText->setPosition({pBarX, gBarY + gBarH + 5.0f});
+        _healLabelText->setFillColor(flasks > 0 ? sf::Color(80, 255, 130) : sf::Color(160, 160, 160, 180));
+        window.draw(*_healLabelText);
 
         for (int i = 0; i < maxFlasks; ++i) {
             sf::RectangleShape flaskIcon({7.0f, 9.0f});

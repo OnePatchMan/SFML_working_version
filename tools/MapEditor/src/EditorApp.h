@@ -390,6 +390,7 @@ private:
     sf::Vector2f _savedEditorCameraPos;
     float _savedEditorViewScale = 1.0f;
     float _simDoorCooldown = 0.0f;
+    float _simDeathTimer = 1.8f;
 
     sf::Font _font;
     bool _fontLoaded = false;

@@ -65,72 +65,41 @@ public:
     }
 
     static bool loadKVFile(const std::string& filepath) {
-        std::ifstream file(filepath);
-        if (!file.is_open()) return false;
-
-        std::vector<std::string> blockStack;
-        std::string pendingBlock = "";
-
-        std::string line;
-        while (std::getline(file, line)) {
-            auto tokens = tokenizeLine(line);
-            if (tokens.empty()) continue;
-
-            for (size_t t = 0; t < tokens.size(); ++t) {
-                const std::string& tok = tokens[t];
-                if (tok == "{") {
-                    blockStack.push_back(pendingBlock);
-                    pendingBlock.clear();
-                } else if (tok == "}") {
-                    if (!blockStack.empty()) blockStack.pop_back();
-                } else {
-                    if (t + 1 < tokens.size() && (tokens[t+1] != "{" && tokens[t+1] != "}")) {
-                        std::string key = tok;
-                        std::string val = tokens[t+1];
-                        t++;
-                        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
-
-                        if (blockStack.size() >= 2) {
-                            const std::string& section = blockStack[1];
-                            if (section == "Stats") {
-                                if (key == "max_hp" || key == "maxhp") _config.maxHp = std::stof(val);
-                                else if (key == "move_speed" || key == "movespeed") _config.moveSpeed = std::stof(val);
-                                else if (key == "sprint_speed" || key == "sprintspeed") _config.sprintSpeed = std::stof(val);
-                                else if (key == "gravity") _config.gravity = std::stof(val);
-                                else if (key == "jump_speed" || key == "jumpspeed") _config.jumpSpeed = std::stof(val);
-                                else if (key == "max_fall_speed" || key == "maxfallspeed") _config.maxFallSpeed = std::stof(val);
-                                else if (key == "turn_delay" || key == "turndelay") _config.turnDelay = std::stof(val);
-                            } else if (section == "Dash") {
-                                if (key == "dash_speed" || key == "dashspeed") _config.dashSpeed = std::stof(val);
-                                else if (key == "dash_duration" || key == "dashduration") _config.dashDuration = std::stof(val);
-                                else if (key == "dash_cooldown" || key == "dashcooldown") _config.dashCooldown = std::stof(val);
-                                else if (key == "iframe_duration" || key == "iframeduration") _config.iframeDuration = std::stof(val);
-                            } else if (section == "SpotDodge") {
-                                if (key == "spot_dodge_duration" || key == "spotdodgeduration") _config.spotDodgeDuration = std::stof(val);
-                                else if (key == "spot_dodge_cooldown" || key == "spotdodgecooldown") _config.spotDodgeCooldown = std::stof(val);
-                                else if (key == "perfect_dodge_window" || key == "perfectdodgewindow") _config.perfectDodgeWindow = std::stof(val);
-                                else if (key == "perfect_dodge_empower" || key == "perfectdodgeempower") _config.perfectDodgeEmpower = std::stof(val);
-                            } else if (section == "Collision") {
-                                if (key == "half_w" || key == "halfw") _config.halfW = std::stof(val);
-                                else if (key == "top_offset" || key == "topoffset") _config.topOffset = std::stof(val);
-                                else if (key == "bottom_offset" || key == "bottomoffset") _config.bottomOffset = std::stof(val);
-                            } else if (section == "Counter") {
-                                if (key == "window") _config.counterWindow = std::stof(val);
-                                else if (key == "cooldown") _config.counterCooldown = std::stof(val);
-                                else if (key == "whiff_stun" || key == "whiffstun") _config.counterWhiffStun = std::stof(val);
-                                else if (key == "enemy_stun" || key == "enemystun") _config.counterEnemyStun = std::stof(val);
-                                else if (key == "damage") _config.counterDamage = std::stof(val);
-                                else if (key == "knock_x" || key == "knockx") _config.counterKnockX = std::stof(val);
-                                else if (key == "knock_y" || key == "knocky") _config.counterKnockY = std::stof(val);
-                            }
-                        }
-                    } else {
-                        pendingBlock = tok;
-                    }
-                }
+        return kv::forEachPair(filepath, [](const std::vector<std::string>& stack, const std::string& key, const std::string& val) {
+            if (stack.size() < 2) return;
+            const std::string& section = stack[1];
+            if (section == "Stats") {
+                if (key == "max_hp" || key == "maxhp") kv::tryParseFloat(val, _config.maxHp);
+                else if (key == "move_speed" || key == "movespeed") kv::tryParseFloat(val, _config.moveSpeed);
+                else if (key == "sprint_speed" || key == "sprintspeed") kv::tryParseFloat(val, _config.sprintSpeed);
+                else if (key == "gravity") kv::tryParseFloat(val, _config.gravity);
+                else if (key == "jump_speed" || key == "jumpspeed") kv::tryParseFloat(val, _config.jumpSpeed);
+                else if (key == "max_fall_speed" || key == "maxfallspeed") kv::tryParseFloat(val, _config.maxFallSpeed);
+                else if (key == "turn_delay" || key == "turndelay") kv::tryParseFloat(val, _config.turnDelay);
+            } else if (section == "Dash") {
+                if (key == "dash_speed" || key == "dashspeed") kv::tryParseFloat(val, _config.dashSpeed);
+                else if (key == "dash_duration" || key == "dashduration") kv::tryParseFloat(val, _config.dashDuration);
+                else if (key == "dash_cooldown" || key == "dashcooldown") kv::tryParseFloat(val, _config.dashCooldown);
+                else if (key == "iframe_duration" || key == "iframeduration") kv::tryParseFloat(val, _config.iframeDuration);
+            } else if (section == "SpotDodge") {
+                if (key == "spot_dodge_duration" || key == "spotdodgeduration") kv::tryParseFloat(val, _config.spotDodgeDuration);
+                else if (key == "spot_dodge_cooldown" || key == "spotdodgecooldown") kv::tryParseFloat(val, _config.spotDodgeCooldown);
+                else if (key == "perfect_dodge_window" || key == "perfectdodgewindow") kv::tryParseFloat(val, _config.perfectDodgeWindow);
+                else if (key == "perfect_dodge_empower" || key == "perfectdodgeempower") kv::tryParseFloat(val, _config.perfectDodgeEmpower);
+            } else if (section == "Collision") {
+                if (key == "half_w" || key == "halfw") kv::tryParseFloat(val, _config.halfW);
+                else if (key == "top_offset" || key == "topoffset") kv::tryParseFloat(val, _config.topOffset);
+                else if (key == "bottom_offset" || key == "bottomoffset") kv::tryParseFloat(val, _config.bottomOffset);
+            } else if (section == "Counter") {
+                if (key == "window") kv::tryParseFloat(val, _config.counterWindow);
+                else if (key == "cooldown") kv::tryParseFloat(val, _config.counterCooldown);
+                else if (key == "whiff_stun" || key == "whiffstun") kv::tryParseFloat(val, _config.counterWhiffStun);
+                else if (key == "enemy_stun" || key == "enemystun") kv::tryParseFloat(val, _config.counterEnemyStun);
+                else if (key == "damage") kv::tryParseFloat(val, _config.counterDamage);
+                else if (key == "knock_x" || key == "knockx") kv::tryParseFloat(val, _config.counterKnockX);
+                else if (key == "knock_y" || key == "knocky") kv::tryParseFloat(val, _config.counterKnockY);
             }
-        }
-        return true;
+        });
     }
 
 private:
@@ -146,39 +115,5 @@ private:
         if (std::filesystem::exists(kvPath)) {
             loadKVFile(kvPath);
         }
-    }
-
-    static std::vector<std::string> tokenizeLine(const std::string& line) {
-        std::vector<std::string> tokens;
-        size_t i = 0;
-        while (i < line.size()) {
-            while (i < line.size() && (line[i] == ' ' || line[i] == '\t' || line[i] == '\r' || line[i] == '\n' || line[i] == '=' || line[i] == ':')) {
-                i++;
-            }
-            if (i >= line.size()) break;
-
-            if (line[i] == '/' && i + 1 < line.size() && line[i+1] == '/') break;
-            if (line[i] == '#' || line[i] == ';') break;
-
-            if (line[i] == '"') {
-                i++;
-                size_t start = i;
-                while (i < line.size() && line[i] != '"') {
-                    i++;
-                }
-                tokens.push_back(line.substr(start, i - start));
-                if (i < line.size() && line[i] == '"') i++;
-            } else if (line[i] == '{' || line[i] == '}') {
-                tokens.push_back(std::string(1, line[i]));
-                i++;
-            } else {
-                size_t start = i;
-                while (i < line.size() && line[i] != ' ' && line[i] != '\t' && line[i] != '\r' && line[i] != '\n' && line[i] != '=' && line[i] != ':' && line[i] != '{' && line[i] != '}') {
-                    i++;
-                }
-                tokens.push_back(line.substr(start, i - start));
-            }
-        }
-        return tokens;
     }
 };

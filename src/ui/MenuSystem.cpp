@@ -114,15 +114,19 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
     if (_font) {
         // Большой заголовок игры - чистый белый цвет
         std::string titleStr = (_appState == AppState::PAUSED) ? "ПАУЗА" : "FIGHTING COMBO ARENA";
-        sf::Text title(*_font, toSfString(titleStr), (_appState == AppState::PAUSED) ? 48 : 44);
-        title.setStyle(sf::Text::Bold);
-        title.setFillColor(sf::Color::White);
-        title.setOutlineThickness(3.0f);
-        title.setOutlineColor(sf::Color(15, 15, 18));
-        sf::FloatRect tb = title.getLocalBounds();
-        title.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
-        title.setPosition(sf::Vector2f(cx, cy - 210.0f));
-        window.draw(title);
+        if (!_cachedTitleText.has_value()) {
+            _cachedTitleText.emplace(*_font, "", 44);
+        }
+        _cachedTitleText->setCharacterSize((_appState == AppState::PAUSED) ? 48 : 44);
+        _cachedTitleText->setStyle(sf::Text::Bold);
+        _cachedTitleText->setFillColor(sf::Color::White);
+        _cachedTitleText->setOutlineThickness(3.0f);
+        _cachedTitleText->setOutlineColor(sf::Color(15, 15, 18));
+        _cachedTitleText->setString(toSfString(titleStr));
+        sf::FloatRect tb = _cachedTitleText->getLocalBounds();
+        _cachedTitleText->setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
+        _cachedTitleText->setPosition(sf::Vector2f(cx, cy - 210.0f));
+        window.draw(*_cachedTitleText);
 
         // Подзаголовок - чистый белый текст
         std::string subStr = (_appState == AppState::PAUSED) ? "ИГРА ПРИОСТАНОВЛЕНА  |  НАЖМИТЕ [ESC] ДЛЯ ВОЗВРАТА" 
@@ -140,10 +144,7 @@ void MenuSystem::drawMainMenuScreen(sf::RenderWindow& window, const sf::Vector2f
     float startY = cy - 120.0f;
     float stepY = 60.0f;
 
-    bool mouseClicked = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
-    static bool prevMouse = false;
-    bool justClicked = mouseClicked && !prevMouse;
-    prevMouse = mouseClicked;
+    const bool justClicked = _justClicked;
 
     if (_appState == AppState::MAIN_MENU) {
         // 1. ИГРАТЬ (Обычная игра)
@@ -262,19 +263,21 @@ void MenuSystem::drawSettingsScreen(sf::RenderWindow& window, const sf::Vector2f
     window.draw(topBar);
 
     if (_font) {
-        sf::Text title(*_font, toSfString("НАСТРОЙКИ"), 30);
-        title.setStyle(sf::Text::Bold);
-        title.setFillColor(sf::Color::White);
-        sf::FloatRect tb = title.getLocalBounds();
-        title.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
-        title.setPosition(sf::Vector2f(cx, topH * 0.5f));
-        window.draw(title);
+        if (!_cachedTitleText.has_value()) {
+            _cachedTitleText.emplace(*_font, "", 30);
+        }
+        _cachedTitleText->setCharacterSize(30);
+        _cachedTitleText->setStyle(sf::Text::Bold);
+        _cachedTitleText->setFillColor(sf::Color::White);
+        _cachedTitleText->setOutlineThickness(0.0f);
+        _cachedTitleText->setString(toSfString("НАСТРОЙКИ"));
+        sf::FloatRect tb = _cachedTitleText->getLocalBounds();
+        _cachedTitleText->setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
+        _cachedTitleText->setPosition(sf::Vector2f(cx, topH * 0.5f));
+        window.draw(*_cachedTitleText);
     }
 
-    bool mouseClicked = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
-    static bool prevMouse = false;
-    bool justClicked = mouseClicked && !prevMouse;
-    prevMouse = mouseClicked;
+    const bool justClicked = _justClicked;
 
     // Вкладки настроек
     float tabW = 280.0f;
@@ -529,7 +532,7 @@ void MenuSystem::drawCombosTab(sf::RenderWindow& window, float x, float y, float
         {"2 -> 1 -> db1", "Reverse Sweep [РУКИ]", "Тяжелый удар -> джеб -> рывок назад с подсечкой (db1): запуск вверх", sf::Color(255, 140, 80)},
         {"a1 -> adw2", "Ground Bounce [РУКИ]", "Удар в воздухе (a1) -> дайв-слэм вниз (adw2): вбивание в пол с отскоком вверх", sf::Color(255, 90, 30)},
         {"a1 -> a1 -> adw2", "Dual Dive Slam [РУКИ]", "Два удара в воздухе (a1) -> финальный дайв-слэм вниз (adw2) об пол с отскоком", sf::Color(255, 75, 25)},
-        {"a1 -> a2", "Air Push [РУКИ]", "Удар в воздухе (a1) и тяжелый толчок (a2) далеко по горизонтали", sf::Color(220, 130, 255)},
+        {"a1 -> a2", "Air Ground Slam [РУКИ]", "Удар в воздухе (a1) и добивание врага в пол (a2), игрок зависает в воздухе", sf::Color(220, 130, 255)},
         {"1 -> 2 -> df2", "Dash Smash [РУКИ]", "Джеб -> силовой удар -> дэш вперед со смешем (df2) строго по горизонтали", sf::Color(255, 180, 60)}
     };
 
@@ -813,19 +816,21 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
     window.draw(topBar);
 
     if (_font) {
-        sf::Text title(*_font, toSfString("ГАЙД ПО ИГРЕ: КОМБО, МЕХАНИКИ И ВРАГИ"), 28);
-        title.setStyle(sf::Text::Bold);
-        title.setFillColor(sf::Color::White);
-        sf::FloatRect tb = title.getLocalBounds();
-        title.setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
-        title.setPosition(sf::Vector2f(cx, topH * 0.5f));
-        window.draw(title);
+        if (!_cachedTitleText.has_value()) {
+            _cachedTitleText.emplace(*_font, "", 28);
+        }
+        _cachedTitleText->setCharacterSize(28);
+        _cachedTitleText->setStyle(sf::Text::Bold);
+        _cachedTitleText->setFillColor(sf::Color::White);
+        _cachedTitleText->setOutlineThickness(0.0f);
+        _cachedTitleText->setString(toSfString("ГАЙД ПО ИГРЕ: КОМБО, МЕХАНИКИ И ВРАГИ"));
+        sf::FloatRect tb = _cachedTitleText->getLocalBounds();
+        _cachedTitleText->setOrigin({tb.position.x + tb.size.x * 0.5f, tb.position.y + tb.size.y * 0.5f});
+        _cachedTitleText->setPosition(sf::Vector2f(cx, topH * 0.5f));
+        window.draw(*_cachedTitleText);
     }
 
-    bool mouseClicked = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
-    static bool prevMouse = false;
-    bool justClicked = mouseClicked && !prevMouse;
-    prevMouse = mouseClicked;
+    const bool justClicked = _justClicked;
 
     // Вкладки гайда (4 вкладки)
     float tabW = 230.0f;
@@ -905,7 +910,15 @@ void MenuSystem::drawGuideScreen(sf::RenderWindow& window, const sf::Vector2f& m
 }
 
 void MenuSystem::draw(sf::RenderWindow& window, const sf::Vector2f& mousePos) {
-    if (!isInMenu()) return;
+    if (!isInMenu()) {
+        _prevMouseDown = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
+        _justClicked = false;
+        return;
+    }
+
+    const bool mouseClicked = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
+    _justClicked = mouseClicked && !_prevMouseDown;
+    _prevMouseDown = mouseClicked;
 
     sf::Vector2f winSize(static_cast<float>(window.getSize().x), static_cast<float>(window.getSize().y));
 

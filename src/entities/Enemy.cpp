@@ -756,8 +756,13 @@ void Enemy::dropCombo() {
     }
     const auto& ecfg = getEConfig();
     aiComboState = AIComboState::IDLE;
-    attackState = EnemyAttackState::RECOVERY;
-    attackStateTimer = ecfg.stats.whiffRecovery; // Стан-лок/восстановление при промахе
+    if (hurtTimer > 0.0f) {
+        attackState = EnemyAttackState::IDLE;
+        attackStateTimer = 0.0f;
+    } else {
+        attackState = EnemyAttackState::RECOVERY;
+        attackStateTimer = ecfg.stats.whiffRecovery; // Стан-лок/восстановление при промахе
+    }
     attackCooldown = (enemyType == EnemyType::DUELIST) ? 0.20f : 0.32f; // Быстрое возвращение в бой
     currentComboName = "";
     isAirSuspended = false;
@@ -782,6 +787,18 @@ void Enemy::finishCombo(bool hitConfirmed) {
     isAirSuspended = false;
     attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
     behaviorState = hasDetectedPlayer ? AIBehaviorState::CHASE : AIBehaviorState::PATROL;
+}
+
+void Enemy::chooseDefensiveBlock(const sf::Vector2f& playerPos, float holdDuration, int lowRollPercent) {
+    if (playerPos.y < position.y - 18.0f) {
+        blockType = BlockType::HIGH;
+    } else if (playerPos.y > position.y + 15.0f) {
+        blockType = BlockType::LOW;
+    } else {
+        blockType = (rand() % 100 < lowRollPercent) ? BlockType::LOW : BlockType::HIGH;
+    }
+    isBlocking = true;
+    blockHoldTimer = holdDuration;
 }
 
 void Enemy::stagger(float duration) {
@@ -1298,15 +1315,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                             } else if (canCounter && counterCooldownTimer <= 0.0f && distToPlayer <= ecfg.counter.triggerDistance && playerIsAttacking) {
                                 triggerCounterStance();
                             } else if (canBlock && isOnGround && blockHoldTimer <= 0.0f && playerIsAttacking && distToPlayer < 110.0f) {
-                                if (playerPos.y < position.y - 18.0f) {
-                                    blockType = BlockType::HIGH; // Атака сверху/в прыжке (оверхэд) -> верхний блок
-                                } else if (playerPos.y > position.y + 15.0f) {
-                                    blockType = BlockType::LOW;  // Атака снизу -> нижний блок
-                                } else {
-                                    blockType = (rand() % 100 < 35) ? BlockType::LOW : BlockType::HIGH;
-                                }
-                                isBlocking = true;
-                                blockHoldTimer = 0.35f;
+                                chooseDefensiveBlock(playerPos, 0.35f, 35);
                             }
                         } else if (distToPlayer > maxSpacing && vertDist < 90.0f) {
                             // Игрок разрывает дистанцию — дуэлянт агрессивно поджимает вперед
@@ -1363,15 +1372,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                 }
 
                                 if (isOnGround && canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
-                                    if (playerPos.y < position.y - 18.0f) {
-                                        blockType = BlockType::HIGH;
-                                    } else if (playerPos.y > position.y + 15.0f) {
-                                        blockType = BlockType::LOW;
-                                    } else {
-                                        blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
-                                    }
-                                    isBlocking = true;
-                                    blockHoldTimer = 0.45f;
+                                    chooseDefensiveBlock(playerPos, 0.45f, 30);
                                 }
 
                                 if (distToPlayer <= ecfg.counter.triggerDistance) {
@@ -1389,15 +1390,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                                 // Идеальная зона спейсинга (золотая середина): держит стойку, следит за игроком
                                 velocity.x = 0.0f;
                                 if (isOnGround && canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f && (rand() % 100 < 20)) {
-                                    if (playerPos.y < position.y - 18.0f) {
-                                        blockType = BlockType::HIGH;
-                                    } else if (playerPos.y > position.y + 15.0f) {
-                                        blockType = BlockType::LOW;
-                                    } else {
-                                        blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
-                                    }
-                                    isBlocking = true;
-                                    blockHoldTimer = 0.35f;
+                                    chooseDefensiveBlock(playerPos, 0.35f, 30);
                                 }
                             }
                         }
@@ -1406,15 +1399,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                     // Медленный, тяжелая броня, при близком контакте может закрыться блоком
                     else if (enemyType == EnemyType::TANK) {
                         if (isOnGround && distToPlayer <= 65.0f && vertDist < 50.0f && canBlock && blockHoldTimer <= 0.0f && (nextStarterChoice % 2 == 0)) {
-                            if (playerPos.y < position.y - 18.0f) {
-                                blockType = BlockType::HIGH;
-                            } else if (playerPos.y > position.y + 15.0f) {
-                                blockType = BlockType::LOW;
-                            } else {
-                                blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
-                            }
-                            isBlocking = true;
-                            blockHoldTimer = 0.45f;
+                            chooseDefensiveBlock(playerPos, 0.45f, 30);
                         }
                         if (distToPlayer > 55.0f) {
                             float stalkSpeed = (attackCooldown > 0.0f) ? (baseSpeed * 0.75f) : baseSpeed;
@@ -1422,15 +1407,7 @@ void Enemy::update(float dt, const Arena& arena, const sf::Vector2f& playerPos, 
                         } else {
                             if (attackCooldown > 0.0f) {
                                 if (isOnGround && canBlock && blockType == BlockType::NONE && blockHoldTimer <= 0.0f) {
-                                    if (playerPos.y < position.y - 18.0f) {
-                                        blockType = BlockType::HIGH;
-                                    } else if (playerPos.y > position.y + 15.0f) {
-                                        blockType = BlockType::LOW;
-                                    } else {
-                                        blockType = (rand() % 100 < 30) ? BlockType::LOW : BlockType::HIGH;
-                                    }
-                                    isBlocking = true;
-                                    blockHoldTimer = 0.35f;
+                                    chooseDefensiveBlock(playerPos, 0.35f, 30);
                                 }
                                 velocity.x = -dir * (baseSpeed * 0.30f); // Медленно держит дистанцию во время отката
                             } else {
@@ -2811,13 +2788,13 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
     static bool s_texAttempted = false;
     if (!s_texAttempted) {
         s_texAttempted = true;
-        s_bossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
-        s_normalTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/normal/normal_mutant.png"));
-        s_tankTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/tank/tank_mutant.png"));
-        s_duelistAggroTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png"));
-        s_duelistPassTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_passive/duelist_passive.png"));
-        s_dummyTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/dummy/dummy_mutant.png"));
-        s_lurkerTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/lurker/lurker_mutant.png"));
+        (void)s_bossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+        (void)s_normalTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/normal/normal_mutant.png"));
+        (void)s_tankTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/tank/tank_mutant.png"));
+        (void)s_duelistAggroTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png"));
+        (void)s_duelistPassTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_passive/duelist_passive.png"));
+        (void)s_dummyTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/dummy/dummy_mutant.png"));
+        (void)s_lurkerTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/lurker/lurker_mutant.png"));
     }
 
     auto getMutantSpec = [&](sf::Texture*& outTex, int& outFw, int& outFh, float& outOx, float& outOy, float& outRw, float& outRh, int& outDeadF) {
@@ -3265,6 +3242,8 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
                 _cachedWarnExText->setFillColor(sf::Color::White);
                 _cachedWarnExText->setPosition({position.x - 4.0f, position.y - halfH - 40.0f});
                 window.draw(*_cachedWarnExText);
+                _cachedWarnExText->setCharacterSize(13);
+                _cachedWarnExText->setStyle(sf::Text::Regular);
             }
 
             // 2. Зона поражения предупреждения (Danger Telegraph Box)
@@ -3425,8 +3404,7 @@ void Enemy::draw(sf::RenderWindow& window, const sf::Font* font) {
         // Отрисовка спец-эффектов Босса 1 (клубящаяся пыль и разломы отрисовываются через BossVfxManager)
         // Звездочки стана при ударе о стену
         if (isBossWallStunned()) {
-            static float stunStarAngle = 0.0f;
-            stunStarAngle += 8.0f;
+            const float stunStarAngle = bossAnimTimer * 480.0f;
             for (int s = 0; s < 4; ++s) {
                 float a = (stunStarAngle + s * 90.0f) * 3.14159f / 180.0f;
                 sf::CircleShape star(5.0f);
@@ -4118,7 +4096,10 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
     bool fightActive = arena.isBossFightActive();
     float distToPlayer = std::abs(playerPos.x - position.x);
 
-    if (!fightActive && hp >= maxHp && distToPlayer > 220.0f) {
+    if (!fightActive && hp >= maxHp && distToPlayer > 220.0f &&
+        bossSpecialState == Boss1SpecialState::NONE &&
+        attackState == EnemyAttackState::IDLE &&
+        hurtTimer <= 0.0f && bossWallStunTimer <= 0.0f) {
         attackState = EnemyAttackState::IDLE;
         attackHitbox = sf::FloatRect({0.0f, 0.0f}, {0.0f, 0.0f});
         velocity.x = 0.0f;
@@ -4197,6 +4178,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
         if (bossSpecialTimer <= 0.0f) {
             bossSpecialState = Boss1SpecialState::BULL_CHARGE_RUN;
             bossSpecialTimer = 4.5f;
+            currentAttackDamage = 25.0f;
             SoundManager::get().playAttack("heavy", "", false, 95.0f);
         }
         return;
@@ -4359,7 +4341,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
     if (bossSpecialAttackCooldown > 0.0f) {
         bossSpecialAttackCooldown -= dt;
     }
-    if (bossComboCooldown > 0.0f) {
+    if (bossComboCooldown > 0.0f && attackState == EnemyAttackState::IDLE) {
         bossComboCooldown -= dt;
         float distToPlayer = std::abs(playerPos.x - position.x);
         isFacingLeft = (playerPos.x < position.x);
@@ -4377,7 +4359,7 @@ void Enemy::updateBoss1(float dt, const Arena& arena, const sf::Vector2f& player
     distToPlayer = std::abs(playerPos.x - position.x);
     isFacingLeft = (playerPos.x < position.x);
 
-    if (bossSpecialAttackCooldown <= 0.0f) {
+    if (bossSpecialAttackCooldown <= 0.0f && attackState == EnemyAttackState::IDLE) {
         bossSpecialAttackCooldown = 2.8f + static_cast<float>(rand() % 2);
         int choice = rand() % 3;
         if (choice == 0 && distToPlayer > 220.0f) {

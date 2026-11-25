@@ -79,6 +79,8 @@ target_include_directories(test_directional_combos PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+target_compile_options(test_directional_combos PRIVATE -UNDEBUG)
+
 target_link_libraries(test_directional_combos PRIVATE
     SFML::Graphics
     SFML::Window

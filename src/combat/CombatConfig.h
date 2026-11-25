@@ -209,163 +209,81 @@ public:
 
     // Загрузка таблицы из указанного KV файла
     static bool loadKVFile(const std::string& filepath) {
-        std::ifstream file(filepath);
-        if (!file.is_open()) {
-            return false;
-        }
+        return kv::forEachPair(filepath, [](const std::vector<std::string>& blockStack, const std::string& key, const std::string& val) {
+            if (key == "whiff_stun_multiplier" || key == "whiff_multiplier" || key == "whiffmultiplier") {
+                kv::tryParseFloat(val, _whiffMultiplier);
+            } else if (key == "damage_scaling_step" || key == "damagescalingstep") {
+                kv::tryParseFloat(val, _damageScalingStep);
+            } else if (key == "damage_scaling_min" || key == "damagescalingmin") {
+                kv::tryParseFloat(val, _damageScalingMin);
+            } else if (key == "hitstun_decay_step" || key == "hitstundecaystep") {
+                kv::tryParseFloat(val, _hitstunDecayStep);
+            } else if (key == "hitstun_decay_min" || key == "hitstundecaymin") {
+                kv::tryParseFloat(val, _hitstunDecayMin);
+            } else if (key == "finisher_blood_base_hp" || key == "finisherbloodbasehp") {
+                kv::tryParseFloat(val, _finisherBloodBaseHp);
+            } else if (key == "base_throw_speed" || key == "basethrowspeed") {
+                kv::tryParseFloat(val, _throwBaseSpeed);
+            } else if (key == "upward_throw_speed" || key == "upwardthrowspeed") {
+                kv::tryParseFloat(val, _throwUpwardSpeed);
+            } else if (key == "max_vertical_boost" || key == "maxverticalboost") {
+                kv::tryParseFloat(val, _throwMaxVerticalBoost);
+            } else if (key == "speed_boost_multiplier" || key == "speedboostmultiplier") {
+                kv::tryParseFloat(val, _throwSpeedBoostMultiplier);
+            } else if (key == "straight_gravity" || key == "straightgravity") {
+                kv::tryParseFloat(val, _throwStraightGravity);
+            } else if (key == "upward_spin_speed" || key == "upwardspinspeed") {
+                kv::tryParseFloat(val, _throwUpwardSpinSpeed);
+            } else if (key == "upward_apex_hover_time" || key == "upwardapexhovertime") {
+                kv::tryParseFloat(val, _throwUpwardApexHoverTime);
+            } else if (key == "upward_up_gravity" || key == "upwardupgravity") {
+                kv::tryParseFloat(val, _throwUpwardUpGravity);
+            } else if (key == "upward_fall_gravity" || key == "upwardfallgravity") {
+                kv::tryParseFloat(val, _throwUpwardFallGravity);
+            } else if (key == "wall_bounce_damage" || key == "wallbouncedamage") {
+                kv::tryParseFloat(val, _wallBounceDamage);
+            } else if (key == "wall_bounce_force_damp" || key == "wallbounceforcedamp") {
+                kv::tryParseFloat(val, _wallBounceForceDamp);
+            } else if (key == "wall_bounce_pop_y" || key == "wallbouncepopy") {
+                kv::tryParseFloat(val, _wallBouncePopY);
+            } else if (key == "wall_bounce_min_speed" || key == "wallbounceminspeed") {
+                kv::tryParseFloat(val, _wallBounceMinSpeed);
+            } else if (key == "wall_bounce_hitstun" || key == "wallbouncehitstun") {
+                kv::tryParseFloat(val, _wallBounceHitstun);
+            } else if (blockStack.size() >= 3) {
+                const std::string& section = blockStack[1];
+                const std::string& entryId = blockStack[2];
 
-        std::vector<std::string> blockStack;
-        std::string pendingBlock = "";
-
-        std::string line;
-        while (std::getline(file, line)) {
-            auto tokens = tokenizeLine(line);
-            if (tokens.empty()) continue;
-
-            for (size_t t = 0; t < tokens.size(); ++t) {
-                const std::string& tok = tokens[t];
-                if (tok == "{") {
-                    blockStack.push_back(pendingBlock);
-                    pendingBlock.clear();
-                } else if (tok == "}") {
-                    if (!blockStack.empty()) blockStack.pop_back();
-                } else {
-                    if (t + 1 < tokens.size() && (tokens[t+1] != "{" && tokens[t+1] != "}")) {
-                        std::string key = tok;
-                        std::string val = tokens[t+1];
-                        t++; // пропуск значения
-
-                        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
-
-                        if (key == "whiff_stun_multiplier" || key == "whiff_multiplier" || key == "whiffmultiplier") {
-                            try { _whiffMultiplier = std::stof(val); } catch (...) {}
-                        } else if (key == "damage_scaling_step" || key == "damagescalingstep") {
-                            try { _damageScalingStep = std::stof(val); } catch (...) {}
-                        } else if (key == "damage_scaling_min" || key == "damagescalingmin") {
-                            try { _damageScalingMin = std::stof(val); } catch (...) {}
-                        } else if (key == "hitstun_decay_step" || key == "hitstundecaystep") {
-                            try { _hitstunDecayStep = std::stof(val); } catch (...) {}
-                        } else if (key == "hitstun_decay_min" || key == "hitstundecaymin") {
-                            try { _hitstunDecayMin = std::stof(val); } catch (...) {}
-                        } else if (key == "finisher_blood_base_hp" || key == "finisherbloodbasehp") {
-                            try { _finisherBloodBaseHp = std::stof(val); } catch (...) {}
-                        } else if (key == "base_throw_speed" || key == "basethrowspeed") {
-                            try { _throwBaseSpeed = std::stof(val); } catch (...) {}
-                        } else if (key == "upward_throw_speed" || key == "upwardthrowspeed") {
-                            try { _throwUpwardSpeed = std::stof(val); } catch (...) {}
-                        } else if (key == "max_vertical_boost" || key == "maxverticalboost") {
-                            try { _throwMaxVerticalBoost = std::stof(val); } catch (...) {}
-                        } else if (key == "speed_boost_multiplier" || key == "speedboostmultiplier") {
-                            try { _throwSpeedBoostMultiplier = std::stof(val); } catch (...) {}
-                        } else if (key == "straight_gravity" || key == "straightgravity") {
-                            try { _throwStraightGravity = std::stof(val); } catch (...) {}
-                        } else if (key == "upward_spin_speed" || key == "upwardspinspeed") {
-                            try { _throwUpwardSpinSpeed = std::stof(val); } catch (...) {}
-                        } else if (key == "upward_apex_hover_time" || key == "upwardapexhovertime") {
-                            try { _throwUpwardApexHoverTime = std::stof(val); } catch (...) {}
-                        } else if (key == "upward_up_gravity" || key == "upwardupgravity") {
-                            try { _throwUpwardUpGravity = std::stof(val); } catch (...) {}
-                        } else if (key == "upward_fall_gravity" || key == "upwardfallgravity") {
-                            try { _throwUpwardFallGravity = std::stof(val); } catch (...) {}
-                        } else if (key == "wall_bounce_damage" || key == "wallbouncedamage") {
-                            try { _wallBounceDamage = std::stof(val); } catch (...) {}
-                        } else if (key == "wall_bounce_force_damp" || key == "wallbounceforcedamp") {
-                            try { _wallBounceForceDamp = std::stof(val); } catch (...) {}
-                        } else if (key == "wall_bounce_pop_y" || key == "wallbouncepopy") {
-                            try { _wallBouncePopY = std::stof(val); } catch (...) {}
-                        } else if (key == "wall_bounce_min_speed" || key == "wallbounceminspeed") {
-                            try { _wallBounceMinSpeed = std::stof(val); } catch (...) {}
-                        } else if (key == "wall_bounce_hitstun" || key == "wallbouncehitstun") {
-                            try { _wallBounceHitstun = std::stof(val); } catch (...) {}
-                        } else if (blockStack.size() >= 3) {
-                            const std::string& section = blockStack[1];
-                            const std::string& entryId = blockStack[2];
-
-                            if (section == "Attacks") {
-                                AttackStats& st = _attacks[entryId];
-                                if (key == "damage") st.damage = std::stof(val);
-                                else if (key == "knock_x" || key == "knockx") st.knockX = std::stof(val);
-                                else if (key == "knock_y" || key == "knocky") st.knockY = std::stof(val);
-                                else if (key == "player_recovery" || key == "playerrecovery") st.playerRecovery = std::stof(val);
-                                else if (key == "enemy_stun" || key == "enemystun") st.enemyStun = std::stof(val);
-                                else if (key == "whiff_stun" || key == "whiffstun") st.whiffStun = std::stof(val);
-                                else if (key == "active_time" || key == "activetime") st.activeTime = std::stof(val);
-                                else if (key == "active_frames" || key == "activeframes") st.activeTime = std::stof(val) / 60.0f;
-                                else if (key == "duration_frames" || key == "durationframes" || key == "total_frames") {
-                                    float totalTime = std::stof(val) / 60.0f;
-                                    st.playerRecovery = std::max(0.01f, totalTime - st.activeTime);
-                                }
-                                else if (key == "lunge") st.lunge = std::stof(val);
-                                else if (key == "name" || key == "displayname") st.displayName = val;
-                                else if (key == "color") st.color = parseColor(val);
-                                else if (key == "height" || key == "hit_level" || key == "hitlevel" || key == "level") {
-                                    std::string v = val;
-                                    std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-                                    if (v == "low") st.hitLevel = HitLevel::LOW;
-                                    else if (v == "overhead" || v == "high") st.hitLevel = HitLevel::OVERHEAD;
-                                    else st.hitLevel = HitLevel::MID;
-                                }
-                                else if (key == "is_back" || key == "is_back_hit" || key == "hits_back" || key == "back_hit") {
-                                    st.isBackHit = (val == "1" || val == "true");
-                                }
-                            } else if (section == "Combos" || section == "CombosUnarmed" || section == "CombosWeapon") {
-                                std::string comboKey = entryId;
-                                if (section == "CombosWeapon" && comboKey.rfind("weapon_", 0) != 0) {
-                                    comboKey = "weapon_" + comboKey;
-                                }
-                                size_t cIdx = 0;
-                                auto it = _comboIndexMap.find(comboKey);
-                                if (it == _comboIndexMap.end()) {
-                                    ComboEntry ce;
-                                    ce.id = comboKey;
-                                    if (section == "CombosWeapon") ce.isWeapon = true;
-                                    _combos.push_back(ce);
-                                    cIdx = _combos.size() - 1;
-                                    _comboIndexMap[comboKey] = cIdx;
-                                } else {
-                                    cIdx = it->second;
-                                    if (section == "CombosWeapon") _combos[cIdx].isWeapon = true;
-                                }
-
-                                ComboEntry& ce = _combos[cIdx];
-                                if (key == "sequence") ce.sequence = splitSequence(val);
-                                else if (key == "is_unique" || key == "isunique") ce.isUniqueFinisher = (val == "1" || val == "true");
-                                else if (key == "is_finisher" || key == "isfinisher") ce.isFinisher = (val == "1" || val == "true");
-                                else if (key == "is_weapon" || key == "isweapon") ce.isWeapon = (val == "1" || val == "true");
-                                else if (key == "damage") ce.stats.damage = std::stof(val);
-                                else if (key == "knock_x" || key == "knockx") ce.stats.knockX = std::stof(val);
-                                else if (key == "knock_y" || key == "knocky") ce.stats.knockY = std::stof(val);
-                                else if (key == "player_recovery" || key == "playerrecovery") ce.stats.playerRecovery = std::stof(val);
-                                else if (key == "enemy_stun" || key == "enemystun") ce.stats.enemyStun = std::stof(val);
-                                else if (key == "whiff_stun" || key == "whiffstun") ce.stats.whiffStun = std::stof(val);
-                                else if (key == "active_time" || key == "activetime") ce.stats.activeTime = std::stof(val);
-                                else if (key == "active_frames" || key == "activeframes") ce.stats.activeTime = std::stof(val) / 60.0f;
-                                else if (key == "duration_frames" || key == "durationframes" || key == "total_frames") {
-                                    float totalTime = std::stof(val) / 60.0f;
-                                    ce.stats.playerRecovery = std::max(0.01f, totalTime - ce.stats.activeTime);
-                                }
-                                else if (key == "lunge") ce.stats.lunge = std::stof(val);
-                                else if (key == "name" || key == "displayname") ce.stats.displayName = val;
-                                else if (key == "color") ce.stats.color = parseColor(val);
-                                else if (key == "height" || key == "hit_level" || key == "hitlevel" || key == "level") {
-                                    std::string v = val;
-                                    std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-                                    if (v == "low") ce.stats.hitLevel = HitLevel::LOW;
-                                    else if (v == "overhead" || v == "high") ce.stats.hitLevel = HitLevel::OVERHEAD;
-                                    else ce.stats.hitLevel = HitLevel::MID;
-                                }
-                                else if (key == "is_back" || key == "is_back_hit" || key == "hits_back" || key == "back_hit") {
-                                    ce.stats.isBackHit = (val == "1" || val == "true");
-                                }
-                            }
-                        }
-                    } else {
-                        pendingBlock = tok;
+                if (section == "Attacks") {
+                    parseAttackStatsField(_attacks[entryId], key, val);
+                } else if (section == "Combos" || section == "CombosUnarmed" || section == "CombosWeapon") {
+                    std::string comboKey = entryId;
+                    if (section == "CombosWeapon" && comboKey.rfind("weapon_", 0) != 0) {
+                        comboKey = "weapon_" + comboKey;
                     }
+                    size_t cIdx = 0;
+                    auto it = _comboIndexMap.find(comboKey);
+                    if (it == _comboIndexMap.end()) {
+                        ComboEntry ce;
+                        ce.id = comboKey;
+                        if (section == "CombosWeapon") ce.isWeapon = true;
+                        _combos.push_back(ce);
+                        cIdx = _combos.size() - 1;
+                        _comboIndexMap[comboKey] = cIdx;
+                    } else {
+                        cIdx = it->second;
+                        if (section == "CombosWeapon") _combos[cIdx].isWeapon = true;
+                    }
+
+                    ComboEntry& ce = _combos[cIdx];
+                    if (key == "sequence") ce.sequence = splitSequence(val);
+                    else if (key == "is_unique" || key == "isunique") ce.isUniqueFinisher = (val == "1" || val == "true");
+                    else if (key == "is_finisher" || key == "isfinisher") ce.isFinisher = (val == "1" || val == "true");
+                    else if (key == "is_weapon" || key == "isweapon") ce.isWeapon = (val == "1" || val == "true");
+                    else parseAttackStatsField(ce.stats, key, val);
                 }
             }
-        }
-        return true;
+        });
     }
 
 private:
@@ -650,40 +568,36 @@ private:
         });
     }
 
-    // Вспомогательные парсеры для KV формата
-    static std::vector<std::string> tokenizeLine(const std::string& line) {
-        std::vector<std::string> tokens;
-        size_t i = 0;
-        while (i < line.size()) {
-            while (i < line.size() && (line[i] == ' ' || line[i] == '\t' || line[i] == '\r' || line[i] == '\n' || line[i] == '=' || line[i] == ':')) {
-                i++;
-            }
-            if (i >= line.size()) break;
-
-            if (line[i] == '/' && i + 1 < line.size() && line[i+1] == '/') break;
-            if (line[i] == '#' || line[i] == ';') break;
-
-            if (line[i] == '"') {
-                i++;
-                size_t start = i;
-                while (i < line.size() && line[i] != '"') {
-                    i++;
-                }
-                tokens.push_back(line.substr(start, i - start));
-                if (i < line.size() && line[i] == '"') i++;
-            } else if (line[i] == '{' || line[i] == '}') {
-                tokens.push_back(std::string(1, line[i]));
-                i++;
-            } else {
-                size_t start = i;
-                while (i < line.size() && line[i] != ' ' && line[i] != '\t' && line[i] != '\r' && 
-                       line[i] != '\n' && line[i] != '=' && line[i] != ':' && line[i] != '{' && line[i] != '}' && line[i] != '"') {
-                    i++;
-                }
-                tokens.push_back(line.substr(start, i - start));
+    /** Parses a single AttackStats key-value field safely (used for both Attacks and Combos). */
+    static void parseAttackStatsField(AttackStats& st, const std::string& key, const std::string& val) {
+        if (key == "damage") kv::tryParseFloat(val, st.damage);
+        else if (key == "knock_x" || key == "knockx") kv::tryParseFloat(val, st.knockX);
+        else if (key == "knock_y" || key == "knocky") kv::tryParseFloat(val, st.knockY);
+        else if (key == "player_recovery" || key == "playerrecovery") kv::tryParseFloat(val, st.playerRecovery);
+        else if (key == "enemy_stun" || key == "enemystun") kv::tryParseFloat(val, st.enemyStun);
+        else if (key == "whiff_stun" || key == "whiffstun") kv::tryParseFloat(val, st.whiffStun);
+        else if (key == "active_time" || key == "activetime") kv::tryParseFloat(val, st.activeTime);
+        else if (key == "active_frames" || key == "activeframes") kv::assignFramesSeconds(val, st.activeTime);
+        else if (key == "duration_frames" || key == "durationframes" || key == "total_frames") {
+            float totalTime = 0.0f;
+            if (kv::assignFramesSeconds(val, totalTime)) {
+                st.playerRecovery = std::max(0.01f, totalTime - st.activeTime);
             }
         }
-        return tokens;
+        else if (key == "lunge") kv::tryParseFloat(val, st.lunge);
+        else if (key == "name" || key == "displayname") st.displayName = val;
+        else if (key == "color") st.color = parseColor(val);
+        else if (key == "height" || key == "hit_level" || key == "hitlevel" || key == "level") {
+            std::string v = val;
+            std::transform(v.begin(), v.end(), v.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (v == "low") st.hitLevel = HitLevel::LOW;
+            else if (v == "overhead" || v == "high") st.hitLevel = HitLevel::OVERHEAD;
+            else st.hitLevel = HitLevel::MID;
+        }
+        else if (key == "is_back" || key == "is_back_hit" || key == "hits_back" || key == "back_hit") {
+            st.isBackHit = kv::parseBool(val, st.isBackHit);
+        }
     }
 
     static std::vector<std::string> splitSequence(const std::string& seqStr) {

@@ -53,7 +53,7 @@ private:
     ~SoundManager() = default;
 
     sf::SoundBuffer _dummyBuffer;
-    std::unordered_map<std::string, sf::SoundBuffer> _buffers;
+    std::unordered_map<std::string, std::shared_ptr<sf::SoundBuffer>> _buffers;
     std::vector<sf::Sound> _soundPool;
     size_t _nextSoundIndex = 0;
     float _masterVolume = 42.5f;
@@ -63,5 +63,8 @@ private:
     std::unique_ptr<sf::Music> _music;
     std::vector<std::string> _musicTracks;
     float _musicBaseVolume = 35.0f;
-    std::string _currentTrackPath = "";
+    std::string _currentTrackPath;
+    std::string _failedTrackPath;
+
+    float scaledVolume(float localVolume) const;
 };

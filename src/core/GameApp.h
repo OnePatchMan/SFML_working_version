@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 #include <filesystem>
+#include <optional>
 
 enum class FpsMode {
     UNCAPPED,
@@ -31,6 +32,7 @@ private:
     void initWindow();
     void initSubsystems();
     void applyFpsMode(FpsMode mode);
+    void spawnEnemyFromConfig(const EnemySpawnConfig& sp);
     void respawnEnemies();
     void checkHotReload();
     void processEvents();
@@ -50,6 +52,18 @@ private:
     bool _isTrainingMode = false;
     DummyBlockMode _dummyBlockMode = DummyBlockMode::NONE;
     FpsMode _fpsMode = FpsMode::UNCAPPED;
+
+    float _doorCooldown = 0.0f;
+    float _playerDeathTimer = 2.0f;
+
+    // Кэшированные объекты HUD (чтобы избежать переаллокаций каждый кадр)
+    sf::RectangleShape _hudOverlayRect;
+    sf::RectangleShape _trainingBannerRect;
+    sf::RectangleShape _fpsBadgeRect;
+    std::optional<sf::Text> _deathTitleText;
+    std::optional<sf::Text> _deathSubText;
+    std::optional<sf::Text> _trainingBannerText;
+    std::optional<sf::Text> _fpsText;
 
     // Мониторинг производительности (FPS / CPU / Swap)
     sf::Clock _fpsClock;

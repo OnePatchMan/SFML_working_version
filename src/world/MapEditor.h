@@ -201,4 +201,6 @@ private:
     void restoreSnapshot(const EditorSnapshot& snap, Arena& arena, Player& player);
 
     void drawJumpArc(sf::RenderWindow& window, const Arena& arena, const sf::Font* font);
+
+    mutable std::optional<sf::Text> _cachedMmTitleText;
 };

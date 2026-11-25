@@ -144,10 +144,14 @@ private:
 
     bool _isTrainingMode = false;
 
+    bool _prevMouseDown = false;
+    bool _justClicked = false;
+
     mutable sf::RectangleShape _cachedButtonRect;
     mutable std::optional<sf::Text> _cachedButtonText;
     mutable sf::RectangleShape _cachedRowBg;
     mutable std::optional<sf::Text> _cachedRowText;
+    mutable std::optional<sf::Text> _cachedTitleText;
 
     std::function<void()> _onStartGame;
     std::function<void()> _onStartTraining;

@@ -241,12 +241,12 @@ void MapEditor::drawWorld(sf::RenderWindow& window, const Arena& arena, const sf
         static bool s_edTexAttempted = false;
         if (!s_edTexAttempted) {
             s_edTexAttempted = true;
-            s_edBossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
-            s_edNormalTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/normal/normal_mutant.png"));
-            s_edTankTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/tank/tank_mutant.png"));
-            s_edDuelistAggroTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png"));
-            s_edDuelistPassTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_passive/duelist_passive.png"));
-            s_edDummyTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/dummy/dummy_mutant.png"));
+            (void)s_edBossTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/boss/boss_pale_mutant.png"));
+            (void)s_edNormalTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/normal/normal_mutant.png"));
+            (void)s_edTankTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/tank/tank_mutant.png"));
+            (void)s_edDuelistAggroTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png"));
+            (void)s_edDuelistPassTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/duelist_passive/duelist_passive.png"));
+            (void)s_edDummyTex.loadFromFile(resolveAssetPath("assets/sprites/enemies/dummy/dummy_mutant.png"));
         }
 
         sf::Texture* pEdTex = nullptr;
@@ -660,10 +660,12 @@ void MapEditor::drawUI(sf::RenderWindow& window, const Arena& arena, const sf::F
     window.draw(mmBg);
 
     if (font) {
-        sf::Text mmTitle(*font, toSfString("МИНИКАРТА (Клик для прыжка)"), 12);
-        mmTitle.setFillColor(sf::Color::White);
-        mmTitle.setPosition({mmX + 8.0f, mmY + 5.0f});
-        window.draw(mmTitle);
+        if (!_cachedMmTitleText.has_value()) {
+            _cachedMmTitleText.emplace(*font, toSfString("МИНИКАРТА (Клик для прыжка)"), 12);
+            _cachedMmTitleText->setFillColor(sf::Color::White);
+        }
+        _cachedMmTitleText->setPosition({mmX + 8.0f, mmY + 5.0f});
+        window.draw(*_cachedMmTitleText);
     }
 
     float mapW = arena.getWidth() * arena.getTileSize();

@@ -459,6 +459,7 @@ public:
     void applyAttackStats(const EnemyAttackStats& s, float dirX);
 
     void setSmartAI(bool smart) { isSmartAI = smart; }
+    void chooseDefensiveBlock(const sf::Vector2f& playerPos, float holdDuration, int lowRollPercent = 30);
     void triggerAttack();
     void triggerComboSequence(int forcedStarter = -1, int forcedHitLimit = -1);
     void dropCombo();
