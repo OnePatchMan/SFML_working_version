@@ -1,6 +1,7 @@
 import os
 import math
 from PIL import Image, ImageDraw
+from pixel_sculpt import PixelLayer, composite_layers
 
 os.makedirs("assets/sprites/enemies/duelist_aggressive", exist_ok=True)
 os.makedirs("assets/sprites/enemies/duelist_passive", exist_ok=True)
@@ -8,785 +9,845 @@ os.makedirs("assets/sprites/enemies/normal", exist_ok=True)
 os.makedirs("assets/sprites/enemies/tank", exist_ok=True)
 os.makedirs("assets/sprites/enemies/dummy", exist_ok=True)
 os.makedirs("assets/sprites/enemies/lurker", exist_ok=True)
-os.makedirs("assets/sprites/enemies/boss", exist_ok=True)
+
+def draw_digitigrade_leg(layer, hip, knee, hock, foot, r_hip, r_knee, r_hock, r_foot, col_skin, col_claw):
+    """
+    Properly articulated digitigrade leg facing LEFT:
+    Hip -> forward-down to Knee -> backward-down to Hock -> forward-down to Foot/Toes.
+    """
+    layer.tapered_limb([
+        (hip[0], hip[1], r_hip),
+        (knee[0], knee[1], r_knee),
+        (hock[0], hock[1], r_hock),
+        (foot[0], foot[1], r_foot),
+    ], col_skin)
+    # Clawed toes pointing forward (left)
+    layer.tapered_limb([
+        (foot[0], foot[1], r_foot),
+        (foot[0] - 3, foot[1] + 0.5, 1.0),
+        (foot[0] - 5, foot[1] + 1.0, 0.4),
+    ], col_claw)
 
 # =========================================================================
-# 1. DUELIST AGGRESSIVE (Sharp conical beak head, bent mantis scythes, rotting grey flesh)
-# Frame size: 48 x 64, 6 frames (Idle, Walk1, Walk2, Windup, Slash, Hurt)
+# 1. DUELIST AGGRESSIVE (Mantis Stalker: conical beak skull, bent 'P' scythes)
+# Frame size: 48 x 64, 6 frames (0:Idle, 1:Walk1, 2:Walk2, 3:Windup, 4:Slash, 5:Hurt)
 # =========================================================================
 def generate_duelist_aggressive():
     W, H = 48, 64
     NFRAMES = 6
-    img = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    sheet = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
 
-    C_OUT = (14, 16, 22, 255)
-    C_DEEP = (34, 36, 46, 255)
-    C_SHADOW = (64, 68, 82, 255)
-    C_MID_DARK = (92, 96, 110, 255)
-    C_MID = (134, 138, 152, 255)
-    C_LIGHT = (186, 192, 206, 255)
-    C_HI = (238, 244, 254, 255)
-    C_VEIN = (98, 48, 76, 255)
-    C_SINEW = (148, 38, 56, 255)
-    C_SCYTHE_BASE = (168, 175, 186, 255)
-    C_SCYTHE_EDGE = (250, 254, 255, 255)
-    C_EYE = (255, 25, 65, 255)
+    C_OUT = (14, 14, 20, 255)
+    C_DEEP = (36, 36, 48, 255)
+    C_SHADOW = (66, 68, 84, 255)
+    C_MID = (128, 132, 148, 255)
+    C_LIGHT = (182, 188, 204, 255)
+    C_HI = (232, 238, 248, 255)
+    C_VEIN = (110, 44, 72, 255)
+    C_SINEW = (158, 42, 58, 255)
+    C_SCYTHE = (224, 230, 240, 255)
+    C_SCYTHE_SH = (138, 146, 162, 255)
+    C_SCYTHE_HI = (252, 254, 255, 255)
+    C_EYE = (255, 30, 68, 255)
+    C_SLASH = (255, 70, 95, 190)
+    C_SLASH_HI = (255, 220, 230, 230)
 
     for f in range(NFRAMES):
-        ox = f * W
-        ground_y = 61
+        far = PixelLayer(W, H)
+        body = PixelLayer(W, H)
+        near = PixelLayer(W, H)
+        fx = PixelLayer(W, H)
+
+        ground_y = 60
         bob_y = 0
+        lean_x = 0
         step = 0
-        rearing = (f == 3)
-        slashing = (f == 4)
+        windup = (f == 3)
+        slash = (f == 4)
         hurt = (f == 5)
 
         if f == 1:
             bob_y = -1
-            step = -3
+            step = 4
         elif f == 2:
             bob_y = -1
-            step = 3
-        elif f == 3:
+            step = -4
+        elif windup:
             bob_y = -2
-        elif f == 4:
-            bob_y = 2
-        elif f == 5:
+            lean_x = 3
+        elif slash:
+            bob_y = 3
+            lean_x = -5
+        elif hurt:
             bob_y = -1
+            lean_x = 4
 
-        cx = ox + 24
+        cx = 25 + lean_x
         cy = 32 + bob_y
 
-        # Far leg (Background)
-        fl_foot_x = cx + 8 + (step if not slashing else 12)
-        fl_knee_x = cx + 11 + (step // 2)
-        far_leg = [
-            (cx + 3, cy + 9), (cx + 8, cy + 9),
-            (fl_knee_x + 3, cy + 18),
-            (fl_foot_x + 3, ground_y), (fl_foot_x - 3, ground_y),
-            (fl_knee_x - 3, cy + 19)
-        ]
-        draw.polygon(far_leg, fill=C_SHADOW, outline=C_OUT)
-        draw.line([(fl_knee_x, cy + 19), (fl_foot_x, ground_y - 2)], fill=C_MID_DARK, width=1)
-        # Claws
-        draw.polygon([(fl_foot_x - 3, ground_y - 2), (fl_foot_x - 5, ground_y), (fl_foot_x - 1, ground_y)], fill=C_SCYTHE_BASE, outline=C_OUT)
-        draw.polygon([(fl_foot_x + 1, ground_y - 2), (fl_foot_x, ground_y), (fl_foot_x + 3, ground_y)], fill=C_SCYTHE_BASE, outline=C_OUT)
+        # --- FAR LEG (consistent digitigrade: hip -> forward knee -> back hock -> forward toes) ---
+        fl_hip = (cx + 3, cy + 8)
+        fl_knee = (cx - 1 - step // 2, cy + 16)
+        fl_hock = (cx + 6 - step // 2, cy + 22)
+        fl_foot = (cx + 2 - step, ground_y)
+        draw_digitigrade_leg(far, fl_hip, fl_knee, fl_hock, fl_foot, 2.8, 2.0, 1.4, 1.6, C_SHADOW, C_SCYTHE_SH)
 
-        # Far Mantis Scythe Arm (Background)
-        if rearing:
-            fa_el = (cx - 4, cy - 18)
-            fa_tip = (cx + 12, cy - 28)
-            draw.line([(cx + 2, cy - 4), fa_el], fill=C_SHADOW, width=3)
-            draw.line([fa_el, fa_tip], fill=C_SCYTHE_EDGE, width=2)
-            draw.polygon([(fa_el[0] + 4, fa_el[1] - 3), (fa_el[0] + 7, fa_el[1] - 4), (fa_el[0] + 5, fa_el[1] - 1)], fill=C_SCYTHE_EDGE)
-        elif slashing:
-            fa_el = (cx - 16, cy + 1)
-            fa_tip = (cx - 26, cy + 8)
-            draw.line([(cx + 2, cy - 2), fa_el], fill=C_SHADOW, width=3)
-            draw.line([fa_el, fa_tip], fill=C_SCYTHE_EDGE, width=2)
-            draw.polygon([(cx - 20, cy + 5), (cx - 22, cy + 2), (cx - 22, cy + 7)], fill=C_SCYTHE_EDGE)
+        # --- FAR MANTIS SCYTHE ARM ---
+        if windup:
+            far.tapered_limb([(cx + 1, cy - 5), (cx + 5, cy - 16), (cx + 2, cy - 22)], C_SHADOW)
+            far.tapered_limb([(cx + 2, cy - 22), (cx - 7, cy - 26), (cx - 14, cy - 22)], C_SCYTHE_SH)
+        elif slash:
+            far.tapered_limb([(cx, cy - 4), (cx - 11, cy - 1)], C_SHADOW)
+            far.tapered_limb([(cx - 11, cy - 1), (cx - 19, cy + 3), (cx - 23, cy + 8)], C_SCYTHE_SH)
         else:
-            fa_el = (cx - 2, cy + 4)
-            fa_tip = (cx - 14, cy + 16)
-            draw.line([(cx + 2, cy - 4), fa_el], fill=C_SHADOW, width=3)
-            draw.line([fa_el, fa_tip], fill=C_SCYTHE_EDGE, width=2)
-            draw.polygon([(cx - 7, cy + 11), (cx - 9, cy + 9), (cx - 8, cy + 13)], fill=C_SCYTHE_EDGE)
+            far.tapered_limb([(cx + 1, cy - 5), (cx + 6, cy + 2)], C_SHADOW)
+            far.tapered_limb([(cx + 6, cy + 2), (cx - 2, cy + 9), (cx - 9, cy + 16)], C_SCYTHE_SH)
 
-        # Torso (Skeletal, pinched, rotting flesh with exposed ribs and bruised sinews)
-        torso_pts = [
-            (cx - 5, cy - 9), (cx + 6, cy - 9),
-            (cx + 7, cy + 2), (cx + 4, cy + 11),
-            (cx - 3, cy + 11), (cx - 6, cy + 2)
-        ]
-        draw.polygon(torso_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 4, cy - 8), (cx - 4, cy + 9)], fill=C_LIGHT, width=2)
-        draw.line([(cx - 3, cy - 8), (cx - 3, cy + 3)], fill=C_HI, width=1)
-        draw.line([(cx + 4, cy - 7), (cx + 4, cy + 9)], fill=C_SHADOW, width=2)
-        draw.line([(cx + 5, cy - 6), (cx + 5, cy + 8)], fill=C_DEEP, width=1)
-        # Rotting ribs & dark necrotic cavities
-        for ry in range(cy - 4, cy + 7, 3):
-            draw.line([(cx - 4, ry), (cx + 4, ry)], fill=C_DEEP, width=1)
-            draw.line([(cx - 4, ry - 1), (cx + 2, ry - 1)], fill=C_HI, width=1)
-        # Bruised necrotic veins pulsing across flank
-        draw.line([(cx - 2, cy + 1), (cx + 3, cy + 5)], fill=C_VEIN, width=1)
-        draw.line([(cx - 3, cy + 7), (cx + 2, cy + 8)], fill=C_SINEW, width=1)
+        far.auto_shade(C_SHADOW, C_MID, C_MID, C_DEEP, C_DEEP)
+        far.add_outline(C_OUT, ground_y + 1)
 
-        # Head (Sharp conical beak-like skull from nape to chin strictly per user sketch!)
-        head_pts = [
-            (cx - 4, cy - 9),
-            (cx - 18, cy - 7),   # Sharp beak tip pointing forward-down
-            (cx - 16, cy - 13),  # Beak upper curve
-            (cx - 7, cy - 22),   # Sloping forehead
-            (cx + 4, cy - 23),   # High curving nape
-            (cx + 8, cy - 14),   # Back of skull
-            (cx + 5, cy - 9)     # Nape connection
-        ]
-        draw.polygon(head_pts, fill=C_MID, outline=C_OUT)
-        # Shading & calcified bone crest along the skull ridge
-        draw.line([(cx + 3, cy - 22), (cx - 6, cy - 21), (cx - 15, cy - 13), (cx - 17, cy - 8)], fill=C_LIGHT, width=2)
-        draw.line([(cx + 2, cy - 21), (cx - 5, cy - 20), (cx - 14, cy - 12)], fill=C_HI, width=1)
-        draw.line([(cx + 6, cy - 14), (cx + 5, cy - 9)], fill=C_SHADOW, width=2)
-        draw.line([(cx + 7, cy - 13), (cx + 6, cy - 10)], fill=C_DEEP, width=1)
-        # Eerie glowing blood-red eye slit in the rotting skull
-        draw.polygon([(cx - 8, cy - 14), (cx - 4, cy - 15), (cx - 5, cy - 13)], fill=C_DEEP)
-        draw.line([(cx - 7, cy - 14), (cx - 5, cy - 14)], fill=C_EYE, width=1)
-        draw.point((cx - 6, cy - 14), fill=(255, 180, 200, 255))
-        draw.point((cx - 1, cy - 17), fill=C_HI)
-        draw.point((cx + 2, cy - 18), fill=C_HI)
+        # --- TORSO (Skeletal, arched S-curve predator) ---
+        body.bezier_limb((cx + 3, cy + 8), (cx + 5, cy), (cx - 1, cy - 8), 3.6, 4.2, 3.8, C_MID)
+        # Neck curving forward into skull
+        body.tapered_limb([(cx - 1, cy - 8), (cx - 2, cy - 13)], C_MID)
 
-        # Near leg (Foreground digitigrade clawed leg)
-        nl_foot_x = cx - 2 - (step if not slashing else 8)
-        nl_knee_x = cx + 4 - (step // 2)
-        near_leg = [
-            (cx - 2, cy + 9), (cx + 4, cy + 9),
-            (cx + 6, cy + 18),
-            (nl_foot_x + 4, ground_y), (nl_foot_x - 4, ground_y),
-            (nl_knee_x - 3, cy + 19)
-        ]
-        draw.polygon(near_leg, fill=C_MID, outline=C_OUT)
-        draw.line([(cx, cy + 10), (nl_knee_x + 1, cy + 18), (nl_foot_x + 2, ground_y - 2)], fill=C_LIGHT, width=2)
-        draw.line([(cx + 1, cy + 10), (nl_knee_x + 2, cy + 18)], fill=C_HI, width=1)
-        draw.line([(cx + 3, cy + 10), (nl_knee_x + 4, cy + 18), (nl_foot_x + 3, ground_y - 2)], fill=C_SHADOW, width=1)
-        draw.line([(nl_knee_x - 1, cy + 16), (nl_knee_x + 1, cy + 20)], fill=C_VEIN, width=1)
-        # Talons firmly planted at ground_y
-        draw.polygon([(nl_foot_x - 3, ground_y - 2), (nl_foot_x - 6, ground_y), (nl_foot_x - 1, ground_y)], fill=C_SCYTHE_BASE, outline=C_OUT)
-        draw.polygon([(nl_foot_x + 1, ground_y - 2), (nl_foot_x, ground_y), (nl_foot_x + 4, ground_y)], fill=C_SCYTHE_BASE, outline=C_OUT)
+        # --- HEAD (Smooth curved conical plague-beak skull per user sketch) ---
+        # Cranium dome + sweeping beak down to sharp tip
+        body.bezier_limb((cx + 4, cy - 16), (cx - 2, cy - 21), (cx - 10, cy - 15), 4.8, 4.5, 2.6, C_MID)
+        body.tapered_limb([(cx - 8, cy - 15), (cx - 13, cy - 11), (cx - 17, cy - 7)], C_MID)
+        body.set_px(cx - 18, cy - 6, C_MID)
+        # Underside jaw line from beak tip back to neck
+        body.polygon([(cx - 16, cy - 7), (cx - 5, cy - 11), (cx + 2, cy - 12), (cx + 4, cy - 15)], C_MID)
 
-        # -----------------------------------------------------------------
-        # NEAR MANTIS ATTACK ARM (Hyper-detailed, barbed predator scythe, NO hands!)
-        # -----------------------------------------------------------------
-        sh_x, sh_y = cx - 2, cy - 4
-        if rearing:
-            el_x, el_y = cx - 8, cy - 19
-            scythe_tip = (cx + 8, cy - 29)
-            draw.polygon([(sh_x - 2, sh_y), (sh_x + 3, sh_y), (el_x + 2, el_y), (el_x - 2, el_y)], fill=C_MID, outline=C_OUT)
-            draw.line([(sh_x, sh_y), (el_x, el_y)], fill=C_LIGHT, width=2)
-            draw.line([(sh_x + 1, sh_y), (el_x + 1, el_y)], fill=C_SINEW, width=1)
-            draw.polygon([(el_x - 3, el_y), (el_x - 6, el_y + 2), (el_x - 1, el_y + 3)], fill=C_SCYTHE_BASE, outline=C_OUT)
-            draw.polygon([(el_x - 2, el_y), (el_x + 2, el_y), (scythe_tip[0] + 1, scythe_tip[1]), (scythe_tip[0] - 1, scythe_tip[1])], fill=C_SCYTHE_EDGE, outline=C_OUT)
-            draw.line([(el_x, el_y), (scythe_tip[0], scythe_tip[1])], fill=C_HI, width=1)
-            # Barbed serrations on inner edge!
-            draw.polygon([(el_x + 1, el_y - 3), (el_x + 5, el_y - 4), (el_x + 2, el_y - 1)], fill=C_SCYTHE_EDGE)
-            draw.polygon([(el_x + 5, el_y - 7), (el_x + 9, el_y - 8), (el_x + 6, el_y - 5)], fill=C_SCYTHE_EDGE)
-        elif slashing:
-            el_x, el_y = cx - 15, cy - 2
-            scythe_tip = (cx - 27, cy + 6)
-            draw.polygon([(sh_x - 2, sh_y), (sh_x + 2, sh_y), (el_x + 2, el_y), (el_x - 2, el_y)], fill=C_MID, outline=C_OUT)
-            draw.line([(sh_x, sh_y), (el_x, el_y)], fill=C_LIGHT, width=2)
-            draw.line([(sh_x + 1, sh_y + 1), (el_x + 1, el_y)], fill=C_VEIN, width=1)
-            draw.polygon([(el_x - 2, el_y), (el_x + 2, el_y), (scythe_tip[0] + 1, scythe_tip[1]), (scythe_tip[0] - 1, scythe_tip[1])], fill=C_SCYTHE_EDGE, outline=C_OUT)
-            draw.line([(el_x, el_y), (scythe_tip[0], scythe_tip[1])], fill=C_HI, width=1)
-            # Inner barbed cutting teeth
-            draw.polygon([(cx - 19, cy + 1), (cx - 22, cy - 2), (cx - 20, cy + 3)], fill=C_SCYTHE_EDGE)
-            draw.polygon([(cx - 23, cy + 4), (cx - 26, cy + 1), (cx - 24, cy + 6)], fill=C_SCYTHE_EDGE)
+        body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+
+        # Anatomical details on body (ribs, veins, crimson eye slit)
+        for ry in range(cy - 3, cy + 6, 3):
+            body.line([(cx - 3, ry), (cx + 3, ry + 1)], C_DEEP)
+            body.line([(cx - 3, ry - 1), (cx + 1, ry)], C_HI)
+        body.line([(cx + 1, cy + 2), (cx + 3, cy + 7)], C_VEIN)
+        # Eye socket & glowing slit
+        body.polygon([(cx - 9, cy - 15), (cx - 5, cy - 16), (cx - 6, cy - 13)], C_DEEP)
+        body.line([(cx - 8, cy - 15), (cx - 6, cy - 15)], C_EYE)
+        body.set_px(cx - 7, cy - 15, (255, 190, 200, 255))
+        body.add_outline(C_OUT, ground_y + 1)
+
+        # --- NEAR LEG (Digitigrade, same natural bend!) ---
+        nl_hip = (cx + 1, cy + 8)
+        nl_knee = (cx - 4 + step // 2, cy + 16)
+        nl_hock = (cx + 3 + step // 2, cy + 22)
+        nl_foot = (cx - 1 + step, ground_y)
+        draw_digitigrade_leg(near, nl_hip, nl_knee, nl_hock, nl_foot, 3.2, 2.2, 1.5, 1.8, C_MID, C_SCYTHE)
+
+        # --- NEAR MANTIS SCYTHE ARM (Primary weapon, NO hands, thick curved scythe!) ---
+        sh = (cx - 1, cy - 5)
+        if windup:
+            el = (cx + 3, cy - 16)
+            near.tapered_limb([(sh[0], sh[1], 2.6), (el[0], el[1], 2.0)], C_MID)
+            # Raised scythe poised high to cleave down
+            near.bezier_limb((el[0], el[1]), (cx - 4, cy - 25), (cx - 15, cy - 22), 2.4, 2.0, 0.5, C_SCYTHE)
+            # Elbow spur
+            near.tapered_limb([(el[0], el[1], 1.5), (el[0] + 4, el[1] + 2, 0.5)], C_SCYTHE)
+            # Inner barbs
+            near.set_px(cx - 5, cy - 22, C_SCYTHE_HI)
+            near.set_px(cx - 9, cy - 21, C_SCYTHE_HI)
+        elif slash:
+            el = (cx - 9, cy - 2)
+            near.tapered_limb([(sh[0], sh[1], 2.6), (el[0], el[1], 2.0)], C_MID)
+            # Huge forward cleaving scythe!
+            near.bezier_limb((el[0], el[1]), (cx - 17, cy + 1), (cx - 21, cy + 11), 2.5, 2.2, 0.5, C_SCYTHE)
+            near.set_px(cx - 14, cy + 3, C_SCYTHE_HI)
+            near.set_px(cx - 17, cy + 6, C_SCYTHE_HI)
+            # Slash trail FX
+            fx.bezier_limb((cx - 12, cy - 14), (cx - 22, cy - 2), (cx - 18, cy + 13), 0.6, 1.6, 0.4, C_SLASH)
+            fx.bezier_limb((cx - 14, cy - 11), (cx - 21, cy - 1), (cx - 19, cy + 10), 0.3, 0.8, 0.2, C_SLASH_HI)
         else:
-            # Default folded predatory mantis stance ('Р' in sketch)
-            el_x, el_y = cx - 1, cy + 4
-            scythe_mid = (cx - 9, cy + 10)
-            scythe_tip = (cx - 18, cy + 19)
-            draw.polygon([(sh_x - 2, sh_y), (sh_x + 3, sh_y), (el_x + 3, el_y), (el_x - 2, el_y)], fill=C_MID, outline=C_OUT)
-            draw.line([(sh_x, sh_y + 1), (el_x, el_y - 1)], fill=C_LIGHT, width=2)
-            draw.line([(sh_x + 1, sh_y + 1), (el_x + 1, el_y - 1)], fill=C_SINEW, width=1)
-            draw.polygon([(el_x + 2, el_y - 1), (el_x + 5, el_y), (el_x + 2, el_y + 2)], fill=C_SCYTHE_BASE, outline=C_OUT)
-            scythe_poly = [
-                (el_x - 2, el_y), (el_x + 2, el_y),
-                (scythe_mid[0] + 2, scythe_mid[1]),
-                (scythe_tip[0] + 1, scythe_tip[1]), (scythe_tip[0] - 1, scythe_tip[1]),
-                (scythe_mid[0] - 3, scythe_mid[1])
-            ]
-            draw.polygon(scythe_poly, fill=C_SCYTHE_EDGE, outline=C_OUT)
-            draw.line([(el_x, el_y + 1), (scythe_mid[0], scythe_mid[1]), (scythe_tip[0], scythe_tip[1])], fill=C_HI, width=1)
-            draw.line([(el_x + 1, el_y + 1), (scythe_mid[0] + 1, scythe_mid[1])], fill=C_SCYTHE_BASE, width=1)
-            # 2 deadly barbed hooks on inner blade edge!
-            draw.polygon([(scythe_mid[0] - 1, scythe_mid[1] + 1), (scythe_mid[0] - 4, scythe_mid[1] - 1), (scythe_mid[0] - 2, scythe_mid[1] + 3)], fill=C_SCYTHE_EDGE)
-            draw.polygon([(scythe_mid[0] + 3, scythe_mid[1] - 4), (scythe_mid[0], scythe_mid[1] - 6), (scythe_mid[0] + 2, scythe_mid[1] - 2)], fill=C_SCYTHE_EDGE)
+            # Default folded 'P' mantis stance
+            el = (cx + 4, cy + 2)
+            near.tapered_limb([(sh[0], sh[1], 2.6), (el[0], el[1], 2.0)], C_MID)
+            # Scythe curving forward-down from elbow
+            near.bezier_limb((el[0], el[1]), (cx - 3, cy + 7), (cx - 13, cy + 17), 2.5, 2.0, 0.5, C_SCYTHE)
+            # Elbow bone spur
+            near.tapered_limb([(el[0], el[1], 1.4), (el[0] + 3, el[1] + 2, 0.4)], C_SCYTHE)
+            # Serrated inner teeth
+            near.set_px(cx - 2, cy + 9, C_SCYTHE_HI)
+            near.set_px(cx - 6, cy + 13, C_SCYTHE_HI)
 
-    img.save("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png")
-    print("Saved hyper-detailed duelist_aggressive.png (288x64)")
+        near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        near.auto_shade(C_SCYTHE, C_SCYTHE_HI, C_SCYTHE_HI, C_SCYTHE_SH, C_SHADOW)
+        # Exposed sinew at shoulder/elbow
+        near.line([(sh[0], sh[1]), (el[0] - 1, el[1])], C_SINEW)
+        near.add_outline(C_OUT, ground_y + 1)
+
+        frame_img = composite_layers(W, H, [far, body, near, fx])
+        sheet.paste(frame_img, (f * W, 0))
+
+    sheet.save("assets/sprites/enemies/duelist_aggressive/duelist_aggressive.png")
+    print("Saved redesigned duelist_aggressive.png (288x64)")
 
 # =========================================================================
-# 2. DUELIST PASSIVE (NO BEAK! Ghostly pale alien cadaver, multi-jointed needle claws)
-# Frame size: 48 x 64, 6 frames
+# 2. DUELIST PASSIVE (Pale Wraith / Bone Surgeon - NO BEAK!)
+# Frame size: 48 x 64, 6 frames (0:Idle, 1:Walk1, 2:Walk2, 3:Block/Windup, 4:LungeSlash, 5:Hurt)
 # =========================================================================
 def generate_duelist_passive():
     W, H = 48, 64
     NFRAMES = 6
-    img = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    sheet = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
 
     C_OUT = (14, 18, 24, 255)
-    C_DEEP = (32, 42, 50, 255)
-    C_SHADOW = (66, 82, 94, 255)
-    C_MID_DARK = (94, 114, 126, 255)
-    C_MID = (128, 146, 158, 255)
-    C_LIGHT = (188, 208, 218, 255)
-    C_HI = (240, 250, 255, 255)
-    C_VEIN = (60, 80, 115, 255)
-    C_BLADE_EDGE = (250, 254, 255, 255)
-    C_BLADE_MID = (175, 198, 208, 255)
-    C_EYE = (40, 240, 255, 255)
+    C_DEEP = (32, 42, 52, 255)
+    C_SHADOW = (64, 80, 94, 255)
+    C_MID = (128, 146, 160, 255)
+    C_LIGHT = (188, 208, 220, 255)
+    C_HI = (238, 248, 255, 255)
+    C_VEIN = (62, 82, 120, 255)
+    C_BLADE = (225, 240, 248, 255)
+    C_BLADE_SH = (138, 162, 178, 255)
+    C_BLADE_HI = (255, 255, 255, 255)
+    C_EYE = (50, 240, 255, 255)
+    C_SLASH = (70, 230, 255, 200)
 
     for f in range(NFRAMES):
-        ox = f * W
-        ground_y = 61
+        far = PixelLayer(W, H)
+        body = PixelLayer(W, H)
+        near = PixelLayer(W, H)
+        fx = PixelLayer(W, H)
+
+        ground_y = 60
         bob_y = 0
+        lean_x = 0
         step = 0
         blocking = (f == 3)
-        slashing = (f == 4)
+        lunge = (f == 4)
         hurt = (f == 5)
 
         if f == 1:
-            step = 3
             bob_y = -1
+            step = 4
         elif f == 2:
-            step = -3
             bob_y = -1
-        elif f == 3:
+            step = -4
+        elif blocking:
             bob_y = 1
-        elif f == 4:
-            bob_y = 2
-        elif f == 5:
+            lean_x = 2
+        elif lunge:
+            bob_y = 3
+            lean_x = -5
+        elif hurt:
             bob_y = -1
+            lean_x = 4
 
-        cx = ox + 24
+        cx = 25 + lean_x
         cy = 32 + bob_y
 
-        # Legs (Tall, agile digitigrade posture)
-        fl_x = cx + 8 + (step if not slashing else 10)
-        draw.polygon([
-            (cx + 3, cy + 9), (cx + 8, cy + 9),
-            (cx + 12, cy + 18),
-            (fl_x + 3, ground_y), (fl_x - 3, ground_y),
-            (cx + 7, cy + 18)
-        ], fill=C_SHADOW, outline=C_OUT)
-        draw.line([(cx + 10, cy + 18), (fl_x + 1, ground_y - 2)], fill=C_MID_DARK, width=1)
+        # --- FAR LEG ---
+        fl_hip = (cx + 2, cy + 8)
+        fl_knee = (cx - 2 - step // 2, cy + 16)
+        fl_hock = (cx + 5 - step // 2, cy + 22)
+        fl_foot = (cx + 1 - step, ground_y)
+        draw_digitigrade_leg(far, fl_hip, fl_knee, fl_hock, fl_foot, 2.5, 1.8, 1.3, 1.5, C_SHADOW, C_BLADE_SH)
 
-        nl_x = cx - 2 - (step if not slashing else 8)
-        draw.polygon([
-            (cx - 3, cy + 9), (cx + 3, cy + 9),
-            (cx + 4, cy + 18),
-            (nl_x + 3, ground_y), (nl_x - 3, ground_y),
-            (cx - 2, cy + 18)
-        ], fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 1, cy + 10), (cx + 2, cy + 18), (nl_x + 1, ground_y - 2)], fill=C_LIGHT, width=2)
-        draw.line([(cx, cy + 10), (cx + 3, cy + 18)], fill=C_HI, width=1)
-        # Talons on ground
-        draw.polygon([(nl_x - 3, ground_y - 2), (nl_x - 5, ground_y), (nl_x, ground_y)], fill=C_BLADE_MID, outline=C_OUT)
-        draw.polygon([(nl_x, ground_y - 2), (nl_x + 3, ground_y), (nl_x - 1, ground_y)], fill=C_BLADE_MID, outline=C_OUT)
-
-        # Torso (Lean, evasive, armored with pale calcified chest carapace)
-        torso_pts = [
-            (cx - 5, cy - 8), (cx + 5, cy - 8),
-            (cx + 6, cy + 2), (cx + 3, cy + 11),
-            (cx - 3, cy + 11), (cx - 6, cy + 2)
-        ]
-        draw.polygon(torso_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 4, cy - 7), (cx - 4, cy + 9)], fill=C_LIGHT, width=2)
-        draw.line([(cx - 3, cy - 7), (cx - 3, cy + 4)], fill=C_HI, width=1)
-        draw.line([(cx - 4, cy - 2), (cx + 4, cy - 2)], fill=C_SHADOW, width=1)
-        draw.line([(cx - 3, cy + 3), (cx + 3, cy + 3)], fill=C_SHADOW, width=1)
-        draw.line([(cx - 2, cy + 1), (cx + 2, cy + 5)], fill=C_VEIN, width=1)
-
-        # Head (NO BEAK! Smooth, terrifying alien humanoid skull cowl)
-        head_pts = [
-            (cx - 5, cy - 8),   # Chin
-            (cx - 10, cy - 10), # Forward jaw
-            (cx - 9, cy - 16),  # Face plate
-            (cx - 4, cy - 22),  # Forehead dome
-            (cx + 3, cy - 24),  # Cranial crest peaking back
-            (cx + 8, cy - 18),  # Elongated alien skull lobe
-            (cx + 6, cy - 10),  # Back of neck
-            (cx + 3, cy - 8)
-        ]
-        draw.polygon(head_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx + 2, cy - 23), (cx - 3, cy - 21), (cx - 8, cy - 15)], fill=C_LIGHT, width=2)
-        draw.line([(cx + 1, cy - 22), (cx - 2, cy - 20)], fill=C_HI, width=1)
-        draw.line([(cx + 6, cy - 17), (cx + 5, cy - 10)], fill=C_SHADOW, width=2)
-        # Eerie glowing cyan horizontal ocular slit
-        draw.line([(cx - 8, cy - 14), (cx - 4, cy - 14)], fill=C_EYE, width=1)
-        draw.point((cx - 6, cy - 14), fill=(220, 255, 255, 255))
-
-        # -----------------------------------------------------------------
-        # ARMS & PARALYZING BONE NEEDLE CLAWS (The attack hands!)
-        # -----------------------------------------------------------------
+        # Far arm
         if blocking:
-            draw.line([(cx - 3, cy - 4), (cx - 8, cy + 2)], fill=C_MID, width=3)
-            draw.line([(cx - 8, cy + 2), (cx - 16, cy - 13)], fill=C_BLADE_EDGE, width=2)
-            draw.line([(cx - 10, cy - 2), (cx - 14, cy - 10)], fill=C_HI, width=1)
-            draw.line([(cx + 2, cy - 4), (cx - 5, cy + 4)], fill=C_SHADOW, width=3)
-            draw.line([(cx - 5, cy + 4), (cx - 12, cy - 8)], fill=C_BLADE_EDGE, width=2)
-            draw.point((cx - 16, cy - 13), fill=C_HI)
-            draw.point((cx - 12, cy - 8), fill=C_HI)
-        elif slashing:
-            draw.line([(cx - 3, cy - 4), (cx - 14, cy)], fill=C_MID, width=3)
-            draw.line([(cx - 13, cy), (cx - 13, cy + 2)], fill=C_VEIN, width=1)
-            draw.line([(cx - 14, cy), (cx - 27, cy + 5)], fill=C_BLADE_EDGE, width=2)
-            draw.line([(cx - 14, cy - 1), (cx - 25, cy + 3)], fill=C_HI, width=1)
-            draw.line([(cx - 18, cy + 1), (cx - 25, cy + 10)], fill=C_BLADE_EDGE, width=1)
-            draw.line([(cx - 18, cy - 1), (cx - 26, cy)], fill=C_BLADE_EDGE, width=1)
+            far.tapered_limb([(cx + 1, cy - 6), (cx - 5, cy - 2), (cx - 9, cy - 12)], C_SHADOW)
+        elif lunge:
+            far.tapered_limb([(cx + 1, cy - 6), (cx + 9, cy - 1), (cx + 15, cy + 3)], C_SHADOW)
         else:
-            draw.line([(cx - 3, cy - 4), (cx - 5, cy + 4)], fill=C_MID, width=3)
-            draw.line([(cx - 2, cy - 3), (cx - 4, cy + 3)], fill=C_LIGHT, width=1)
-            draw.line([(cx - 5, cy + 4), (cx - 14, cy + 14)], fill=C_BLADE_EDGE, width=2)
-            draw.line([(cx - 4, cy + 4), (cx - 12, cy + 12)], fill=C_HI, width=1)
-            draw.line([(cx - 6, cy + 6), (cx - 12, cy + 18)], fill=C_BLADE_MID, width=1)
-            draw.line([(cx - 7, cy + 4), (cx - 15, cy + 10)], fill=C_BLADE_MID, width=1)
+            far.tapered_limb([(cx + 1, cy - 6), (cx + 4, cy + 2), (cx + 6, cy + 10)], C_SHADOW)
+        far.auto_shade(C_SHADOW, C_MID, C_MID, C_DEEP, C_DEEP)
+        far.add_outline(C_OUT, ground_y + 1)
 
-    img.save("assets/sprites/enemies/duelist_passive/duelist_passive.png")
-    print("Saved hyper-detailed duelist_passive.png (288x64)")
+        # --- TORSO (Tall, gaunt, eerie alien-cadaver posture) ---
+        body.bezier_limb((cx + 2, cy + 8), (cx + 4, cy), (cx, cy - 9), 3.2, 4.0, 3.6, C_MID)
+        # Slender curved neck
+        body.tapered_limb([(cx, cy - 9), (cx - 1, cy - 14)], C_MID)
+
+        # --- HEAD (NO BEAK! Smooth elongated alien skull with recessed jaw & cold cyan slit) ---
+        body.bezier_limb((cx + 4, cy - 20), (cx - 1, cy - 21), (cx - 6, cy - 16), 4.2, 4.4, 3.6, C_MID)
+        body.tapered_limb([(cx - 5, cy - 15), (cx - 4, cy - 11)], C_MID)
+        body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+
+        # Carapace seam & veins
+        body.line([(cx - 3, cy - 2), (cx + 3, cy - 1)], C_SHADOW)
+        body.line([(cx - 2, cy + 3), (cx + 2, cy + 5)], C_VEIN)
+        # Cold glowing cyan slit
+        body.line([(cx - 7, cy - 16), (cx - 4, cy - 16)], C_EYE)
+        body.set_px(cx - 6, cy - 16, C_BLADE_HI)
+        body.add_outline(C_OUT, ground_y + 1)
+
+        # --- NEAR LEG ---
+        nl_hip = (cx, cy + 8)
+        nl_knee = (cx - 5 + step // 2, cy + 16)
+        nl_hock = (cx + 2 + step // 2, cy + 22)
+        nl_foot = (cx - 2 + step, ground_y)
+        draw_digitigrade_leg(near, nl_hip, nl_knee, nl_hock, nl_foot, 2.8, 2.0, 1.4, 1.6, C_MID, C_BLADE)
+
+        # --- NEAR ARM & BONE STILETTO BLADES ---
+        sh = (cx - 1, cy - 6)
+        if blocking:
+            # High vertical parry guard with crossed bone-blade!
+            el = (cx - 5, cy + 1)
+            near.tapered_limb([(sh[0], sh[1], 2.2), (el[0], el[1], 1.8)], C_MID)
+            near.tapered_limb([(el[0], el[1], 1.8), (cx - 10, cy - 8, 1.4), (cx - 12, cy - 18, 0.4)], C_BLADE)
+            near.tapered_limb([(cx - 8, cy - 5, 1.0), (cx - 15, cy - 12, 0.3)], C_BLADE)
+        elif lunge:
+            # Explosive horizontal fencing lunge!
+            el = (cx - 10, cy - 4)
+            near.tapered_limb([(sh[0], sh[1], 2.2), (el[0], el[1], 1.8)], C_MID)
+            near.tapered_limb([(el[0], el[1], 1.8), (cx - 24, cy - 2, 0.4)], C_BLADE)
+            near.tapered_limb([(el[0] - 4, el[1] + 1, 1.1), (cx - 21, cy + 3, 0.3)], C_BLADE)
+            fx.line([(cx - 14, cy - 2), (cx - 26, cy - 2)], C_SLASH, width=2)
+            fx.line([(cx - 18, cy - 2), (cx - 26, cy - 2)], C_BLADE_HI, width=1)
+        else:
+            # Poised low guard, multi-bladed wrist hanging ready
+            el = (cx + 2, cy + 2)
+            near.tapered_limb([(sh[0], sh[1], 2.2), (el[0], el[1], 1.8)], C_MID)
+            near.tapered_limb([(el[0], el[1], 1.6), (cx - 5, cy + 9, 1.2), (cx - 12, cy + 15, 0.4)], C_BLADE)
+            near.tapered_limb([(cx - 5, cy + 9, 0.9), (cx - 10, cy + 18, 0.3)], C_BLADE)
+
+        near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        near.auto_shade(C_BLADE, C_BLADE_HI, C_BLADE_HI, C_BLADE_SH, C_SHADOW)
+        near.add_outline(C_OUT, ground_y + 1)
+
+        sheet.paste(composite_layers(W, H, [far, body, near, fx]), (f * W, 0))
+
+    sheet.save("assets/sprites/enemies/duelist_passive/duelist_passive.png")
+    print("Saved redesigned duelist_passive.png (288x64)")
 
 # =========================================================================
-# 3. NORMAL MUTANT (Feral ghoul, gaping needle-toothed jaw, MASSIVE clawed attack arms)
-# Frame size: 48 x 64, 6 frames
+# 3. NORMAL MUTANT (Feral Hunched Ghoul - massive clawed attack arms)
+# Frame size: 48 x 64, 6 frames (0:Idle, 1:Walk1, 2:Walk2, 3:Windup, 4:ClawSwipe, 5:Hurt)
 # =========================================================================
 def generate_normal_mutant():
     W, H = 48, 64
     NFRAMES = 6
-    img = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    sheet = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
 
     C_OUT = (14, 18, 14, 255)
     C_DEEP = (32, 40, 32, 255)
     C_SHADOW = (64, 76, 66, 255)
-    C_MID_DARK = (94, 108, 96, 255)
-    C_MID = (128, 144, 130, 255)
-    C_LIGHT = (182, 198, 184, 255)
+    C_MID = (126, 142, 128, 255)
+    C_LIGHT = (180, 196, 182, 255)
     C_HI = (232, 244, 234, 255)
-    C_TEETH = (248, 242, 212, 255)
-    C_CLAW = (242, 238, 214, 255)
-    C_CLAW_DARK = (112, 98, 76, 255)
-    C_EYE = (255, 215, 35, 255)
-    C_VEIN = (88, 48, 70, 255)
-    C_SINEW = (142, 42, 52, 255)
+    C_VEIN = (96, 46, 68, 255)
+    C_SINEW = (148, 42, 52, 255)
+    C_CLAW = (236, 230, 204, 255)
+    C_CLAW_SH = (132, 122, 98, 255)
+    C_CLAW_HI = (255, 252, 240, 255)
+    C_EYE = (255, 215, 45, 255)
+    C_SLASH = (240, 220, 180, 200)
 
     for f in range(NFRAMES):
-        ox = f * W
-        ground_y = 61
+        far = PixelLayer(W, H)
+        body = PixelLayer(W, H)
+        near = PixelLayer(W, H)
+        fx = PixelLayer(W, H)
+
+        ground_y = 60
         bob_y = 0
+        lean_x = 0
         step = 0
         windup = (f == 3)
-        attacking = (f == 4)
+        attack = (f == 4)
         hurt = (f == 5)
 
         if f == 1:
-            step = 3
             bob_y = -1
+            step = 4
         elif f == 2:
-            step = -3
             bob_y = -1
-        elif f == 3:
+            step = -4
+        elif windup:
             bob_y = -2
-        elif f == 4:
-            bob_y = 2
-        elif f == 5:
-            bob_y = -2
+            lean_x = 3
+        elif attack:
+            bob_y = 3
+            lean_x = -5
+        elif hurt:
+            bob_y = -1
+            lean_x = 4
 
-        cx = ox + 24
-        cy = 32 + bob_y
+        cx = 25 + lean_x
+        cy = 34 + bob_y
 
-        # Hind legs (Feral hunch, thick rotting digitigrade legs)
-        fl_x = cx + 8 + (step if not attacking else 10)
-        draw.polygon([
-            (cx + 3, cy + 8), (cx + 8, cy + 8),
-            (cx + 10, cy + 18),
-            (fl_x + 3, ground_y), (fl_x - 3, ground_y),
-            (cx + 5, cy + 18)
-        ], fill=C_SHADOW, outline=C_OUT)
+        # --- FAR LEG (natural crouched predator leg) ---
+        fl_hip = (cx + 4, cy + 7)
+        fl_knee = (cx - 1 - step // 2, cy + 15)
+        fl_hock = (cx + 6 - step // 2, cy + 21)
+        fl_foot = (cx + 2 - step, ground_y)
+        draw_digitigrade_leg(far, fl_hip, fl_knee, fl_hock, fl_foot, 3.0, 2.2, 1.5, 1.7, C_SHADOW, C_CLAW_SH)
 
-        nl_x = cx - 3 - (step if not attacking else 8)
-        draw.polygon([
-            (cx - 3, cy + 8), (cx + 3, cy + 8),
-            (cx + 4, cy + 18),
-            (nl_x + 3, ground_y), (nl_x - 3, ground_y),
-            (cx - 2, cy + 18)
-        ], fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 1, cy + 9), (cx + 2, cy + 18), (nl_x + 1, ground_y - 2)], fill=C_LIGHT, width=2)
-        # Rotting talons on ground
-        draw.polygon([(nl_x - 3, ground_y - 2), (nl_x - 6, ground_y), (nl_x - 1, ground_y)], fill=C_CLAW, outline=C_OUT)
-        draw.polygon([(nl_x + 1, ground_y - 2), (nl_x, ground_y), (nl_x + 4, ground_y)], fill=C_CLAW, outline=C_OUT)
-
-        # Feral hunched torso (Rotting, sinewy, exposed spine vertebrae)
-        torso_pts = [
-            (cx - 6, cy - 8), (cx + 4, cy - 8),
-            (cx + 6, cy + 2), (cx + 2, cy + 10),
-            (cx - 4, cy + 10), (cx - 7, cy + 2)
-        ]
-        draw.polygon(torso_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 5, cy - 7), (cx - 5, cy + 8)], fill=C_LIGHT, width=2)
-        draw.line([(cx - 4, cy - 6), (cx - 4, cy + 2)], fill=C_HI, width=1)
-        draw.line([(cx + 4, cy - 6), (cx + 4, cy + 8)], fill=C_SHADOW, width=2)
-        # Exposed spine knobs along back
-        for s in range(4):
-            sx = cx + 1 + s * 2
-            sy = cy - 7 + s * 4
-            draw.polygon([(sx, sy - 1), (sx + 2, sy), (sx, sy + 1)], fill=C_HI)
-            draw.point((sx + 2, sy), fill=C_OUT)
-        # Bruised necrotic veins on flank
-        draw.line([(cx - 4, cy), (cx + 2, cy + 4)], fill=C_VEIN, width=1)
-        draw.line([(cx - 3, cy + 5), (cx + 1, cy + 7)], fill=C_SINEW, width=1)
-
-        # Head: Feral rotting mutant skull, unhinged jaw, crooked needle fangs, feverish yellow eye
-        head_pts = [
-            (cx - 4, cy - 8),
-            (cx - 16, cy - 5),  # Lower toothy jaw (gaping)
-            (cx - 14, cy - 12), # Upper snout
-            (cx - 6, cy - 19),  # Brow
-            (cx + 4, cy - 19),  # Cranium
-            (cx + 5, cy - 8)
-        ]
-        draw.polygon(head_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx + 2, cy - 18), (cx - 5, cy - 18), (cx - 13, cy - 11)], fill=C_LIGHT, width=2)
-        draw.line([(cx + 1, cy - 17), (cx - 4, cy - 17)], fill=C_HI, width=1)
-        draw.line([(cx + 4, cy - 12), (cx + 4, cy - 8)], fill=C_SHADOW, width=2)
-        # Sunken dark cavity with feverish yellow/amber eye
-        draw.rectangle([cx - 8, cy - 14, cx - 5, cy - 11], fill=C_DEEP)
-        draw.point((cx - 7, cy - 13), fill=C_EYE)
-        draw.point((cx - 6, cy - 13), fill=(255, 255, 180, 255))
-        # Gaping mouth cavity with sharp needle fangs
-        draw.polygon([(cx - 15, cy - 7), (cx - 10, cy - 8), (cx - 9, cy - 5), (cx - 14, cy - 4)], fill=C_DEEP)
-        for t in range(4):
-            tx = cx - 15 + t * 2
-            draw.point((tx, cy - 8), fill=C_TEETH)
-            draw.point((tx, cy - 5), fill=C_TEETH)
-
-        # -----------------------------------------------------------------
-        # MASSIVE MUTATED CLAWED ATTACK ARMS (The primary weapons!)
-        # Overgrown, sinewy, heavily veined, huge jagged claws!
-        # -----------------------------------------------------------------
-        sh_x, sh_y = cx - 4, cy - 4
+        # Far Clawed Arm
         if windup:
-            el_x, el_y = cx - 3, cy - 18
-            draw.polygon([(sh_x - 3, sh_y), (sh_x + 3, sh_y), (el_x + 3, el_y), (el_x - 3, el_y)], fill=C_MID, outline=C_OUT)
-            draw.line([(sh_x, sh_y), (el_x, el_y)], fill=C_LIGHT, width=2)
-            draw.line([(sh_x + 1, sh_y), (el_x + 1, el_y)], fill=C_VEIN, width=1)
-            # Massive claw cluster rearing back
-            draw.polygon([(el_x - 4, el_y - 2), (el_x - 9, el_y - 10), (el_x + 3, el_y - 8)], fill=C_CLAW, outline=C_OUT)
-            draw.line([(el_x - 8, el_y - 9), (el_x - 2, el_y - 4)], fill=C_HI, width=1)
-            draw.polygon([(el_x - 9, el_y - 10), (el_x - 12, el_y - 14), (el_x - 7, el_y - 11)], fill=C_CLAW_DARK)
-            draw.polygon([(el_x - 5, el_y - 10), (el_x - 7, el_y - 15), (el_x - 3, el_y - 9)], fill=C_CLAW_DARK)
-        elif attacking:
-            el_x, el_y = cx - 18, cy + 1
-            draw.polygon([(sh_x - 3, sh_y), (sh_x + 2, sh_y), (el_x + 2, el_y + 3), (el_x - 2, el_y - 2)], fill=C_MID, outline=C_OUT)
-            draw.line([(sh_x, sh_y), (el_x, el_y)], fill=C_LIGHT, width=2)
-            draw.line([(sh_x, sh_y + 1), (el_x, el_y + 1)], fill=C_VEIN, width=1)
-            hand_x, hand_y = el_x - 4, el_y
-            draw.polygon([(el_x - 2, el_y - 3), (hand_x, hand_y - 4), (hand_x, hand_y + 4), (el_x + 1, el_y + 4)], fill=C_MID, outline=C_OUT)
-            # 4 wicked talons raking the air
-            draw.line([(hand_x, hand_y - 3), (hand_x - 9, hand_y - 5)], fill=C_CLAW, width=2)
-            draw.line([(hand_x, hand_y - 1), (hand_x - 11, hand_y - 1)], fill=C_CLAW, width=2)
-            draw.line([(hand_x, hand_y + 1), (hand_x - 10, hand_y + 3)], fill=C_CLAW, width=2)
-            draw.line([(hand_x, hand_y + 3), (hand_x - 8, hand_y + 6)], fill=C_CLAW, width=2)
-            draw.point((hand_x - 9, hand_y - 5), fill=C_HI)
-            draw.point((hand_x - 11, hand_y - 1), fill=C_HI)
-            draw.point((hand_x - 10, hand_y + 3), fill=C_HI)
-            draw.point((hand_x - 8, hand_y + 6), fill=C_HI)
+            far.tapered_limb([(cx - 1, cy - 5), (cx + 4, cy - 15), (cx + 8, cy - 22)], C_SHADOW)
+            far.tapered_limb([(cx + 8, cy - 22), (cx + 12, cy - 25)], C_CLAW_SH)
+        elif attack:
+            far.tapered_limb([(cx - 1, cy - 4), (cx - 12, cy - 2), (cx - 18, cy + 2)], C_SHADOW)
         else:
-            el_x, el_y = cx - 11, cy + 9
-            draw.polygon([(sh_x - 3, sh_y), (sh_x + 2, sh_y), (el_x + 2, el_y), (el_x - 2, el_y)], fill=C_MID, outline=C_OUT)
-            draw.line([(sh_x, sh_y), (el_x, el_y)], fill=C_LIGHT, width=2)
-            draw.line([(sh_x + 1, sh_y + 1), (el_x + 1, el_y)], fill=C_VEIN, width=1)
-            # Massive hand hanging down
-            draw.polygon([(el_x - 2, el_y), (el_x - 6, el_y + 7), (el_x + 2, el_y + 5)], fill=C_CLAW, outline=C_OUT)
-            draw.line([(el_x - 1, el_y + 1), (el_x - 4, el_y + 6)], fill=C_HI, width=1)
-            draw.line([(el_x - 4, el_y + 6), (el_x - 7, el_y + 11)], fill=C_CLAW_DARK, width=1)
-            draw.line([(el_x - 2, el_y + 6), (el_x - 4, el_y + 12)], fill=C_CLAW_DARK, width=1)
-            draw.line([(el_x, el_y + 5), (el_x - 1, el_y + 11)], fill=C_CLAW_DARK, width=1)
+            far.tapered_limb([(cx - 1, cy - 5), (cx - 7, cy + 3), (cx - 11, cy + 12)], C_SHADOW)
+        far.auto_shade(C_SHADOW, C_MID, C_MID, C_DEEP, C_DEEP)
+        far.add_outline(C_OUT, ground_y + 1)
 
-    img.save("assets/sprites/enemies/normal/normal_mutant.png")
-    print("Saved hyper-detailed normal_mutant.png (288x64)")
+        # --- HUNCHED FERAL TORSO ---
+        body.bezier_limb((cx + 5, cy + 7), (cx + 6, cy - 4), (cx - 3, cy - 9), 4.0, 5.0, 4.4, C_MID)
+        # Neck thrusting forward
+        body.tapered_limb([(cx - 3, cy - 9), (cx - 7, cy - 11)], C_MID)
+
+        # --- GAUNT GHOUL HEAD (sloping skull + hanging unhinged jaw) ---
+        body.bezier_limb((cx - 2, cy - 14), (cx - 8, cy - 16), (cx - 13, cy - 11), 4.2, 3.6, 2.2, C_MID)
+        # Lower jaw (opens wide on windup/attack)
+        jaw_drop = 3 if (windup or attack) else 1
+        body.tapered_limb([(cx - 5, cy - 9), (cx - 10, cy - 7 + jaw_drop), (cx - 14, cy - 7 + jaw_drop)], C_MID)
+
+        body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+
+        # Spine knobs & ribs & veins
+        for s in range(4):
+            sx = cx + 4 - s * 2
+            sy = cy - 6 + s * 3
+            body.set_px(sx + 2, sy, C_CLAW)
+        body.line([(cx - 2, cy - 2), (cx + 3, cy)], C_DEEP)
+        body.line([(cx - 1, cy + 2), (cx + 3, cy + 4)], C_VEIN)
+        # Mouth cavity + jagged fangs
+        body.polygon([(cx - 13, cy - 10), (cx - 8, cy - 10), (cx - 8, cy - 7 + jaw_drop), (cx - 13, cy - 7 + jaw_drop)], C_DEEP)
+        for tx in (cx - 13, cx - 11, cx - 9):
+            body.set_px(tx, cy - 10, C_CLAW_HI)
+            body.set_px(tx, cy - 7 + jaw_drop, C_CLAW_HI)
+        # Feverish eye in sunken socket
+        body.disc(cx - 8, cy - 13, 1.3, C_DEEP)
+        body.set_px(cx - 9, cy - 13, C_EYE)
+        body.add_outline(C_OUT, ground_y + 1)
+
+        # --- NEAR LEG ---
+        nl_hip = (cx + 2, cy + 7)
+        nl_knee = (cx - 4 + step // 2, cy + 15)
+        nl_hock = (cx + 3 + step // 2, cy + 21)
+        nl_foot = (cx - 1 + step, ground_y)
+        draw_digitigrade_leg(near, nl_hip, nl_knee, nl_hock, nl_foot, 3.2, 2.3, 1.6, 1.8, C_MID, C_CLAW)
+
+        # --- MASSIVE CLAWED ATTACK ARM (Primary weapon!) ---
+        sh = (cx - 2, cy - 6)
+        if windup:
+            el = (cx + 2, cy - 14)
+            wrist = (cx - 2, cy - 22)
+            near.tapered_limb([(sh[0], sh[1], 3.0), (el[0], el[1], 2.5), (wrist[0], wrist[1], 2.4)], C_MID)
+            # 3 splayed talons reared overhead
+            near.tapered_limb([(wrist[0], wrist[1], 2.0), (wrist[0] - 6, wrist[1] - 5, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 2.0), (wrist[0] - 2, wrist[1] - 7, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 2.0), (wrist[0] + 3, wrist[1] - 6, 0.4)], C_CLAW)
+        elif attack:
+            el = (cx - 10, cy - 4)
+            wrist = (cx - 17, cy + 1)
+            near.tapered_limb([(sh[0], sh[1], 3.2), (el[0], el[1], 2.6), (wrist[0], wrist[1], 2.6)], C_MID)
+            # Savage forward claw rake!
+            near.tapered_limb([(wrist[0], wrist[1], 2.0), (wrist[0] - 7, wrist[1] - 4, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 2.0), (wrist[0] - 8, wrist[1] + 0, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 2.0), (wrist[0] - 7, wrist[1] + 5, 0.4)], C_CLAW)
+            # Slash arc
+            fx.bezier_limb((cx - 14, cy - 12), (cx - 23, cy), (cx - 19, cy + 11), 0.5, 1.5, 0.4, C_SLASH)
+        else:
+            el = (cx - 5, cy + 3)
+            wrist = (cx - 11, cy + 11)
+            near.tapered_limb([(sh[0], sh[1], 3.0), (el[0], el[1], 2.4), (wrist[0], wrist[1], 2.3)], C_MID)
+            # Hanging gnarled claws
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] - 4, wrist[1] + 5, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] - 1, wrist[1] + 7, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] + 2, wrist[1] + 6, 0.4)], C_CLAW)
+
+        near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        near.auto_shade(C_CLAW, C_CLAW_HI, C_CLAW_HI, C_CLAW_SH, C_SHADOW)
+        near.line([(sh[0], sh[1] + 1), (el[0], el[1])], C_SINEW)
+        near.add_outline(C_OUT, ground_y + 1)
+
+        sheet.paste(composite_layers(W, H, [far, body, near, fx]), (f * W, 0))
+
+    sheet.save("assets/sprites/enemies/normal/normal_mutant.png")
+    print("Saved redesigned normal_mutant.png (288x64)")
 
 # =========================================================================
-# 4. TANK MUTANT (72x96, Bloated necrotic titan, massive spiked bone knuckle club-arms)
-# Frame size: 72 x 96, 6 frames
+# 4. TANK MUTANT (72x96, Hulking Gorilla-like Flesh Behemoth, NOT a fridge!)
+# Frame size: 72 x 96, 6 frames (0:Idle, 1:Walk1, 2:Walk2, 3:Windup, 4:Smash, 5:Hurt)
 # =========================================================================
 def generate_tank_mutant():
     W, H = 72, 96
     NFRAMES = 6
-    img = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    sheet = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
 
-    C_OUT = (18, 16, 20, 255)
-    C_DEEP = (38, 34, 42, 255)
-    C_SHADOW = (76, 72, 82, 255)
-    C_MID_DARK = (106, 102, 112, 255)
-    C_MID = (140, 136, 146, 255)
-    C_LIGHT = (194, 192, 202, 255)
-    C_HI = (246, 246, 254, 255)
-    C_VEIN = (104, 42, 60, 255)
-    C_VEIN_DARK = (60, 22, 34, 255)
-    C_BONE = (236, 232, 218, 255)
-    C_BONE_DARK = (136, 130, 120, 255)
+    C_OUT = (16, 14, 20, 255)
+    C_DEEP = (38, 34, 44, 255)
+    C_SHADOW = (74, 70, 82, 255)
+    C_MID = (138, 134, 146, 255)
+    C_LIGHT = (190, 186, 198, 255)
+    C_HI = (238, 236, 246, 255)
+    C_VEIN = (112, 42, 62, 255)
+    C_BONE = (234, 226, 206, 255)
+    C_BONE_SH = (134, 126, 112, 255)
+    C_BONE_HI = (255, 252, 242, 255)
     C_EYE = (255, 95, 30, 255)
+    C_IMPACT = (240, 210, 170, 200)
 
     for f in range(NFRAMES):
-        ox = f * W
-        ground_y = 93
+        far = PixelLayer(W, H)
+        body = PixelLayer(W, H)
+        near = PixelLayer(W, H)
+        fx = PixelLayer(W, H)
+
+        ground_y = 92
         bob_y = 0
-        smash = (f == 4)
+        lean_x = 0
+        step = 0
         windup = (f == 3)
+        smash = (f == 4)
         hurt = (f == 5)
 
-        if f in (1, 2):
+        if f == 1:
             bob_y = -2
-        elif f == 5:
+            step = 5
+        elif f == 2:
             bob_y = -2
+            step = -5
+        elif windup:
+            bob_y = -4
+            lean_x = 4
+        elif smash:
+            bob_y = 6
+            lean_x = -6
+        elif hurt:
+            bob_y = -2
+            lean_x = 5
 
-        cx = ox + 36
+        cx = 38 + lean_x
         cy = 48 + bob_y
 
-        # Massive Pillar Legs
-        draw.polygon([
-            (cx + 6, cy + 16), (cx + 18, cy + 16),
-            (cx + 22, cy + 32),
-            (cx + 20, ground_y), (cx + 8, ground_y),
-            (cx + 12, cy + 32)
-        ], fill=C_SHADOW, outline=C_OUT)
-        draw.line([(cx + 15, cy + 20), (cx + 14, ground_y - 2)], fill=C_DEEP, width=2)
+        # --- FAR LEG (Thick plantigrade/digitigrade pillar) ---
+        far.tapered_limb([
+            (cx + 8, cy + 16, 7.0),
+            (cx + 4 - step // 2, cy + 28, 5.5),
+            (cx + 10 - step // 2, cy + 36, 4.5),
+            (cx + 7 - step, ground_y - 2, 5.0),
+        ], C_SHADOW)
+        far.tapered_limb([(cx + 6 - step, ground_y - 1, 3.0), (cx + 1 - step, ground_y, 1.2)], C_BONE_SH)
 
-        draw.polygon([
-            (cx - 8, cy + 16), (cx + 6, cy + 16),
-            (cx + 6, cy + 32),
-            (cx + 4, ground_y), (cx - 10, ground_y),
-            (cx - 6, cy + 32)
-        ], fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 4, cy + 18), (cx + 2, cy + 32), (cx, ground_y - 3)], fill=C_LIGHT, width=3)
-        draw.line([(cx - 2, cy + 18), (cx + 3, cy + 32)], fill=C_HI, width=1)
-        # Heavy bone-capped toes
-        draw.polygon([(cx - 8, ground_y - 3), (cx - 10, ground_y), (cx - 4, ground_y)], fill=C_BONE, outline=C_OUT)
-        draw.polygon([(cx - 2, ground_y - 3), (cx + 2, ground_y), (cx - 4, ground_y)], fill=C_BONE, outline=C_OUT)
-        draw.polygon([(cx + 10, ground_y - 3), (cx + 15, ground_y), (cx + 8, ground_y)], fill=C_BONE, outline=C_OUT)
-
-        # Colossal Bloated Torso (Swollen pale flesh, bruised necrotic veins, calcified ribs)
-        torso_pts = [
-            (cx - 14, cy - 14), (cx + 14, cy - 14),
-            (cx + 18, cy + 4), (cx + 10, cy + 20),
-            (cx - 10, cy + 20), (cx - 18, cy + 4)
-        ]
-        draw.polygon(torso_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 13, cy - 10), (cx - 13, cy + 14)], fill=C_LIGHT, width=3)
-        draw.line([(cx - 11, cy - 10), (cx - 11, cy + 14)], fill=C_HI, width=1)
-        draw.line([(cx + 13, cy - 8), (cx + 13, cy + 14)], fill=C_SHADOW, width=3)
-        draw.line([(cx + 16, cy - 6), (cx + 16, cy + 12)], fill=C_DEEP, width=2)
-        # Pulsating bruised veins across swollen gut
-        draw.line([(cx - 10, cy), (cx + 10, cy)], fill=C_VEIN, width=2)
-        draw.line([(cx - 8, cy + 8), (cx + 8, cy + 8)], fill=C_VEIN, width=2)
-        draw.line([(cx - 4, cy - 6), (cx + 6, cy + 4)], fill=C_VEIN_DARK, width=1)
-        draw.line([(cx - 6, cy + 4), (cx - 1, cy + 12)], fill=C_VEIN_DARK, width=1)
-        # Calcified bone ribs bursting through the rotting flesh
-        for r in range(3):
-            ry = cy - 6 + r * 6
-            draw.line([(cx - 13, ry), (cx - 5, ry)], fill=C_BONE, width=2)
-            draw.line([(cx - 12, ry - 1), (cx - 6, ry - 1)], fill=C_HI, width=1)
-            draw.point((cx - 4, ry), fill=C_BONE_DARK)
-
-        # Armored Juggernaut Head / Bone Horn Crest
-        head_pts = [
-            (cx - 8, cy - 14), (cx - 20, cy - 10),
-            (cx - 16, cy - 24), (cx - 4, cy - 30),
-            (cx + 8, cy - 30), (cx + 12, cy - 14)
-        ]
-        draw.polygon(head_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx + 6, cy - 28), (cx - 4, cy - 28), (cx - 15, cy - 22)], fill=C_LIGHT, width=2)
-        draw.line([(cx + 4, cy - 27), (cx - 3, cy - 27)], fill=C_HI, width=1)
-        # Sunken dark pit sockets with feverish red eye slits
-        draw.rectangle([cx - 13, cy - 20, cx - 9, cy - 17], fill=C_DEEP)
-        draw.point((cx - 11, cy - 19), fill=C_EYE)
-        draw.point((cx - 10, cy - 19), fill=(255, 180, 80, 255))
-        # 3 Massive jagged bone horns jutting from the crest
-        for h in range(3):
-            hx = cx - 14 + h * 9
-            draw.polygon([(hx, cy - 28), (hx + 4, cy - 28), (hx + 2, cy - 38)], fill=C_BONE, outline=C_OUT)
-            draw.line([(hx + 1, cy - 29), (hx + 2, cy - 37)], fill=C_HI, width=1)
-
-        # -----------------------------------------------------------------
-        # TITANIC CLUB-ARMS & SPIKED BONE KNUCKLE FISTS (Attack weapons!)
-        # -----------------------------------------------------------------
+        # Far Massive Club Arm
         if windup:
-            draw.polygon([(cx - 14, cy - 8), (cx - 7, cy - 34), (cx + 7, cy - 34), (cx + 5, cy - 8)], fill=C_MID, outline=C_OUT)
-            draw.line([(cx - 5, cy - 12), (cx, cy - 32)], fill=C_LIGHT, width=4)
-            draw.line([(cx - 2, cy - 12), (cx + 2, cy - 32)], fill=C_VEIN, width=2)
-            draw.polygon([(cx - 12, cy - 24), (cx - 16, cy - 28), (cx - 10, cy - 28)], fill=C_BONE, outline=C_OUT)
-            draw.polygon([(cx - 10, cy - 34), (cx + 10, cy - 34), (cx + 7, cy - 44), (cx - 7, cy - 44)], fill=C_BONE, outline=C_OUT)
-            draw.line([(cx - 6, cy - 43), (cx + 6, cy - 43)], fill=C_HI, width=1)
-            draw.polygon([(cx - 6, cy - 44), (cx - 9, cy - 48), (cx - 3, cy - 44)], fill=C_BONE, outline=C_OUT)
-            draw.polygon([(cx + 3, cy - 44), (cx + 6, cy - 48), (cx, cy - 44)], fill=C_BONE, outline=C_OUT)
+            far.tapered_limb([(cx + 2, cy - 12, 6.0), (cx + 6, cy - 26, 5.5), (cx + 2, cy - 36, 6.5)], C_SHADOW)
         elif smash:
-            draw.polygon([(cx - 12, cy), (cx - 28, cy + 24), (cx - 16, cy + 28), (cx - 2, cy + 4)], fill=C_MID, outline=C_OUT)
-            draw.line([(cx - 10, cy + 4), (cx - 22, cy + 24)], fill=C_LIGHT, width=4)
-            draw.line([(cx - 8, cy + 6), (cx - 20, cy + 24)], fill=C_VEIN, width=2)
-            draw.rectangle([cx - 34, ground_y - 14, cx - 14, ground_y], fill=C_BONE, outline=C_OUT)
-            draw.line([(cx - 32, ground_y - 13), (cx - 16, ground_y - 13)], fill=C_HI, width=2)
-            for sk in range(3):
-                skx = cx - 30 + sk * 6
-                draw.polygon([(skx, ground_y - 14), (skx + 2, ground_y - 18), (skx + 4, ground_y - 14)], fill=C_BONE, outline=C_OUT)
+            far.tapered_limb([(cx - 4, cy - 8, 6.0), (cx - 14, cy + 12, 6.0), (cx - 18, ground_y - 4, 7.0)], C_SHADOW)
         else:
-            # Heavy resting club-arms hanging low
-            draw.polygon([(cx - 14, cy - 4), (cx - 25, cy + 18), (cx - 14, cy + 24), (cx - 4, cy)], fill=C_MID, outline=C_OUT)
-            draw.line([(cx - 12, cy), (cx - 20, cy + 18)], fill=C_LIGHT, width=4)
-            draw.line([(cx - 10, cy), (cx - 18, cy + 18)], fill=C_HI, width=1)
-            draw.line([(cx - 8, cy + 2), (cx - 16, cy + 20)], fill=C_VEIN, width=2)
-            draw.polygon([(cx - 23, cy + 6), (cx - 28, cy + 9), (cx - 22, cy + 12)], fill=C_BONE, outline=C_OUT)
-            draw.rectangle([cx - 26, cy + 16, cx - 12, cy + 26], fill=C_BONE, outline=C_OUT)
-            draw.line([(cx - 25, cy + 17), (cx - 13, cy + 17)], fill=C_HI, width=1)
-            for sk in range(3):
-                skx = cx - 24 + sk * 5
-                draw.polygon([(skx, cy + 26), (skx + 2, cy + 30), (skx + 4, cy + 26)], fill=C_BONE, outline=C_OUT)
+            far.tapered_limb([(cx + 2, cy - 10, 5.5), (cx - 8, cy + 8, 5.5), (cx - 12, cy + 24, 6.5)], C_SHADOW)
+        far.auto_shade(C_SHADOW, C_MID, C_MID, C_DEEP, C_DEEP)
+        far.add_outline(C_OUT, ground_y + 1)
 
-    img.save("assets/sprites/enemies/tank/tank_mutant.png")
-    print("Saved hyper-detailed tank_mutant.png (432x96)")
+        # --- COLOSSAL HUNCHED BEHEMOTH TORSO (Sloping shoulders towering over sunken head!) ---
+        # Pelvis -> Huge hunched upper back -> Massive forward traps
+        body.bezier_limb((cx + 8, cy + 16), (cx + 14, cy - 2), (cx - 2, cy - 18), 10.0, 14.5, 13.0, C_MID)
+        # Bulging chest forward
+        body.disc(cx - 8, cy - 6, 9.5, C_MID)
+        # Asymmetrical jagged bone osteoderms/ridges along spine/back (NOT 3 birthday candles!)
+        body.tapered_limb([(cx + 4, cy - 24, 3.2), (cx + 7, cy - 33, 0.8)], C_BONE)
+        body.tapered_limb([(cx + 11, cy - 18, 2.8), (cx + 16, cy - 25, 0.7)], C_BONE)
+        body.tapered_limb([(cx - 3, cy - 26, 2.5), (cx - 2, cy - 32, 0.7)], C_BONE)
+
+        # --- SUNKEN BRUTISH HEAD (tucked low in front of massive shoulders) ---
+        body.tapered_limb([(cx - 8, cy - 14, 7.0), (cx - 16, cy - 11, 6.2)], C_MID)
+        # Heavy protruding brow & underbite jaw
+        body.tapered_limb([(cx - 13, cy - 7, 4.0), (cx - 19, cy - 6, 3.0)], C_MID)
+
+        body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        body.auto_shade(C_BONE, C_BONE_HI, C_BONE_HI, C_BONE_SH, C_SHADOW)
+
+        # Bursting calcified ribs & thick necrotic veins
+        for r in range(3):
+            ry = cy - 4 + r * 6
+            body.tapered_limb([(cx - 11, ry, 1.3), (cx - 2, ry + 2, 0.7)], C_BONE)
+        body.line([(cx - 6, cy + 6), (cx + 8, cy + 10)], C_VEIN, width=2)
+        body.line([(cx + 2, cy - 8), (cx + 10, cy + 2)], C_VEIN, width=2)
+
+        # Sunken eye & jagged underbite fangs
+        body.disc(cx - 16, cy - 12, 2.0, C_DEEP)
+        body.set_px(cx - 17, cy - 12, C_EYE)
+        body.set_px(cx - 16, cy - 12, (255, 190, 90, 255))
+        body.set_px(cx - 18, cy - 8, C_BONE_HI)
+        body.set_px(cx - 16, cy - 8, C_BONE_HI)
+        body.add_outline(C_OUT, ground_y + 1)
+
+        # --- NEAR LEG ---
+        near.tapered_limb([
+            (cx + 4, cy + 16, 7.5),
+            (cx - 2 + step // 2, cy + 28, 5.8),
+            (cx + 5 + step // 2, cy + 36, 4.8),
+            (cx + 1 + step, ground_y - 2, 5.5),
+        ], C_MID)
+        near.tapered_limb([(cx + 1 + step, ground_y - 1, 3.2), (cx - 5 + step, ground_y, 1.2)], C_BONE)
+
+        # --- TITANIC NEAR CLUB-ARM & SPIKED BONE FIST ---
+        sh = (cx - 5, cy - 10)
+        if windup:
+            el = (cx - 10, cy - 20)
+            fist = (cx - 6, cy - 31)
+            near.tapered_limb([(sh[0], sh[1], 7.0), (el[0], el[1], 6.0), (fist[0], fist[1], 7.0)], C_MID)
+            # Spiked bone knuckle armor on raised fist
+            near.tapered_limb([(fist[0] - 5, fist[1] - 3, 2.8), (fist[0] + 5, fist[1] - 3, 2.8)], C_BONE)
+            near.tapered_limb([(fist[0] - 4, fist[1] - 4, 1.8), (fist[0] - 7, fist[1] - 8, 0.5)], C_BONE)
+            near.tapered_limb([(fist[0] + 2, fist[1] - 4, 1.8), (fist[0] + 3, fist[1] - 9, 0.5)], C_BONE)
+        elif smash:
+            el = (cx - 16, cy + 4)
+            fist = (cx - 24, ground_y - 5)
+            near.tapered_limb([(sh[0], sh[1], 7.2), (el[0], el[1], 6.2), (fist[0], fist[1], 7.8)], C_MID)
+            # Bone knuckle plate slamming ground!
+            near.tapered_limb([(fist[0] - 5, fist[1] + 2, 3.2), (fist[0] + 4, fist[1] + 2, 3.2)], C_BONE)
+            near.tapered_limb([(fist[0] - 5, fist[1], 2.0), (fist[0] - 9, fist[1] - 3, 0.5)], C_BONE)
+            near.tapered_limb([(fist[0] - 1, fist[1] - 3, 2.0), (fist[0] - 2, fist[1] - 7, 0.5)], C_BONE)
+            # Impact shockwave pixels
+            fx.line([(fist[0] - 10, ground_y), (fist[0] - 2, ground_y - 4)], C_IMPACT, width=2)
+            fx.line([(fist[0] + 5, ground_y), (fist[0] + 10, ground_y - 5)], C_IMPACT, width=2)
+        else:
+            el = (cx - 12, cy + 6)
+            fist = (cx - 17, cy + 23)
+            near.tapered_limb([(sh[0], sh[1], 7.0), (el[0], el[1], 6.0), (fist[0], fist[1], 7.2)], C_MID)
+            # Elbow bone spur
+            near.tapered_limb([(el[0] + 3, el[1] - 1, 2.0), (el[0] + 8, el[1] - 3, 0.5)], C_BONE)
+            # Heavy bone knuckles & claws
+            near.tapered_limb([(fist[0] - 4, fist[1] + 3, 2.8), (fist[0] + 4, fist[1] + 3, 2.8)], C_BONE)
+            near.tapered_limb([(fist[0] - 4, fist[1] + 4, 1.5), (fist[0] - 6, fist[1] + 9, 0.4)], C_BONE)
+            near.tapered_limb([(fist[0] + 1, fist[1] + 4, 1.5), (fist[0] + 1, fist[1] + 9, 0.4)], C_BONE)
+
+        near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        near.auto_shade(C_BONE, C_BONE_HI, C_BONE_HI, C_BONE_SH, C_SHADOW)
+        near.line([(sh[0], sh[1] + 2), (el[0], el[1])], C_VEIN, width=2)
+        near.add_outline(C_OUT, ground_y + 1)
+
+        sheet.paste(composite_layers(W, H, [far, body, near, fx]), (f * W, 0))
+
+    sheet.save("assets/sprites/enemies/tank/tank_mutant.png")
+    print("Saved redesigned tank_mutant.png (432x96)")
 
 # =========================================================================
-# 5. DUMMY MUTANT (Necrotic biological training totem, stitched cadaver, grafted mutated blocking arms)
-# Frame size: 48 x 64, 6 frames
+# 5. DUMMY MUTANT (Stitched Bio-Horror Totem - NO traffic cone / clown nose!)
+# Frame size: 48 x 64, 6 frames (0:Idle1, 1:Idle2, 2:HighBlock, 3:LowBlock, 4:Hurt1, 5:Hurt2)
 # =========================================================================
 def generate_dummy_mutant():
     W, H = 48, 64
     NFRAMES = 6
-    img = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    sheet = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
 
-    C_OUT = (16, 18, 22, 255)
-    C_DEEP = (38, 40, 48, 255)
-    C_SHADOW = (72, 76, 86, 255)
-    C_MID = (132, 136, 146, 255)
-    C_LIGHT = (190, 196, 206, 255)
-    C_HI = (240, 246, 252, 255)
-    C_CORE = (210, 30, 40, 255)
-    C_CORE_HI = (255, 120, 110, 255)
-    C_VEIN = (98, 46, 68, 255)
-    C_BONE = (235, 230, 218, 255)
+    C_OUT = (16, 16, 22, 255)
+    C_DEEP = (38, 36, 46, 255)
+    C_SHADOW = (72, 72, 84, 255)
+    C_MID = (132, 134, 146, 255)
+    C_LIGHT = (186, 190, 202, 255)
+    C_HI = (236, 240, 248, 255)
+    C_VEIN = (104, 44, 66, 255)
+    C_CORE = (176, 32, 46, 255)
+    C_CORE_HI = (242, 108, 108, 255)
+    C_BONE = (228, 222, 206, 255)
+    C_BONE_SH = (128, 122, 108, 255)
 
     for f in range(NFRAMES):
-        ox = f * W
-        ground_y = 61
+        far = PixelLayer(W, H)
+        body = PixelLayer(W, H)
+        near = PixelLayer(W, H)
+
+        ground_y = 60
         wobble_x = 0
-        if f in (4, 5):
-            wobble_x = -3 if f == 4 else 2
+        bob_y = 0
+        if f == 1:
+            bob_y = 1
+        elif f == 4:
+            wobble_x = -3
+        elif f == 5:
+            wobble_x = 3
 
-        cx = ox + 24 + wobble_x
-        cy = 32
+        cx = 24 + wobble_x
+        cy = 33 + bob_y
 
-        # Rooted rotting spinal column on floor
-        draw.polygon([(cx - 10, ground_y), (cx + 10, ground_y), (cx + 4, cy + 16), (cx - 4, cy + 16)], fill=C_SHADOW, outline=C_OUT)
-        draw.line([(cx - 8, ground_y - 2), (cx + 8, ground_y - 2)], fill=C_LIGHT, width=1)
-        for v in range(3):
-            vy = ground_y - 4 - v * 4
-            draw.point((cx, vy), fill=C_BONE)
+        # --- TWISTED BONE & FLESH ROOT PEDESTAL ---
+        far.tapered_limb([(cx + 2, cy + 12, 3.5), (cx + 7, ground_y - 1, 2.2)], C_SHADOW)
+        far.tapered_limb([(cx - 2, cy + 12, 3.5), (cx - 7, ground_y - 1, 2.2)], C_SHADOW)
+        far.add_outline(C_OUT, ground_y + 1)
 
-        # Torso pod (Cadaver-grey stitched flesh pod)
-        draw.polygon([(cx - 8, cy - 10), (cx + 8, cy - 10), (cx + 9, cy + 6), (cx + 5, cy + 18), (cx - 5, cy + 18), (cx - 9, cy + 6)], fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 6, cy - 8), (cx - 6, cy + 14)], fill=C_LIGHT, width=2)
-        draw.line([(cx - 5, cy - 8), (cx - 5, cy + 4)], fill=C_HI, width=1)
-        # Crude black autopsy sutures holding flesh slabs together
-        draw.line([(cx + 3, cy - 8), (cx + 3, cy + 14)], fill=C_DEEP, width=1)
-        for st in range(4):
-            sty = cy - 6 + st * 5
-            draw.line([(cx + 1, sty), (cx + 5, sty)], fill=C_BONE, width=1)
-        # Bruised veins radiating from core
-        draw.line([(cx - 4, cy - 6), (cx - 1, cy - 3)], fill=C_VEIN, width=1)
-        draw.line([(cx + 2, cy + 8), (cx + 5, cy + 12)], fill=C_VEIN, width=1)
+        # --- IMPALED / STITCHED TORSO & SLACK HEAD ---
+        body.tapered_limb([(cx, ground_y - 2, 2.4), (cx, cy + 12, 3.5)], C_BONE)  # Central spine stake
+        body.bezier_limb((cx, cy + 13), (cx + 1, cy + 2), (cx - 1, cy - 9), 4.5, 7.0, 6.2, C_MID)
+        # Slack tilted stitched head
+        body.tapered_limb([(cx - 1, cy - 10, 3.0), (cx - 3, cy - 17, 4.8)], C_MID)
+        body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        body.auto_shade(C_BONE, C_HI, C_HI, C_BONE_SH, C_SHADOW)
 
-        # Pulsating Bruised Target Core in chest
-        draw.ellipse([cx - 5, cy - 4, cx + 5, cy + 6], fill=C_CORE, outline=C_OUT)
-        draw.point((cx - 2, cy - 1), fill=C_CORE_HI)
-        draw.point((cx - 1, cy - 2), fill=(255, 200, 190, 255))
+        # Exposed thoracic cavity with visceral pulsing organ + rib cage bars
+        body.disc(cx - 2, cy - 1, 3.6, C_DEEP)
+        body.disc(cx - 2, cy - 1, 2.4, C_CORE)
+        body.set_px(cx - 3, cy - 2, C_CORE_HI)
+        # Ribs framing cavity
+        body.line([(cx - 6, cy - 3), (cx - 3, cy - 2)], C_BONE)
+        body.line([(cx - 6, cy + 1), (cx - 3, cy + 1)], C_BONE)
+        # Autopsy stitches on torso & sewn-shut eyes
+        body.line([(cx + 3, cy - 7), (cx + 3, cy + 9)], C_DEEP)
+        for sy in range(cy - 5, cy + 8, 4):
+            body.line([(cx + 1, sy), (cx + 5, sy)], C_BONE)
+        body.line([(cx - 6, cy - 18), (cx - 3, cy - 17)], C_DEEP)  # Sewn eye
+        body.set_px(cx - 5, cy - 19, C_BONE)
+        body.set_px(cx - 4, cy - 16, C_BONE)
+        body.add_outline(C_OUT, ground_y + 1)
 
-        # Head node (Smooth cadaver dome)
-        draw.ellipse([cx - 6, cy - 22, cx + 6, cy - 10], fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 3, cy - 20), (cx + 3, cy - 20)], fill=C_HI, width=2)
-
-        # Grafted Mutated Blocking Claw-Arms on flanks
-        if f == 2:  # High block
-            draw.line([(cx - 5, cy - 4), (cx - 9, cy - 14)], fill=C_MID, width=3)
-            draw.line([(cx - 9, cy - 14), (cx - 4, cy - 20)], fill=C_BONE, width=2)
-            draw.polygon([(cx - 11, cy - 18), (cx - 5, cy - 18), (cx - 6, cy - 7), (cx - 12, cy - 7)], fill=C_BONE, outline=C_OUT)
-            draw.line([(cx - 10, cy - 17), (cx - 7, cy - 8)], fill=C_HI, width=1)
-        elif f == 3: # Low block
-            draw.line([(cx - 5, cy - 2), (cx - 10, cy + 6)], fill=C_MID, width=3)
-            draw.polygon([(cx - 12, cy - 2), (cx - 5, cy - 2), (cx - 6, cy + 10), (cx - 13, cy + 10)], fill=C_BONE, outline=C_OUT)
-            draw.line([(cx - 11, cy - 1), (cx - 7, cy + 9)], fill=C_HI, width=1)
+        # --- GRAFTED MUTANT BLOCKING ARMS ---
+        if f == 2:  # High Block
+            near.tapered_limb([(cx + 2, cy - 6, 2.6), (cx - 5, cy - 10, 2.4), (cx - 9, cy - 19, 3.0)], C_MID)
+            near.tapered_limb([(cx - 9, cy - 21, 2.5), (cx - 9, cy - 11, 2.5)], C_BONE)
+        elif f == 3:  # Low Block
+            near.tapered_limb([(cx + 2, cy - 4, 2.6), (cx - 6, cy + 3, 2.4), (cx - 10, cy + 10, 3.0)], C_MID)
+            near.tapered_limb([(cx - 10, cy + 2, 2.5), (cx - 10, cy + 13, 2.5)], C_BONE)
         else:
-            # Resting folded arms
-            draw.line([(cx - 6, cy - 6), (cx - 9, cy + 6)], fill=C_SHADOW, width=2)
-            draw.line([(cx - 9, cy + 6), (cx - 6, cy + 12)], fill=C_BONE, width=1)
+            near.tapered_limb([(cx + 3, cy - 6, 2.4), (cx + 6, cy + 3, 2.0), (cx + 3, cy + 11, 1.8)], C_MID)
+            near.tapered_limb([(cx + 3, cy + 11, 1.4), (cx, cy + 15, 0.4)], C_BONE)
 
-    img.save("assets/sprites/enemies/dummy/dummy_mutant.png")
-    print("Saved hyper-detailed dummy_mutant.png (288x64)")
+        near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        near.auto_shade(C_BONE, C_HI, C_HI, C_BONE_SH, C_SHADOW)
+        near.add_outline(C_OUT, ground_y + 1)
+
+        sheet.paste(composite_layers(W, H, [far, body, near]), (f * W, 0))
+
+    sheet.save("assets/sprites/enemies/dummy/dummy_mutant.png")
+    print("Saved redesigned dummy_mutant.png (288x64)")
 
 # =========================================================================
-# 6. LURKER MUTANT (Subterranean cadaver crawler, grasping predatory claw-arms)
-# Frame size: 48 x 64, 6 frames
+# 6. LURKER MUTANT (Low-slung Stalker/Crawler - fixes opposite legs, face sticks & missing attack!)
+# Frame size: 48 x 64, 6 frames (0:Idle, 1:Walk1, 2:Walk2, 3:Windup, 4:PounceSlash, 5:Hurt)
 # =========================================================================
 def generate_lurker_mutant():
     W, H = 48, 64
     NFRAMES = 6
-    img = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    sheet = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
 
-    C_OUT = (16, 18, 22, 255)
-    C_DEEP = (36, 40, 46, 255)
-    C_SHADOW = (72, 78, 86, 255)
-    C_MID = (128, 134, 144, 255)
-    C_LIGHT = (186, 194, 204, 255)
-    C_HI = (238, 244, 252, 255)
-    C_CLAW = (240, 236, 218, 255)
-    C_EYE = (255, 45, 30, 255)
-    C_VEIN = (92, 46, 64, 255)
+    C_OUT = (14, 16, 22, 255)
+    C_DEEP = (34, 38, 46, 255)
+    C_SHADOW = (68, 74, 86, 255)
+    C_MID = (128, 134, 146, 255)
+    C_LIGHT = (184, 192, 206, 255)
+    C_HI = (236, 244, 254, 255)
+    C_VEIN = (98, 46, 68, 255)
+    C_CLAW = (238, 234, 214, 255)
+    C_CLAW_SH = (132, 128, 114, 255)
+    C_CLAW_HI = (255, 252, 242, 255)
+    C_EYE = (255, 40, 35, 255)
+    C_SLASH = (255, 80, 60, 200)
 
     for f in range(NFRAMES):
-        ox = f * W
-        ground_y = 61
-        cx = ox + 24
-        cy = 34
+        far = PixelLayer(W, H)
+        body = PixelLayer(W, H)
+        near = PixelLayer(W, H)
+        fx = PixelLayer(W, H)
 
-        # Frame 4 is burrowed mound under ground
-        if f == 4:
-            draw.ellipse([cx - 14, ground_y - 6, cx + 14, ground_y + 4], fill=C_SHADOW, outline=C_OUT)
-            draw.line([(cx - 4, ground_y - 8), (cx - 2, ground_y - 14)], fill=C_MID, width=2)
-            draw.line([(cx + 4, ground_y - 8), (cx + 2, ground_y - 14)], fill=C_MID, width=2)
-            draw.point((cx - 2, ground_y - 14), fill=C_EYE)
-            draw.point((cx + 2, ground_y - 14), fill=C_EYE)
-            continue
+        ground_y = 60
+        bob_y = 0
+        lean_x = 0
+        step = 0
+        windup = (f == 3)
+        attack = (f == 4)
+        hurt = (f == 5)
 
-        # Legs (Low, spider-like crawling limbs on ground_y)
-        draw.line([(cx + 2, cy + 8), (cx + 8, cy + 16), (cx + 6, ground_y)], fill=C_SHADOW, width=3)
-        draw.line([(cx - 2, cy + 8), (cx - 6, cy + 16), (cx - 4, ground_y)], fill=C_MID, width=3)
-        draw.polygon([(cx - 6, ground_y - 2), (cx - 8, ground_y), (cx - 3, ground_y)], fill=C_CLAW, outline=C_OUT)
-        draw.polygon([(cx + 4, ground_y - 2), (cx + 7, ground_y), (cx + 2, ground_y)], fill=C_CLAW, outline=C_OUT)
+        if f == 1:
+            bob_y = -1
+            step = 4
+        elif f == 2:
+            bob_y = -1
+            step = -4
+        elif windup:
+            bob_y = 2
+            lean_x = 4
+        elif attack:
+            bob_y = -1
+            lean_x = -5
+        elif hurt:
+            bob_y = -2
+            lean_x = 4
 
-        # Low creeping necrotic chitin torso
-        draw.polygon([(cx - 8, cy - 6), (cx + 6, cy - 6), (cx + 8, cy + 6), (cx + 4, cy + 14), (cx - 4, cy + 14), (cx - 10, cy + 4)], fill=C_MID, outline=C_OUT)
-        draw.line([(cx - 7, cy - 4), (cx - 7, cy + 8)], fill=C_LIGHT, width=2)
-        draw.line([(cx - 6, cy - 4), (cx - 6, cy + 2)], fill=C_HI, width=1)
-        draw.line([(cx - 4, cy + 2), (cx + 2, cy + 5)], fill=C_VEIN, width=1)
+        cx = 26 + lean_x
+        cy = 39 + bob_y
 
-        # Predatory Head with grasping bone mandibles & bead eyes
-        head_pts = [(cx - 4, cy - 6), (cx - 14, cy - 2), (cx - 12, cy - 10), (cx - 4, cy - 14), (cx + 4, cy - 14), (cx + 4, cy - 6)]
-        draw.polygon(head_pts, fill=C_MID, outline=C_OUT)
-        draw.line([(cx + 2, cy - 13), (cx - 3, cy - 13), (cx - 11, cy - 9)], fill=C_LIGHT, width=2)
-        # Cluster of 3 creepy glowing red eyes
-        draw.point((cx - 7, cy - 8), fill=C_EYE)
-        draw.point((cx - 9, cy - 8), fill=C_EYE)
-        draw.point((cx - 8, cy - 6), fill=C_EYE)
-        # Sharp bone mandibles
-        draw.line([(cx - 13, cy - 4), (cx - 19, cy)], fill=C_CLAW, width=2)
-        draw.line([(cx - 13, cy - 8), (cx - 19, cy - 12)], fill=C_CLAW, width=2)
+        # --- FAR HIND LEG (SAME anatomical direction as near leg: knee forward, hock back, foot forward!) ---
+        fl_hip = (cx + 7, cy + 4)
+        fl_knee = (cx + 2 - step // 2, cy + 11)
+        fl_hock = (cx + 9 - step // 2, cy + 16)
+        fl_foot = (cx + 5 - step, ground_y)
+        draw_digitigrade_leg(far, fl_hip, fl_knee, fl_hock, fl_foot, 2.8, 2.0, 1.4, 1.6, C_SHADOW, C_CLAW_SH)
 
-        # Predatory Grasping Front Claw-Arms (Primary attack limbs reaching forward)
-        if f in (1, 3):
-            draw.line([(cx - 4, cy), (cx - 15, cy + 4), (cx - 22, cy + 12)], fill=C_MID, width=3)
-            draw.line([(cx - 15, cy + 4), (cx - 22, cy + 12)], fill=C_LIGHT, width=1)
-            draw.polygon([(cx - 21, cy + 11), (cx - 25, cy + 16), (cx - 20, cy + 14)], fill=C_CLAW, outline=C_OUT)
+        # Far Grasping Claw Arm
+        if windup:
+            far.tapered_limb([(cx - 4, cy - 2, 2.2), (cx + 2, cy - 10, 1.8), (cx - 2, cy - 16, 1.8)], C_SHADOW)
+        elif attack:
+            far.tapered_limb([(cx - 6, cy - 2, 2.2), (cx - 15, cy - 4, 1.8), (cx - 21, cy + 1, 1.8)], C_SHADOW)
         else:
-            draw.line([(cx - 4, cy), (cx - 12, cy + 6), (cx - 18, cy + 14)], fill=C_MID, width=3)
-            draw.line([(cx - 12, cy + 6), (cx - 18, cy + 14)], fill=C_LIGHT, width=1)
-            draw.polygon([(cx - 17, cy + 13), (cx - 21, cy + 18), (cx - 16, cy + 16)], fill=C_CLAW, outline=C_OUT)
+            far.tapered_limb([(cx - 5, cy - 1, 2.2), (cx - 11, cy + 6, 1.8), (cx - 15, cy + 13, 1.8)], C_SHADOW)
+        far.auto_shade(C_SHADOW, C_MID, C_MID, C_DEEP, C_DEEP)
+        far.add_outline(C_OUT, ground_y + 1)
 
-    img.save("assets/sprites/enemies/lurker/lurker_mutant.png")
-    print("Saved hyper-detailed lurker_mutant.png (288x64)")
+        # --- LOW-SLUNG HORIZONTAL STALKER TORSO ---
+        body.bezier_limb((cx + 8, cy + 4), (cx + 2, cy - 4), (cx - 7, cy - 3), 4.4, 5.2, 4.4, C_MID)
 
-# Generate all 6 standard mutants
+        # --- PREDATOR SKULL (Elongated snout + jagged lower jaw, NO silly sticks on forehead!) ---
+        body.bezier_limb((cx - 5, cy - 5), (cx - 11, cy - 7), (cx - 17, cy - 3), 4.0, 3.5, 2.0, C_MID)
+        jaw_open = 3 if (windup or attack) else 1
+        body.tapered_limb([(cx - 7, cy - 1, 2.2), (cx - 14, cy + 1 + jaw_open, 1.4)], C_MID)
+
+        body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+
+        # Spine ridges & veins
+        for s in range(3):
+            body.set_px(cx + 4 - s * 4, cy - 9 + s, C_CLAW)
+        body.line([(cx - 1, cy), (cx + 4, cy + 2)], C_VEIN)
+        # Mouth + fangs
+        body.polygon([(cx - 15, cy - 2), (cx - 10, cy - 2), (cx - 10, cy + jaw_open), (cx - 14, cy + jaw_open)], C_DEEP)
+        body.set_px(cx - 15, cy - 2, C_CLAW_HI)
+        body.set_px(cx - 13, cy - 2, C_CLAW_HI)
+        # 3 clustered crimson eyes on skull side
+        body.set_px(cx - 11, cy - 5, C_EYE)
+        body.set_px(cx - 13, cy - 5, C_EYE)
+        body.set_px(cx - 12, cy - 3, C_EYE)
+        body.add_outline(C_OUT, ground_y + 1)
+
+        # --- NEAR HIND LEG (Proper digitigrade bend!) ---
+        nl_hip = (cx + 5, cy + 4)
+        nl_knee = (cx - 1 + step // 2, cy + 11)
+        nl_hock = (cx + 6 + step // 2, cy + 16)
+        nl_foot = (cx + 2 + step, ground_y)
+        draw_digitigrade_leg(near, nl_hip, nl_knee, nl_hock, nl_foot, 3.2, 2.2, 1.5, 1.7, C_MID, C_CLAW)
+
+        # --- NEAR PREDATORY CLAWED ARM (Clearly attacks!) ---
+        sh = (cx - 5, cy - 1)
+        if windup:
+            # Coiled back, claws raised high ready to pounce-slash!
+            el = (cx, cy - 9)
+            wrist = (cx - 5, cy - 17)
+            near.tapered_limb([(sh[0], sh[1], 2.8), (el[0], el[1], 2.2), (wrist[0], wrist[1], 2.2)], C_MID)
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] - 6, wrist[1] - 4, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] - 3, wrist[1] - 6, 0.4)], C_CLAW)
+        elif attack:
+            # Fierce forward pounce-slash!
+            el = (cx - 12, cy - 4)
+            wrist = (cx - 19, cy + 1)
+            near.tapered_limb([(sh[0], sh[1], 3.0), (el[0], el[1], 2.4), (wrist[0], wrist[1], 2.4)], C_MID)
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] - 7, wrist[1] - 4, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] - 8, wrist[1] + 1, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 1.8), (wrist[0] - 6, wrist[1] + 5, 0.4)], C_CLAW)
+            fx.bezier_limb((cx - 14, cy - 10), (cx - 24, cy), (cx - 19, cy + 10), 0.5, 1.4, 0.4, C_SLASH)
+        else:
+            # Stalking crouch: elbow bent back, hooked claws poised low in front
+            el = (cx - 2, cy + 5)
+            wrist = (cx - 10, cy + 12)
+            near.tapered_limb([(sh[0], sh[1], 2.8), (el[0], el[1], 2.2), (wrist[0], wrist[1], 2.0)], C_MID)
+            near.tapered_limb([(wrist[0], wrist[1], 1.6), (wrist[0] - 5, wrist[1] + 4, 0.4)], C_CLAW)
+            near.tapered_limb([(wrist[0], wrist[1], 1.6), (wrist[0] - 2, wrist[1] + 6, 0.4)], C_CLAW)
+
+        near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+        near.auto_shade(C_CLAW, C_CLAW_HI, C_CLAW_HI, C_CLAW_SH, C_SHADOW)
+        near.add_outline(C_OUT, ground_y + 1)
+
+        sheet.paste(composite_layers(W, H, [far, body, near, fx]), (f * W, 0))
+
+    sheet.save("assets/sprites/enemies/lurker/lurker_mutant.png")
+    print("Saved redesigned lurker_mutant.png (288x64)")
+
 generate_duelist_aggressive()
 generate_duelist_passive()
 generate_normal_mutant()
@@ -794,7 +855,7 @@ generate_tank_mutant()
 generate_dummy_mutant()
 generate_lurker_mutant()
 
-# Copy icons to assets/tiles/enemies and preview folders
+# Regenerate all tile icons and canvas previews from frame 0
 enemies = {
     'enemy_normal': ('assets/sprites/enemies/normal/normal_mutant.png', 48, 64, 'assets/sprites/enemies/normal/preview.png'),
     'enemy_tank': ('assets/sprites/enemies/tank/tank_mutant.png', 72, 96, 'assets/sprites/enemies/tank/preview.png'),
@@ -821,8 +882,7 @@ for name, (path, fw, fh, prev_path) in enemies.items():
     icon32.paste(scaled, (paste_x, paste_y))
     for dir_path in ['assets/tiles', 'assets/tiles/tools', 'assets/tiles/enemies']:
         os.makedirs(dir_path, exist_ok=True)
-        out_p = os.path.join(dir_path, f'{name}.png')
-        icon32.save(out_p)
+        icon32.save(os.path.join(dir_path, f'{name}.png'))
     icon32.save(prev_path)
 
-print("All enemy sprites, icons and canvas previews updated!")
+print("All 6 mutant spritesheets & icons regenerated!")

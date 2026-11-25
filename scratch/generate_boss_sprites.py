@@ -1,333 +1,221 @@
-import numpy as np
-from PIL import Image, ImageDraw
+import os
+from PIL import Image
+from pixel_sculpt import PixelLayer, composite_layers
 
 FRAME_W = 128
 FRAME_H = 96
 NUM_FRAMES = 8
-GROUND_Y = 95
+GROUND_Y = 94
 
-# 1. Palette: Sickly pale organic mutant (Sachiel / Alien / Bio-horror)
-C_TRANS = (0, 0, 0, 0)
-C_OUT = (18, 20, 28, 255)            # Deep organic dark outline
-C_SHADOW_DEEP = (44, 50, 68, 255)    # Deep shadow cavity
-C_SHADOW = (82, 92, 116, 255)        # Flesh/carapace shadow
-C_MID = (146, 158, 184, 255)         # Base pale skin/bone
-C_LIGHT = (206, 216, 236, 255)       # Lit skin surface
-C_HI = (252, 254, 255, 255)          # Soft rim highlight
+C_OUT = (16, 18, 26, 255)
+C_DEEP = (40, 46, 64, 255)
+C_SHADOW = (80, 90, 114, 255)
+C_MID = (146, 158, 184, 255)
+C_LIGHT = (204, 214, 234, 255)
+C_HI = (248, 252, 255, 255)
 
-C_RIB_DARK = (100, 105, 96, 255)
-C_RIB_LIGHT = (244, 246, 238, 255)
+C_BONE = (238, 240, 230, 255)
+C_BONE_SH = (120, 126, 120, 255)
+C_BONE_HI = (255, 255, 250, 255)
+C_VEIN = (96, 46, 76, 255)
+C_SINEW = (142, 42, 58, 255)
+C_IMPACT = (245, 225, 200, 200)
 
-C_CLAW_DARK = (108, 112, 104, 255)
-C_CLAW_HI = (250, 252, 246, 255)
-C_VEIN = (92, 46, 74, 255)
-C_SINEW = (136, 42, 58, 255)
+def draw_boss_frame(frame_idx):
+    far = PixelLayer(FRAME_W, FRAME_H)
+    body = PixelLayer(FRAME_W, FRAME_H)
+    near = PixelLayer(FRAME_W, FRAME_H)
+    fx = PixelLayer(FRAME_W, FRAME_H)
 
-def draw_organic_boss_frame(draw, ox, frame_idx):
-    """
-    Renders 1 frame of the Pale Mutant Boss (Organic, Slender, 3/4 perspective):
-    - NO unneeded middle limb (exactly 4 limbs: 2 front arms at chest, 2 hind legs at hip)
-    - Slender arched spine & deeply scooped underbelly (matches user's red sketch)
-    - Organic anatomy with smooth muscle contours (NO robot ball joints, boxes or cylinder cuts)
-    - Front cowl points down-forward at acute angle (faceless smooth organic carapace)
-    - STRICTLY bounded within [0..127, 2..95] (zero gap on ground, never clips outside frame!)
-    """
-    dx = ox
     bob_y = 0
-    rear_up = False
-    slam = False
-    jumping = False
-    hurt = False
+    lean_x = 0
+    rear_up = (frame_idx == 4)
+    slam = (frame_idx == 5)
+    jumping = (frame_idx == 6)
+    hurt = (frame_idx == 7)
 
-    # Near Arm anchors
-    na_sx, na_sy = 30, 36
-    na_ex, na_ey = 22, 58
-    na_kx, na_ky = 18, GROUND_Y
+    # Default limb anchors
+    na_sh = (31, 35)
+    na_el = (21, 58)
+    na_kn = (17, GROUND_Y - 3)
 
-    # Far Arm anchors
-    fa_sx, fa_sy = 42, 34
-    fa_ex, fa_ey = 38, 58
-    fa_kx, fa_ky = 34, GROUND_Y
+    fa_sh = (43, 33)
+    fa_el = (36, 58)
+    fa_kn = (32, GROUND_Y - 3)
 
-    # Near Leg anchors
-    nl_hip = (74, 48)
-    nl_knee = (92, 68)
-    nl_foot = (80, GROUND_Y)
+    nl_hip = (76, 46)
+    nl_knee = (90, 66)
+    nl_hock = (86, 78)
+    nl_foot = (78, GROUND_Y - 2)
 
-    # Far Leg anchors
-    fl_hip = (76, 50)
-    fl_knee = (90, 70)
-    fl_foot = (84, GROUND_Y)
+    fl_hip = (79, 48)
+    fl_knee = (93, 67)
+    fl_hock = (89, 79)
+    fl_foot = (82, GROUND_Y - 2)
 
-    # Frame animation modifiers
-    if frame_idx == 0:
-        # Idle low
-        pass
-    elif frame_idx == 1:
-        # Idle breath: subtle chest/spine rise
+    if frame_idx == 1:
         bob_y = -2
     elif frame_idx == 2:
-        # Knuckle walk 1: Near arm steps forward-left
-        na_ex -= 6
-        na_kx -= 8
-        nl_knee = (88, 68)
-        nl_foot = (76, GROUND_Y)
+        na_el = (16, 56)
+        na_kn = (11, GROUND_Y - 3)
+        nl_knee = (86, 66)
+        nl_foot = (73, GROUND_Y - 2)
     elif frame_idx == 3:
-        # Knuckle walk 2: Far arm steps forward-left
-        fa_ex -= 6
-        fa_kx -= 8
-        fl_foot = (80, GROUND_Y)
-        nl_foot = (84, GROUND_Y)
-    elif frame_idx == 4:
-        # Attack windup: Reared back on hind legs, fists raised ready to crash down!
-        # STRICT BOUNDS: stays safely within Y in [4, 95]
-        rear_up = True
-        bob_y = -4
-        na_sy = 28
-        na_ex, na_ey = 24, 20
-        na_kx, na_ky = 26, 10
-        fa_sy = 26
-        fa_ex, fa_ey = 44, 18
-        fa_kx, fa_ky = 46, 10
-        nl_hip = (72, 50)
-        nl_knee = (92, 68)
-        nl_foot = (78, GROUND_Y)
-    elif frame_idx == 5:
-        # Attack slam: Fists smashed into ground in front, body lunging forward
-        slam = True
-        bob_y = 4
-        na_sx, na_sy = 28, 42
-        na_ex, na_ey = 18, 64
-        na_kx, na_ky = 12, GROUND_Y
-        fa_sx, fa_sy = 40, 40
-        fa_ex, fa_ey = 30, 66
-        fa_kx, fa_ky = 24, GROUND_Y
-        nl_hip = (78, 54)
-        nl_knee = (96, 72)
-        nl_foot = (84, GROUND_Y)
-    elif frame_idx == 6:
-        # Jump slam: Coiled mid-air (bounds Y in [6, 77])
-        jumping = True
-        bob_y = -4
-        nl_foot = (80, 72)
-        fl_foot = (86, 70)
-        na_ex, na_ey = 22, 54
-        na_kx, na_ky = 18, 76
-        fa_ex, fa_ey = 38, 52
-        fa_kx, fa_ky = 34, 74
-    elif frame_idx == 7:
-        # Hurt: Flinched backward
-        hurt = True
+        fa_el = (30, 56)
+        fa_kn = (25, GROUND_Y - 3)
+        fl_knee = (88, 67)
+        fl_foot = (77, GROUND_Y - 2)
+        nl_foot = (82, GROUND_Y - 2)
+    elif rear_up:
+        bob_y = -6
+        lean_x = 8
+        na_sh = (32, 30)
+        na_el = (18, 22)
+        na_kn = (14, 9)
+        fa_sh = (44, 28)
+        fa_el = (34, 18)
+        fa_kn = (32, 7)
+        nl_hip = (78, 49)
+        nl_knee = (93, 67)
+        nl_foot = (78, GROUND_Y - 2)
+    elif slam:
+        bob_y = 5
+        lean_x = -5
+        na_sh = (27, 41)
+        na_el = (17, 63)
+        na_kn = (11, GROUND_Y - 3)
+        fa_sh = (39, 39)
+        fa_el = (29, 64)
+        fa_kn = (23, GROUND_Y - 3)
+        nl_hip = (77, 52)
+        nl_knee = (93, 70)
+        nl_foot = (81, GROUND_Y - 2)
+    elif jumping:
+        bob_y = -6
+        na_el = (21, 52)
+        na_kn = (17, 74)
+        fa_el = (37, 50)
+        fa_kn = (33, 72)
+        nl_knee = (91, 61)
+        nl_hock = (86, 70)
+        nl_foot = (77, 74)
+        fl_knee = (94, 62)
+        fl_hock = (89, 71)
+        fl_foot = (82, 75)
+    elif hurt:
         bob_y = -2
-        na_sx += 4
-        na_ex += 6
-        na_kx += 6
-        fa_sx += 4
-        fa_ex += 6
-        fa_kx += 6
+        lean_x = 5
 
-    # -------------------------------------------------------------
-    # 1. FAR HIND LEG (Background)
-    # -------------------------------------------------------------
-    fl_h_y = fl_hip[1] + bob_y
-    fl_k_y = fl_knee[1] + bob_y
-    fl_f_y = fl_foot[1]
-    far_leg_pts = [
-        (dx + fl_hip[0] - 4, fl_h_y),
-        (dx + fl_hip[0] + 6, fl_h_y),
-        (dx + fl_knee[0] + 5, fl_k_y),
-        (dx + fl_foot[0] + 4, fl_f_y - 11),
-        (dx + fl_foot[0] + 2, fl_f_y),
-        (dx + fl_foot[0] - 6, fl_f_y),
-        (dx + fl_foot[0] - 3, fl_f_y - 11),
-        (dx + fl_knee[0] - 3, fl_k_y + 3)
-    ]
-    draw.polygon(far_leg_pts, fill=C_SHADOW, outline=C_OUT)
-    for c in range(3):
-        cx = dx + fl_foot[0] - 5 + c * 3
-        draw.polygon([(cx, fl_f_y - 2), (cx - 2, fl_f_y), (cx + 1, fl_f_y)], fill=C_CLAW_DARK, outline=C_OUT)
+    dx = lean_x
 
-    # -------------------------------------------------------------
-    # 2. FAR FRONT ARM (Background, at FRONT chest!)
-    # -------------------------------------------------------------
-    fa_s_y = fa_sy + bob_y
-    fa_e_y = fa_ey + bob_y if not rear_up and not jumping else fa_ey
-    fa_k_y = fa_ky
-    far_arm_pts = [
-        (dx + fa_sx - 4, fa_s_y),
-        (dx + fa_sx + 5, fa_s_y - 1),
-        (dx + fa_ex + 4, fa_e_y),
-        (dx + fa_kx + 4, fa_k_y - 4),
-        (dx + fa_kx + 3, fa_k_y),
-        (dx + fa_kx - 5, fa_k_y),
-        (dx + fa_kx - 4, fa_k_y - 4),
-        (dx + fa_ex - 4, fa_e_y)
-    ]
-    draw.polygon(far_arm_pts, fill=C_SHADOW, outline=C_OUT)
-    draw.line([(dx + fa_sx - 2, fa_s_y + 4), (dx + fa_ex - 1, fa_e_y), (dx + fa_kx - 1, fa_k_y - 6)], fill=C_MID, width=2)
-    draw.line([(dx + fa_sx, fa_s_y + 5), (dx + fa_ex, fa_e_y - 2)], fill=C_VEIN, width=1)
-    for c in range(3):
-        cx = dx + fa_kx - 4 + c * 3
-        draw.polygon([(cx, fa_k_y - 2), (cx - 2, fa_k_y), (cx + 1, fa_k_y)], fill=C_CLAW_DARK, outline=C_OUT)
+    # 1. FAR HIND LEG (Muscular thigh -> knee -> tapered shin -> clawed foot)
+    far.tapered_limb([
+        (dx + fl_hip[0], fl_hip[1] + bob_y, 6.5),
+        (dx + fl_knee[0], fl_knee[1] + bob_y, 4.5),
+        (dx + fl_hock[0], fl_hock[1] + bob_y, 3.2),
+        (dx + fl_foot[0], fl_foot[1], 3.8),
+    ], C_SHADOW)
+    far.tapered_limb([(dx + fl_foot[0], fl_foot[1], 2.5), (dx + fl_foot[0] - 6, fl_foot[1] + 1, 0.8)], C_BONE_SH)
 
-    # -------------------------------------------------------------
-    # 3. SLENDER ARCHED TORSO (User's red curves!)
-    # -------------------------------------------------------------
-    torso_pts = [
-        (dx + 18, 42 + bob_y),   # Front searchlight nose (angled down-forward towards floor)
-        (dx + 16, 34 + bob_y),   # Upper front prow
-        (dx + 22, 24 + bob_y),   # Front chest slope
-        (dx + 34, 16 + bob_y),   # Upper chest curve
-        (dx + 50, 11 + bob_y),   # Rising spine arch
-        (dx + 66, 10 + bob_y),   # PEAK OF ARCHED SPINE (Y=10+bob_y)
-        (dx + 78, 14 + bob_y),   # Descending back arch
-        (dx + 86, 22 + bob_y),   # Upper rear back
-        (dx + 88, 34 + bob_y),   # Mid rear back
-        (dx + 84, 48 + bob_y),   # Hip junction
-        (dx + 76, 50 + bob_y),   # Pelvis bottom
-        (dx + 68, 38 + bob_y),   # Underbelly scoop: rises UP high (slender body!)
-        (dx + 54, 28 + bob_y),   # Narrow waist arch (body thickness only ~14-16px!)
-        (dx + 40, 34 + bob_y),   # Under chest
-        (dx + 24, 44 + bob_y)    # Nose underside
-    ]
-    draw.polygon(torso_pts, fill=C_MID, outline=C_OUT)
+    # 2. FAR FRONT ARM (Organic deltoid -> forearm -> knuckle fist)
+    fa_e_y = fa_el[1] + (0 if (rear_up or jumping) else bob_y)
+    far.tapered_limb([
+        (dx + fa_sh[0], fa_sh[1] + bob_y, 6.2),
+        (dx + fa_el[0], fa_e_y, 4.8),
+        (dx + fa_kn[0], fa_kn[1], 5.4),
+    ], C_SHADOW)
+    far.tapered_limb([(dx + fa_kn[0], fa_kn[1] + 1, 2.5), (dx + fa_kn[0] - 5, fa_kn[1] + 2, 0.6)], C_BONE_SH)
+    far.auto_shade(C_SHADOW, C_MID, C_MID, C_DEEP, C_DEEP)
+    far.add_outline(C_OUT, GROUND_Y + 1)
 
-    # Top rim light along arched spine
-    spine_rim = [(dx + 17, 33 + bob_y), (dx + 23, 23 + bob_y), (dx + 35, 15 + bob_y), (dx + 51, 10 + bob_y), (dx + 66, 10 + bob_y), (dx + 78, 14 + bob_y), (dx + 85, 23 + bob_y), (dx + 87, 34 + bob_y)]
-    draw.line(spine_rim, fill=C_HI, width=2)
-    spine_light = [(dx + 19, 35 + bob_y), (dx + 25, 25 + bob_y), (dx + 37, 17 + bob_y), (dx + 52, 12 + bob_y), (dx + 67, 12 + bob_y), (dx + 78, 16 + bob_y), (dx + 84, 25 + bob_y), (dx + 86, 36 + bob_y)]
-    draw.line(spine_light, fill=C_LIGHT, width=2)
+    # 3. SLENDER ARCHED SPINE & ACUTE FRONT COWL (Approved silhouette!)
+    # Sculpted with smooth overlapping Bezier curves
+    body.bezier_limb((dx + 19, 38 + bob_y), (dx + 34, 18 + bob_y), (dx + 64, 15 + bob_y), 4.5, 9.5, 10.5, C_MID)
+    body.bezier_limb((dx + 64, 15 + bob_y), (dx + 84, 20 + bob_y), (dx + 79, 46 + bob_y), 10.5, 10.0, 7.5, C_MID)
+    # Acute downward-pointing faceless prow/cowl
+    body.polygon([
+        (dx + 15, 34 + bob_y),
+        (dx + 22, 23 + bob_y),
+        (dx + 34, 24 + bob_y),
+        (dx + 25, 43 + bob_y),
+        (dx + 18, 42 + bob_y),
+    ], C_MID)
 
-    # Jagged bone vertebrae crest along arched spine
-    for s in range(5):
-        vx = dx + 38 + s * 10
-        vy = (16 if s in (0, 4) else 12) + bob_y
-        draw.polygon([(vx, vy), (vx + 2, vy - 3), (vx + 4, vy)], fill=C_RIB_LIGHT, outline=C_OUT)
-        draw.point((vx + 2, vy - 2), fill=C_HI)
+    body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
 
-    # Front Cowl
-    prow_face = [(dx + 17, 34 + bob_y), (dx + 26, 26 + bob_y), (dx + 32, 38 + bob_y), (dx + 22, 43 + bob_y)]
-    draw.polygon(prow_face, fill=C_LIGHT)
-    draw.line([(dx + 18, 34 + bob_y), (dx + 22, 42 + bob_y)], fill=C_HI, width=2)
+    # Deep scooped underbelly cavity & sinews
+    body.bezier_limb((dx + 36, 36 + bob_y), (dx + 54, 29 + bob_y), (dx + 72, 43 + bob_y), 2.5, 2.0, 2.5, C_DEEP)
+    body.line([(dx + 46, 31 + bob_y), (dx + 62, 34 + bob_y)], C_SINEW)
+    body.line([(dx + 50, 29 + bob_y), (dx + 66, 37 + bob_y)], C_VEIN)
 
-    # Deep underbelly cavity with visceral sinew strands
-    under_cavity = [(dx + 38, 34 + bob_y), (dx + 54, 28 + bob_y), (dx + 68, 38 + bob_y), (dx + 76, 48 + bob_y), (dx + 72, 42 + bob_y), (dx + 56, 32 + bob_y), (dx + 42, 36 + bob_y)]
-    draw.polygon(under_cavity, fill=C_SHADOW_DEEP)
-    draw.line([(dx + 48, 32 + bob_y), (dx + 62, 34 + bob_y)], fill=C_SINEW, width=1)
-    draw.line([(dx + 52, 30 + bob_y), (dx + 66, 37 + bob_y)], fill=C_VEIN, width=1)
+    # Ivory ribcage curving down the slender flank
+    for rx, ry in ((40, 26), (48, 22), (56, 20), (64, 21)):
+        body.bezier_limb((dx + rx, ry + bob_y), (dx + rx + 4, ry + 6 + bob_y), (dx + rx + 7, ry + 11 + bob_y), 1.3, 1.1, 0.7, C_BONE)
+    # Dorsal spine vertebrae along the arch
+    for vx, vy in ((38, 16), (48, 12), (58, 10), (68, 11), (77, 15)):
+        body.tapered_limb([(dx + vx, vy + bob_y, 1.5), (dx + vx + 1, vy - 3 + bob_y, 0.4)], C_BONE)
 
-    # Ivory Bone Ribs (Curving along the flank)
-    ribs = [
-        [(38, 28), (42, 34), (46, 38)],
-        [(46, 24), (50, 30), (54, 34)],
-        [(54, 22), (58, 28), (62, 32)],
-        [(62, 22), (66, 28), (70, 34)]
-    ]
-    for pts in ribs:
-        pts_shifted = [(dx + x, y + bob_y) for x, y in pts]
-        draw.line(pts_shifted, fill=C_RIB_LIGHT, width=2)
-        shadow_shifted = [(dx + x, y + 1 + bob_y) for x, y in pts]
-        draw.line(shadow_shifted, fill=C_RIB_DARK, width=1)
-        draw.point(pts_shifted[-1], fill=C_RIB_LIGHT)
+    body.auto_shade(C_BONE, C_BONE_HI, C_BONE_HI, C_BONE_SH, C_SHADOW)
+    body.add_outline(C_OUT, GROUND_Y + 1)
 
-    # Crescent shadow on rear dome
-    crescent_shadow = [
-        (dx + 76, 18 + bob_y), (dx + 84, 24 + bob_y), (dx + 87, 34 + bob_y), (dx + 84, 46 + bob_y), (dx + 78, 48 + bob_y), (dx + 80, 36 + bob_y), (dx + 74, 24 + bob_y)
-    ]
-    draw.polygon(crescent_shadow, fill=C_SHADOW)
+    # 4. NEAR HIND LEG
+    near.tapered_limb([
+        (dx + nl_hip[0], nl_hip[1] + bob_y, 7.0),
+        (dx + nl_knee[0], nl_knee[1] + bob_y, 4.8),
+        (dx + nl_hock[0], nl_hock[1] + bob_y, 3.4),
+        (dx + nl_foot[0], nl_foot[1], 4.2),
+    ], C_MID)
+    near.tapered_limb([(dx + nl_foot[0], nl_foot[1], 2.5), (dx + nl_foot[0] - 7, nl_foot[1] + 1, 0.7)], C_BONE)
 
-    # -------------------------------------------------------------
-    # 4. NEAR HIND LEG (Foreground leg)
-    # -------------------------------------------------------------
-    nl_h_y = nl_hip[1] + bob_y
-    nl_k_y = nl_knee[1] + bob_y
-    nl_f_y = nl_foot[1]
-    near_leg_pts = [
-        (dx + nl_hip[0] - 4, nl_h_y),
-        (dx + nl_hip[0] + 6, nl_h_y),
-        (dx + nl_knee[0] + 5, nl_k_y),
-        (dx + nl_foot[0] + 5, nl_f_y - 11),
-        (dx + nl_foot[0] + 4, nl_f_y),
-        (dx + nl_foot[0] - 7, nl_f_y),
-        (dx + nl_foot[0] - 4, nl_f_y - 11),
-        (dx + nl_knee[0] - 3, nl_k_y + 3)
-    ]
-    draw.polygon(near_leg_pts, fill=C_MID, outline=C_OUT)
-    draw.line([(dx + nl_hip[0] - 2, nl_h_y + 2), (dx + nl_knee[0] + 2, nl_k_y - 1)], fill=C_LIGHT, width=2)
-    draw.line([(dx + nl_knee[0] + 1, nl_k_y + 2), (dx + nl_foot[0] + 2, nl_f_y - 12)], fill=C_LIGHT, width=2)
-    draw.line([(dx + nl_foot[0] - 6, nl_f_y - 3), (dx + nl_foot[0] + 3, nl_f_y - 3)], fill=C_LIGHT, width=2)
-    for c in range(3):
-        cx = dx + nl_foot[0] - 6 + c * 4
-        draw.polygon([(cx, nl_f_y - 3), (cx - 3, nl_f_y), (cx + 1, nl_f_y)], fill=C_CLAW_HI, outline=C_OUT)
+    # 5. NEAR FRONT ATTACK ARM (Organic sculpted gorilla-mutant arm + heavy clawed knuckles!)
+    na_e_y = na_el[1] + (0 if (rear_up or jumping) else bob_y)
+    near.tapered_limb([
+        (dx + na_sh[0], na_sh[1] + bob_y, 7.2),
+        (dx + na_el[0], na_e_y, 5.4),
+        (dx + na_kn[0], na_kn[1], 6.0),
+    ], C_MID)
+    # Bone knuckle shield & sharp claws
+    near.tapered_limb([(dx + na_kn[0] - 4, na_kn[1] - 2, 2.2), (dx + na_kn[0] + 4, na_kn[1] - 2, 2.2)], C_BONE)
+    for c_off in (-5, -2, 1):
+        near.tapered_limb([(dx + na_kn[0] + c_off, na_kn[1], 1.4), (dx + na_kn[0] + c_off - 3, na_kn[1] + 3, 0.4)], C_BONE)
 
-    # -------------------------------------------------------------
-    # 5. NEAR FRONT ARM (Foreground, at FRONT of chest!)
-    # -------------------------------------------------------------
-    na_s_y = na_sy + bob_y
-    na_e_y = na_ey + bob_y if not rear_up and not jumping else na_ey
-    na_k_y = na_ky
-    near_arm_pts = [
-        (dx + na_sx - 5, na_s_y - 3),
-        (dx + na_sx + 6, na_s_y - 3),
-        (dx + na_ex + 6, na_e_y),
-        (dx + na_kx + 6, na_k_y - 5),
-        (dx + na_kx + 5, na_k_y),
-        (dx + na_kx - 6, na_k_y),
-        (dx + na_kx - 5, na_k_y - 5),
-        (dx + na_ex - 6, na_e_y)
-    ]
-    draw.polygon(near_arm_pts, fill=C_MID, outline=C_OUT)
+    near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
+    near.auto_shade(C_BONE, C_BONE_HI, C_BONE_HI, C_BONE_SH, C_SHADOW)
+    # Necrotic veins running along the sculpted forearm
+    near.line([(dx + na_sh[0], na_sh[1] + bob_y + 3), (dx + na_el[0] - 1, na_e_y), (dx + na_kn[0] - 1, na_kn[1] - 5)], C_VEIN, width=2)
+    near.add_outline(C_OUT, GROUND_Y + 1)
 
-    draw.line([(dx + na_sx - 3, na_s_y - 1), (dx + na_sx + 4, na_s_y - 1)], fill=C_LIGHT, width=2)
-    draw.line([(dx + na_sx - 2, na_s_y + 2), (dx + na_ex - 3, na_e_y), (dx + na_kx - 3, na_k_y - 6)], fill=C_LIGHT, width=2)
-    draw.line([(dx + na_sx - 1, na_s_y + 2), (dx + na_ex - 2, na_e_y)], fill=C_HI, width=1)
-    draw.line([(dx + na_sx + 4, na_s_y + 2), (dx + na_ex + 3, na_e_y), (dx + na_kx + 3, na_k_y - 6)], fill=C_SHADOW, width=2)
-    # Bulging dark necrotic veins and sinews running down the front attack arm
-    draw.line([(dx + na_sx, na_s_y + 3), (dx + na_ex - 1, na_e_y - 2), (dx + na_kx - 1, na_k_y - 7)], fill=C_VEIN, width=2)
-    draw.line([(dx + na_sx + 2, na_s_y + 5), (dx + na_ex + 1, na_e_y)], fill=C_SINEW, width=1)
+    if slam:
+        fx.line([(dx + na_kn[0] - 10, GROUND_Y), (dx + na_kn[0] - 3, GROUND_Y - 5)], C_IMPACT, width=2)
+        fx.line([(dx + na_kn[0] + 7, GROUND_Y), (dx + na_kn[0] + 13, GROUND_Y - 5)], C_IMPACT, width=2)
 
-    # Calcified bone knuckle shield on the fist
-    draw.rectangle([dx + na_kx - 6, na_k_y - 6, dx + na_kx + 5, na_k_y - 3], fill=C_RIB_LIGHT, outline=C_OUT)
-    draw.line([(dx + na_kx - 5, na_k_y - 5), (dx + na_kx + 4, na_k_y - 5)], fill=C_HI, width=1)
-
-    # Heavy curved bone claws digging into the floor
-    for i in range(4):
-        cx = dx + na_kx - 5 + i * 3
-        draw.polygon([(cx, na_k_y - 3), (cx - 3, na_k_y), (cx + 1, na_k_y)], fill=C_CLAW_HI, outline=C_OUT)
-        draw.point((cx - 1, na_k_y), fill=C_CLAW_DARK)
+    return composite_layers(FRAME_W, FRAME_H, [far, body, near, fx])
 
 def generate_full_sheet():
     sheet = Image.new("RGBA", (FRAME_W * NUM_FRAMES, FRAME_H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(sheet)
-
     for f in range(NUM_FRAMES):
-        draw_organic_boss_frame(draw, f * FRAME_W, f)
-        # Verify strict bounds
-        frame_crop = sheet.crop((f * FRAME_W, 0, (f + 1) * FRAME_W, FRAME_H))
-        bbox = frame_crop.getbbox()
-        assert bbox[1] >= 0, f"Frame {f} clipped top: y_min={bbox[1]}"
-        assert bbox[3] <= FRAME_H, f"Frame {f} clipped bottom: y_max={bbox[3]}"
-        assert bbox[0] >= 0 and bbox[2] <= FRAME_W, f"Frame {f} clipped x: {bbox}"
+        frame = draw_boss_frame(f)
+        bbox = frame.getbbox()
+        assert bbox[1] >= 0 and bbox[3] <= FRAME_H, f"Frame {f} Y out of bounds: {bbox}"
+        assert bbox[0] >= 0 and bbox[2] <= FRAME_W, f"Frame {f} X out of bounds: {bbox}"
+        sheet.paste(frame, (f * FRAME_W, 0))
 
     sheet.save("assets/sprites/enemies/boss/boss_pale_mutant.png")
-    print("Saved assets/sprites/enemies/boss/boss_pale_mutant.png (1024x96)")
+    print("Saved redesigned boss_pale_mutant.png (1024x96)")
 
-    # Editor preview icons:
     f0 = sheet.crop((0, 0, FRAME_W, FRAME_H))
-    
-    # 64x64 preview icon
     icon64 = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     icon_sub = f0.resize((64, 48), Image.Resampling.LANCZOS)
     icon64.paste(icon_sub, (0, 8), icon_sub)
     icon64.save("assets/tiles/enemy_boss.png")
     icon64.save("assets/tiles/tools/enemy_boss.png")
 
-    # 32x32 preview icon
     icon32 = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
     icon_sub32 = f0.resize((32, 24), Image.Resampling.LANCZOS)
     icon32.paste(icon_sub32, (0, 4), icon_sub32)
     icon32.save("assets/tiles/enemies/enemy_boss.png")
-    print("Updated editor preview icons.")
+    icon32.save("assets/sprites/enemies/boss/preview.png")
+    print("Updated boss preview icons.")
 
 if __name__ == "__main__":
     generate_full_sheet()
