@@ -623,92 +623,73 @@ def generate_tank_mutant():
     print("Saved redesigned tank_mutant.png (432x96)")
 
 # =========================================================================
-# 5. DUMMY MUTANT (Stitched Bio-Horror Totem - NO traffic cone / clown nose!)
-# Frame size: 48 x 64, 6 frames (0:Idle1, 1:Idle2, 2:HighBlock, 3:LowBlock, 4:Hurt1, 5:Hurt2)
+# 5. DUMMY (Static Training Dummy - NO animations, classic combat mannequin)
+# Frame size: 48 x 64, 6 identical static frames
 # =========================================================================
 def generate_dummy_mutant():
     W, H = 48, 64
     NFRAMES = 6
     sheet = Image.new("RGBA", (W * NFRAMES, H), (0, 0, 0, 0))
 
-    C_OUT = (16, 16, 22, 255)
-    C_DEEP = (38, 36, 46, 255)
-    C_SHADOW = (72, 72, 84, 255)
-    C_MID = (132, 134, 146, 255)
-    C_LIGHT = (186, 190, 202, 255)
-    C_HI = (236, 240, 248, 255)
-    C_VEIN = (104, 44, 66, 255)
-    C_CORE = (176, 32, 46, 255)
-    C_CORE_HI = (242, 108, 108, 255)
-    C_BONE = (228, 222, 206, 255)
-    C_BONE_SH = (128, 122, 108, 255)
+    C_OUT = (16, 14, 12, 255)
+    C_WOOD_DARK = (58, 42, 28, 255)
+    C_WOOD = (98, 72, 48, 255)
+    C_WOOD_HI = (138, 104, 72, 255)
+    C_SACK_DEEP = (68, 56, 44, 255)
+    C_SACK_SHADOW = (112, 94, 72, 255)
+    C_SACK_MID = (162, 140, 108, 255)
+    C_SACK_LIGHT = (204, 182, 144, 255)
+    C_SACK_HI = (232, 214, 178, 255)
+    C_TARGET = (178, 44, 44, 255)
+    C_TARGET_HI = (224, 92, 82, 255)
+    C_ROPE = (120, 96, 62, 255)
+
+    # Build 1 static frame and duplicate across all 6 frames (NO animations)
+    base = PixelLayer(W, H)
+    ground_y = 60
+    cx = 24
+    cy = 32
+
+    # Wooden stand / cross-base & central post
+    base.polygon([(cx - 10, ground_y), (cx + 10, ground_y), (cx + 8, ground_y - 3), (cx - 8, ground_y - 3)], C_WOOD)
+    base.line([(cx - 9, ground_y - 2), (cx + 8, ground_y - 2)], C_WOOD_HI)
+    base.line([(cx - 9, ground_y), (cx + 9, ground_y)], C_WOOD_DARK)
+    base.tapered_limb([(cx, ground_y - 2, 2.2), (cx, cy + 12, 2.2)], C_WOOD)
+    base.line([(cx - 1, ground_y - 3), (cx - 1, cy + 12)], C_WOOD_HI)
+    base.line([(cx + 1, ground_y - 3), (cx + 1, cy + 12)], C_WOOD_DARK)
+
+    # Wooden shoulder crossbar
+    base.tapered_limb([(cx - 12, cy - 8, 1.8), (cx + 12, cy - 8, 1.8)], C_WOOD)
+    base.line([(cx - 11, cy - 9), (cx + 11, cy - 9)], C_WOOD_HI)
+
+    # Stuffed burlap/canvas mannequin torso
+    base.bezier_limb((cx, cy + 12), (cx, cy + 1), (cx, cy - 9), 4.5, 7.2, 6.2, C_SACK_MID)
+    # Stuffed burlap head
+    base.tapered_limb([(cx, cy - 11, 2.4), (cx, cy - 18, 5.0)], C_SACK_MID)
+
+    base.auto_shade(C_SACK_MID, C_SACK_LIGHT, C_SACK_HI, C_SACK_SHADOW, C_SACK_DEEP)
+
+    # Rope bindings at neck & waist
+    base.line([(cx - 3, cy - 11), (cx + 3, cy - 11)], C_ROPE, width=2)
+    base.line([(cx - 5, cy + 9), (cx + 5, cy + 9)], C_ROPE, width=2)
+
+    # Painted target / stitching on chest & head
+    base.disc(cx - 1, cy - 1, 3.2, C_TARGET)
+    base.disc(cx - 1, cy - 1, 1.2, C_SACK_HI)
+    base.set_px(cx - 2, cy - 2, C_TARGET_HI)
+    # Crosshair / stitch marks on face
+    base.line([(cx - 3, cy - 19), (cx - 1, cy - 17)], C_SACK_DEEP)
+    base.line([(cx - 1, cy - 19), (cx - 3, cy - 17)], C_SACK_DEEP)
+    base.line([(cx + 1, cy - 19), (cx + 3, cy - 17)], C_SACK_DEEP)
+    base.line([(cx + 3, cy - 19), (cx + 1, cy - 17)], C_SACK_DEEP)
+
+    base.add_outline(C_OUT, ground_y + 1)
 
     for f in range(NFRAMES):
-        far = PixelLayer(W, H)
-        body = PixelLayer(W, H)
-        near = PixelLayer(W, H)
-
-        ground_y = 60
-        wobble_x = 0
-        bob_y = 0
-        if f == 1:
-            bob_y = 1
-        elif f == 4:
-            wobble_x = -3
-        elif f == 5:
-            wobble_x = 3
-
-        cx = 24 + wobble_x
-        cy = 33 + bob_y
-
-        # --- TWISTED BONE & FLESH ROOT PEDESTAL ---
-        far.tapered_limb([(cx + 2, cy + 12, 3.5), (cx + 7, ground_y - 1, 2.2)], C_SHADOW)
-        far.tapered_limb([(cx - 2, cy + 12, 3.5), (cx - 7, ground_y - 1, 2.2)], C_SHADOW)
-        far.add_outline(C_OUT, ground_y + 1)
-
-        # --- IMPALED / STITCHED TORSO & SLACK HEAD ---
-        body.tapered_limb([(cx, ground_y - 2, 2.4), (cx, cy + 12, 3.5)], C_BONE)  # Central spine stake
-        body.bezier_limb((cx, cy + 13), (cx + 1, cy + 2), (cx - 1, cy - 9), 4.5, 7.0, 6.2, C_MID)
-        # Slack tilted stitched head
-        body.tapered_limb([(cx - 1, cy - 10, 3.0), (cx - 3, cy - 17, 4.8)], C_MID)
-        body.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
-        body.auto_shade(C_BONE, C_HI, C_HI, C_BONE_SH, C_SHADOW)
-
-        # Exposed thoracic cavity with visceral pulsing organ + rib cage bars
-        body.disc(cx - 2, cy - 1, 3.6, C_DEEP)
-        body.disc(cx - 2, cy - 1, 2.4, C_CORE)
-        body.set_px(cx - 3, cy - 2, C_CORE_HI)
-        # Ribs framing cavity
-        body.line([(cx - 6, cy - 3), (cx - 3, cy - 2)], C_BONE)
-        body.line([(cx - 6, cy + 1), (cx - 3, cy + 1)], C_BONE)
-        # Autopsy stitches on torso & sewn-shut eyes
-        body.line([(cx + 3, cy - 7), (cx + 3, cy + 9)], C_DEEP)
-        for sy in range(cy - 5, cy + 8, 4):
-            body.line([(cx + 1, sy), (cx + 5, sy)], C_BONE)
-        body.line([(cx - 6, cy - 18), (cx - 3, cy - 17)], C_DEEP)  # Sewn eye
-        body.set_px(cx - 5, cy - 19, C_BONE)
-        body.set_px(cx - 4, cy - 16, C_BONE)
-        body.add_outline(C_OUT, ground_y + 1)
-
-        # --- GRAFTED MUTANT BLOCKING ARMS ---
-        if f == 2:  # High Block
-            near.tapered_limb([(cx + 2, cy - 6, 2.6), (cx - 5, cy - 10, 2.4), (cx - 9, cy - 19, 3.0)], C_MID)
-            near.tapered_limb([(cx - 9, cy - 21, 2.5), (cx - 9, cy - 11, 2.5)], C_BONE)
-        elif f == 3:  # Low Block
-            near.tapered_limb([(cx + 2, cy - 4, 2.6), (cx - 6, cy + 3, 2.4), (cx - 10, cy + 10, 3.0)], C_MID)
-            near.tapered_limb([(cx - 10, cy + 2, 2.5), (cx - 10, cy + 13, 2.5)], C_BONE)
-        else:
-            near.tapered_limb([(cx + 3, cy - 6, 2.4), (cx + 6, cy + 3, 2.0), (cx + 3, cy + 11, 1.8)], C_MID)
-            near.tapered_limb([(cx + 3, cy + 11, 1.4), (cx, cy + 15, 0.4)], C_BONE)
-
-        near.auto_shade(C_MID, C_LIGHT, C_HI, C_SHADOW, C_DEEP)
-        near.auto_shade(C_BONE, C_HI, C_HI, C_BONE_SH, C_SHADOW)
-        near.add_outline(C_OUT, ground_y + 1)
-
-        sheet.paste(composite_layers(W, H, [far, body, near]), (f * W, 0))
+        sheet.paste(base.img, (f * W, 0))
 
     sheet.save("assets/sprites/enemies/dummy/dummy_mutant.png")
-    print("Saved redesigned dummy_mutant.png (288x64)")
+    print("Saved static dummy_mutant.png (288x64)")
 
 # =========================================================================
 # 6. LURKER MUTANT (Low-slung Stalker/Crawler - fixes opposite legs, face sticks & missing attack!)
